@@ -1,0 +1,17 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Runtime data
+data/*.db
+logs/
+uploads/
+
+# Config (contains passwords/access codes)
+config/config.yaml
+
+# OS
+.DS_Store
+Thumbs.db

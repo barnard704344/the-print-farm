@@ -1,0 +1,7 @@
+admin_password: changeme
+auto_assign: false
+api_key: changeme
+web:
+  host: 0.0.0.0
+  port: 5000
+printers: []

@@ -1,0 +1,18 @@
+[Unit]
+Description=BambuLab Print Farm Manager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/html/bambulab-farm
+ExecStart=/var/www/html/bambulab-farm/venv/bin/python -m src.main
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

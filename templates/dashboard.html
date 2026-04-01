@@ -1,0 +1,2241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BambuLab Print Farm</title>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --card: #1a1d27;
+            --border: #2a2d3a;
+            --text: #e4e4e7;
+            --text-muted: #71717a;
+            --accent: #22c55e;
+            --accent-dim: rgba(34, 197, 94, 0.15);
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #3b82f6;
+            --idle: #6b7280;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .header {
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header h1 .logo {
+            width: 28px;
+            height: 28px;
+            background: var(--accent);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .farm-stats {
+            display: flex;
+            gap: 20px;
+            font-size: 13px;
+        }
+
+        .farm-stat {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .farm-stat .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .dot-connected { background: var(--accent); }
+        .dot-printing { background: var(--info); }
+        .dot-idle { background: var(--idle); }
+        .dot-error { background: var(--danger); }
+
+        .main {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 24px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            background: none;
+            border-top: none;
+            border-left: none;
+            border-right: none;
+        }
+
+        .tab:hover { color: var(--text); }
+        .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Printer Grid */
+        .printer-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 16px;
+        }
+
+        .printer-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            transition: border-color 0.2s;
+        }
+
+        .printer-card:hover { border-color: #3a3d4a; }
+
+        .printer-card.status-running { border-left: 3px solid var(--info); }
+        .printer-card.status-idle, .printer-card.status-finish { border-left: 3px solid var(--accent); }
+        .printer-card.status-paused { border-left: 3px solid var(--warning); }
+        .printer-card.status-failed, .printer-card.status-pause_filament { border-left: 3px solid var(--danger); }
+        .printer-card.status-unknown { border-left: 3px solid var(--idle); }
+
+        .printer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .printer-remove-btn,
+        .printer-rename-btn {
+            background: none;
+            border: none;
+            color: #666;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 0 4px;
+            line-height: 1;
+            border-radius: 4px;
+            opacity: 0.4;
+            transition: opacity 0.2s, color 0.2s;
+        }
+        .printer-remove-btn:hover {
+            opacity: 1;
+            color: var(--danger);
+        }
+        .printer-rename-btn {
+            font-size: 12px;
+        }
+        .printer-rename-btn:hover {
+            opacity: 1;
+            color: var(--primary);
+        }
+
+        .printer-name {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .printer-status {
+            font-size: 12px;
+            font-weight: 500;
+            padding: 3px 10px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-badge-running { background: rgba(59,130,246,0.15); color: var(--info); }
+        .status-badge-idle, .status-badge-finish { background: rgba(34,197,94,0.15); color: var(--accent); }
+        .status-badge-paused { background: rgba(245,158,11,0.15); color: var(--warning); }
+        .status-badge-failed, .status-badge-pause_filament { background: rgba(239,68,68,0.15); color: var(--danger); }
+        .status-badge-unknown { background: rgba(107,114,128,0.15); color: var(--idle); }
+
+        .printer-job {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .progress-bar-container {
+            background: var(--bg);
+            border-radius: 6px;
+            height: 8px;
+            margin-bottom: 12px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            border-radius: 6px;
+            background: var(--info);
+            transition: width 0.5s ease;
+        }
+
+        .printer-temps {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .temp-item {
+            text-align: center;
+            background: var(--bg);
+            border-radius: 8px;
+            padding: 8px 4px;
+        }
+
+        .temp-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+        }
+
+        .temp-value {
+            font-size: 16px;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .temp-target {
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .printer-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+
+        .printer-controls {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        /* Temperature Controls */
+        .temp-control {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 4px;
+        }
+
+        .temp-input {
+            width: 52px;
+            padding: 3px 6px;
+            font-size: 11px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text);
+            text-align: center;
+        }
+
+        .temp-input:focus {
+            outline: none;
+            border-color: var(--info);
+        }
+
+        .temp-set-btn {
+            padding: 3px 8px;
+            font-size: 10px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        .temp-set-btn:hover { border-color: var(--info); color: var(--info); }
+
+        .temp-off-btn {
+            padding: 3px 6px;
+            font-size: 10px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+
+        .temp-off-btn:hover { border-color: var(--danger); color: var(--danger); }
+
+        /* AMS Section */
+        .ams-section {
+            margin-bottom: 12px;
+            padding: 10px;
+            background: var(--bg);
+            border-radius: 8px;
+        }
+
+        .ams-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .ams-humidity {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        .ams-trays {
+            display: flex;
+            gap: 6px;
+        }
+
+        .ams-tray {
+            flex: 1;
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            padding: 6px 4px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.15s;
+            position: relative;
+            min-width: 0;
+        }
+
+        .ams-tray:hover { border-color: var(--text-muted); }
+        .ams-tray.active { border-color: var(--accent); box-shadow: 0 0 6px rgba(34,197,94,0.3); }
+        .ams-tray.empty { opacity: 0.4; cursor: default; }
+
+        .ams-tray-edit {
+            position: absolute; top: 2px; right: 2px;
+            font-size: 10px; color: var(--text-muted); cursor: pointer;
+            opacity: 0; transition: opacity 0.15s;
+            padding: 2px 4px; line-height: 1;
+        }
+        .ams-tray:hover .ams-tray-edit { opacity: 1; }
+        .ams-tray-edit:hover { color: var(--accent); }
+
+        .ams-tray-swatch {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin: 0 auto 4px;
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+
+        .ams-tray-type {
+            font-size: 10px;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .ams-tray-slot {
+            font-size: 9px;
+            color: var(--text-muted);
+        }
+
+        .ams-tray-remain {
+            font-size: 9px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .ams-external {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px solid var(--border);
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .ams-external.active { color: var(--accent); }
+
+        /* Filament Controls */
+        .filament-controls {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid var(--border);
+        }
+
+        /* Camera Feed */
+        .camera-section {
+            margin-bottom: 12px;
+            position: relative;
+            border-radius: 8px;
+            overflow: hidden;
+            background: var(--bg);
+            min-height: 40px;
+        }
+
+        .camera-feed {
+            width: 100%;
+            display: block;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .camera-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px;
+            font-size: 12px;
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+
+        .camera-placeholder:hover { color: var(--text); }
+
+        .camera-btn {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            padding: 2px 8px;
+            font-size: 11px;
+            background: rgba(0,0,0,0.6);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .camera-btn:hover { background: rgba(0,0,0,0.8); }
+
+        /* Camera modal (full-screen view) */
+        .camera-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .camera-modal-overlay.active { display: flex; }
+
+        .camera-modal {
+            max-width: 90vw;
+            max-height: 90vh;
+            position: relative;
+        }
+
+        .camera-modal img {
+            max-width: 90vw;
+            max-height: 85vh;
+            border-radius: 8px;
+        }
+
+        .camera-modal-title {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .camera-modal-close {
+            position: absolute;
+            top: -12px;
+            right: -12px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: none;
+            background: var(--danger);
+            color: #fff;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 6px 14px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--bg);
+            color: var(--text);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .btn:hover { background: var(--border); }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-danger { border-color: var(--danger); color: var(--danger); }
+        .btn-danger:hover { background: rgba(239,68,68,0.1); }
+
+        .admin-only { display: none; }
+        body.is-admin .admin-only { display: inline-block; }
+
+        /* Multi-printer send dropdown */
+        .send-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        .send-dropdown-btn {
+            cursor: pointer;
+        }
+        .send-dropdown-menu {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: 100%;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            min-width: 220px;
+            z-index: 100;
+            padding: 8px 0;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        }
+        .send-dropdown.open .send-dropdown-menu { display: block; }
+        .send-dropdown-menu label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            font-size: 13px;
+            cursor: pointer;
+            color: var(--text);
+        }
+        .send-dropdown-menu label:hover {
+            background: rgba(255,255,255,0.05);
+        }
+        .send-dropdown-menu label input[type="checkbox"] {
+            accent-color: var(--accent);
+        }
+        .send-dropdown-menu .send-dropdown-status {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+        .send-dropdown-menu .send-dropdown-actions {
+            border-top: 1px solid var(--border);
+            padding: 8px 14px 4px;
+            display: flex;
+            gap: 6px;
+        }
+        .btn-warning { border-color: var(--warning); color: var(--warning); }
+        .btn-warning:hover { background: rgba(245,158,11,0.1); }
+        .btn-success { border-color: var(--accent); color: var(--accent); }
+        .btn-success:hover { background: var(--accent-dim); }
+        .btn-primary { border-color: var(--info); color: var(--info); }
+        .btn-primary:hover { background: rgba(59,130,246,0.1); }
+
+        /* Job Queue */
+        .queue-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .upload-area {
+            background: var(--card);
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 24px;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .upload-area:hover, .upload-area.dragover {
+            border-color: var(--accent);
+        }
+
+        .upload-area h3 {
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+
+        .upload-area p {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .upload-options {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+
+        .upload-option {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+        }
+
+        .upload-option label { color: var(--text-muted); }
+        .upload-option input, .upload-option select {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .job-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .job-table th {
+            text-align: left;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .job-table td {
+            padding: 10px 12px;
+            font-size: 13px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .job-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+        .job-status {
+            font-size: 11px;
+            font-weight: 500;
+            padding: 2px 8px;
+            border-radius: 12px;
+        }
+
+        .job-queued { background: rgba(59,130,246,0.15); color: var(--info); }
+        .job-printing { background: rgba(34,197,94,0.15); color: var(--accent); }
+        .job-completed { background: rgba(107,114,128,0.15); color: var(--idle); }
+        .job-failed { background: rgba(239,68,68,0.15); color: var(--danger); }
+        .job-cancelled { background: rgba(245,158,11,0.15); color: var(--warning); }
+        .job-uploading { background: rgba(168,85,247,0.15); color: #a855f7; }
+
+        .job-actions { display: flex; gap: 4px; }
+        .assign-select {
+            appearance: auto;
+            cursor: pointer;
+            padding: 2px 6px;
+            font-size: 12px;
+            background: var(--card-bg);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+        }
+
+        /* Connection badge */
+        .conn-badge {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        .conn-online { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+        .conn-offline { background: var(--danger); }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .printer-grid { grid-template-columns: 1fr; }
+            .farm-stats { display: none; }
+            .main { padding: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>
+            <span class="logo">&#x25B2;</span>
+            BambuLab Print Farm
+        </h1>
+        <div style="display:flex; align-items:center; gap:20px;">
+            <div class="farm-stats" id="farmStats">
+                <div class="farm-stat"><span class="dot dot-connected"></span> <span id="statConnected">0</span> Connected</div>
+                <div class="farm-stat"><span class="dot dot-printing"></span> <span id="statPrinting">0</span> Printing</div>
+                <div class="farm-stat"><span class="dot dot-idle"></span> <span id="statIdle">0</span> Idle</div>
+                <div class="farm-stat"><span class="dot dot-error"></span> <span id="statErrored">0</span> Error</div>
+            </div>
+            <div id="authArea">
+                <button class="btn" id="loginBtn" onclick="showLoginModal()" style="font-size:12px; padding:4px 12px;">Login</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="main">
+        <div class="tabs">
+            <button class="tab active" data-tab="printers">Printers</button>
+            <button class="tab" data-tab="queue">Job Queue</button>
+            <button class="tab" data-tab="history">History</button>
+            <button class="tab" data-tab="orca">OrcaSlicer Setup</button>
+        </div>
+
+        <!-- Printers Tab -->
+        <div class="tab-content active" id="tab-printers">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <div id="printerCount" style="font-size:13px; color:var(--text-muted);"></div>
+                <button class="btn btn-success admin-only" onclick="openWizard()">+ Add Printer</button>
+            </div>
+            <div class="printer-grid" id="printerGrid"></div>
+        </div>
+
+        <!-- Job Queue Tab -->
+        <div class="tab-content" id="tab-queue">
+            <div class="upload-area" id="uploadArea">
+                <h3>Upload G-code File</h3>
+                <p>Drag &amp; drop files here or click to browse</p>
+                <input type="file" id="fileInput" accept=".gcode" style="display:none" multiple>
+                <div class="upload-options">
+                    <div class="upload-option">
+                        <label>Copies:</label>
+                        <input type="number" id="uploadCopies" value="1" min="1" max="100" style="width:60px">
+                    </div>
+                    <div class="upload-option admin-only">
+                        <label>Priority:</label>
+                        <select id="uploadPriority">
+                            <option value="0">Normal</option>
+                            <option value="1">High</option>
+                            <option value="2">Urgent</option>
+                        </select>
+                    </div>
+                    <div class="upload-option admin-only">
+                        <label>Printer:</label>
+                        <select id="uploadPrinter">
+                            <option value="">Auto (next idle)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="queue-header">
+                <h2 style="font-size:16px;">Print Queue</h2>
+                <div id="queueStats" style="font-size:13px; color:var(--text-muted);"></div>
+            </div>
+            <table class="job-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>File</th>
+                        <th>Status</th>
+                        <th>Printer</th>
+                        <th>Copies</th>
+                        <th>Priority</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="jobTableBody"></tbody>
+            </table>
+        </div>
+
+        <!-- History Tab -->
+        <div class="tab-content" id="tab-history">
+            <h2 style="font-size:16px; margin-bottom:16px;">Print History</h2>
+            <table class="job-table">
+                <thead>
+                    <tr>
+                        <th>File</th>
+                        <th>Printer</th>
+                        <th>Status</th>
+                        <th>Duration</th>
+                        <th>Completed</th>
+                    </tr>
+                </thead>
+                <tbody id="historyTableBody"></tbody>
+            </table>
+        </div>
+        <!-- OrcaSlicer Setup Tab -->
+        <div class="tab-content" id="tab-orca">
+            <div class="orca-setup">
+                <h2 style="font-size:18px; margin-bottom:20px;">Send G-code from OrcaSlicer to the Print Farm</h2>
+
+                <div class="setup-section">
+                    <h3>1. Download the Upload Script</h3>
+                    <p style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">
+                        This script runs automatically after OrcaSlicer finishes slicing and sends the G-code to the farm's job queue.
+                    </p>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                        <a class="btn btn-primary" id="dlBat" download="upload_to_farm.bat" style="text-decoration:none;">
+                            &#11015; Windows (.bat)
+                        </a>
+                        <a class="btn btn-success" id="dlPython" download="upload_to_farm.py" style="text-decoration:none;">
+                            &#11015; Python (Any OS)
+                        </a>
+                    </div>
+                    <p style="font-size:11px; color:var(--text-muted); margin-top:8px;">
+                        Windows users: just download the .bat file. No PowerShell or Python needed — it uses <code>curl</code> which is built into Windows.
+                    </p>
+                </div>
+
+                <div class="setup-section">
+                    <h3>2. Setup in OrcaSlicer</h3>
+                    <div class="setup-steps">
+                        <div class="step">
+                            <div class="step-num">1</div>
+                            <div class="step-text">
+                                <strong>Save the script</strong><br>
+                                Download the script above and save it somewhere permanent, e.g.<br>
+                                Windows: Leave in your <code>Downloads</code> folder (default download location)<br>
+                                Mac/Linux: <code>~/upload_to_farm.py</code>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-num">2</div>
+                            <div class="step-text">
+                                <strong>Open Post-Processing Scripts</strong><br>
+                                First, make sure OrcaSlicer is in <strong>Advanced</strong> or <strong>Expert</strong> mode (top-right corner dropdown — it's hidden in Simple mode).<br>
+                                Then click the <strong>pencil/edit icon</strong> next to your print profile name to open the <strong>Process</strong> settings.<br>
+                                Click the <strong>Others</strong> sub-tab at the top of the settings panel, then scroll to the bottom to find <strong>Post-processing Scripts</strong>.
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-num">3</div>
+                            <div class="step-text">
+                                <strong>Add the script command</strong><br>
+                                Paste this into the Post-processing Scripts box:<br><br>
+                                <strong>Windows:</strong>
+                                <div class="script-box">
+                                    <code id="cmdPs">C:\Windows\System32\cmd.exe /c C:\Users\USERNAME\Downloads\upload_to_farm.bat</code>
+                                    <button class="btn-copy" onclick="copyText(document.getElementById('cmdPs').textContent)" title="Copy">&#128203;</button>
+                                </div>
+                                <span style="font-size:11px; color:var(--text-muted);">Replace <strong>USERNAME</strong> with your Windows username (e.g. <code>C:\Windows\System32\cmd.exe /c C:\Users\rob.barnard\Downloads\upload_to_farm.bat</code>).</span><br><br>
+                                <strong>Python (any OS):</strong>
+                                <div class="script-box">
+                                    <code id="cmdPy">python3 "/path/to/upload_to_farm.py"</code>
+                                    <button class="btn-copy" onclick="copyText(document.getElementById('cmdPy').textContent)" title="Copy">&#128203;</button>
+                                </div>
+                                <span style="font-size:11px; color:var(--text-muted);">Update the path to match where you saved the script.</span>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-num">4</div>
+                            <div class="step-text">
+                                <strong>Slice as normal</strong><br>
+                                Click <em>"Slice"</em> in OrcaSlicer. After slicing completes, the script will automatically upload the G-code to the farm. You'll see a confirmation in OrcaSlicer's console log.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="setup-section">
+                    <h3>Connection Details</h3>
+                    <div class="setup-details">
+                        <div class="detail-row">
+                            <span class="detail-label">Farm URL</span>
+                            <span class="detail-value">
+                                <code id="orcaHost"></code>
+                                <button class="btn-copy" onclick="copyText(document.getElementById('orcaHost').textContent)" title="Copy">&#128203;</button>
+                            </span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">API Key</span>
+                            <span class="detail-value">
+                                <code id="orcaApiKey">{{ api_key }}</code>
+                                <button class="btn-copy" onclick="copyText(document.getElementById('orcaApiKey').textContent)" title="Copy">&#128203;</button>
+                            </span>
+                        </div>
+                    </div>
+                    <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">
+                        These are pre-configured in the download scripts. Only change them if you move the server.
+                    </p>
+                </div>
+
+                <div class="setup-section">
+                    <h3>Notes</h3>
+                    <ul class="setup-notes">
+                        <li>The script runs after every slice — uploaded files appear in the <strong>Job Queue</strong> tab.</li>
+                        <li>Only <code>.gcode</code> files are uploaded. OrcaSlicer passes the file path automatically.</li>
+                        <li>The script is <strong>silent on success</strong> in OrcaSlicer — check the Job Queue to confirm.</li>
+                        <li>Make sure your computer can reach <code id="orcaHostNote"></code> on the network.</li>
+                        <li>You can also drag &amp; drop files directly into the <strong>Job Queue</strong> tab as an alternative.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Camera Full-Screen Modal -->
+    <div class="camera-modal-overlay" id="cameraModalOverlay" onclick="closeCameraModal()">
+        <div class="camera-modal" onclick="event.stopPropagation()">
+            <div class="camera-modal-title" id="cameraModalTitle"></div>
+            <img id="cameraModalImg" src="" alt="Camera Feed">
+            <button class="camera-modal-close" onclick="closeCameraModal()">&times;</button>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div class="modal-overlay" id="loginOverlay" style="display:none">
+        <div class="modal" style="max-width:360px;">
+            <div class="modal-header">
+                <h2 style="font-size:18px;">Admin Login</h2>
+                <button class="modal-close" onclick="closeLoginModal()">&times;</button>
+            </div>
+            <div style="padding:20px;">
+                <input type="password" id="loginPassword" placeholder="Password" autofocus
+                       style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:14px; margin-bottom:12px;"
+                       onkeydown="if(event.key==='Enter')doLogin()">
+                <div id="loginError" style="color:var(--danger); font-size:13px; margin-bottom:12px; display:none;"></div>
+                <button class="btn btn-success" onclick="doLogin()" style="width:100%; padding:10px;">Login</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Discovery Wizard Modal -->
+    <div class="modal-overlay" id="wizardOverlay" style="display:none">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 style="font-size:18px;">Add Printer</h2>
+                <button class="modal-close" onclick="closeWizard()">&times;</button>
+            </div>
+
+            <!-- Step 1: Discover -->
+            <div class="wizard-step" id="wiz-step-1">
+                <p style="color:var(--text-muted); margin-bottom:16px;">
+                    Search for BambuLab printers on your network. Make sure LAN mode is enabled on each printer.
+                </p>
+                <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
+                    <button class="btn btn-primary" id="btnScan" onclick="startScan(false)">
+                        Scan for Printers
+                    </button>
+                    <button class="btn" id="btnDeepScan" onclick="startScan(true)">
+                        Deep Scan (Port Scan)
+                    </button>
+                    <button class="btn" onclick="showManualAdd()">
+                        Add Manually
+                    </button>
+                </div>
+                <div id="scanStatus" style="font-size:13px; color:var(--text-muted); margin-bottom:12px;"></div>
+                <div id="scanResults"></div>
+            </div>
+
+            <!-- Step 2: Configure -->
+            <div class="wizard-step" id="wiz-step-2" style="display:none">
+                <div class="wizard-form">
+                    <div class="form-group">
+                        <label>Printer Name</label>
+                        <input type="text" id="wizName" placeholder="e.g. P1S-01">
+                    </div>
+                    <div class="form-group">
+                        <label>IP Address</label>
+                        <input type="text" id="wizHost" placeholder="192.168.1.x">
+                    </div>
+                    <div class="form-group">
+                        <label>Serial Number</label>
+                        <input type="text" id="wizSerial" placeholder="From LCD: Settings → Device Info">
+                    </div>
+                    <div class="form-group">
+                        <label>LAN Access Code</label>
+                        <input type="text" id="wizAccessCode" placeholder="From LCD: Settings → LAN Mode">
+                        <span style="font-size:11px; color:var(--text-muted);">8-digit code from the printer's LCD screen</span>
+                    </div>
+                    <div class="form-group">
+                        <label>AMS Serial Number <span style="font-size:11px; color:var(--text-muted);">(optional)</span></label>
+                        <input type="text" id="wizAmsSerial" placeholder="Leave blank if no AMS attached">
+                    </div>
+                    <div id="wizTestResult" style="margin:12px 0;"></div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn" onclick="wizBack()">Back</button>
+                        <button class="btn btn-primary" id="btnTest" onclick="wizTest()">Test Connection</button>
+                        <button class="btn btn-success" id="btnAdd" onclick="wizAdd()" disabled>Add Printer</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tray Config Modal -->
+    <div class="modal-overlay" id="trayConfigOverlay" style="display:none">
+        <div class="modal" style="max-width:400px;">
+            <div class="modal-header">
+                <h2 style="font-size:18px;">Configure Tray <span id="trayConfigSlotLabel"></span></h2>
+                <button class="modal-close" onclick="closeTrayConfig()">&times;</button>
+            </div>
+            <div class="tray-config-form">
+                <input type="hidden" id="trayConfigPrinter">
+                <input type="hidden" id="trayConfigId">
+                <div class="form-group">
+                    <label>Filament Type</label>
+                    <select id="trayConfigType">
+                        <option value="PLA">PLA</option>
+                        <option value="PLA-S">PLA Silk</option>
+                        <option value="PLA-CF">PLA-CF</option>
+                        <option value="PETG">PETG</option>
+                        <option value="PETG-CF">PETG-CF</option>
+                        <option value="ABS">ABS</option>
+                        <option value="ASA">ASA</option>
+                        <option value="TPU">TPU</option>
+                        <option value="PA">PA (Nylon)</option>
+                        <option value="PA-CF">PA-CF</option>
+                        <option value="PC">PC</option>
+                        <option value="PVA">PVA</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Filament Color</label>
+                    <div class="color-row">
+                        <input type="color" id="trayConfigColor" value="#FFFFFF">
+                        <input type="text" id="trayConfigColorHex" class="color-hex" placeholder="#FFFFFF" maxlength="7">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Nozzle Temp Min (°C)</label>
+                    <input type="number" id="trayConfigTempMin" value="190" min="0" max="300">
+                </div>
+                <div class="form-group">
+                    <label>Nozzle Temp Max (°C)</label>
+                    <input type="number" id="trayConfigTempMax" value="230" min="0" max="300">
+                </div>
+                <div id="trayConfigResult" style="margin:12px 0; font-size:13px;"></div>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn" onclick="closeTrayConfig()">Cancel</button>
+                    <button class="btn btn-primary" onclick="saveTrayConfig()">Save & Apply</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7); z-index: 1000;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .modal {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 12px; padding: 24px; width: 90%; max-width: 600px;
+            max-height: 80vh; overflow-y: auto;
+        }
+        .modal-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 16px;
+        }
+        .modal-close {
+            background: none; border: none; color: var(--text-muted);
+            font-size: 24px; cursor: pointer; padding: 0 4px;
+        }
+        .modal-close:hover { color: var(--text); }
+        .wizard-form .form-group { margin-bottom: 14px; }
+        .wizard-form label {
+            display: block; font-size: 12px; font-weight: 500;
+            color: var(--text-muted); margin-bottom: 4px;
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .wizard-form input {
+            width: 100%; padding: 8px 12px; border-radius: 6px;
+            border: 1px solid var(--border); background: var(--bg);
+            color: var(--text); font-size: 14px;
+        }
+        .wizard-form input:focus {
+            outline: none; border-color: var(--accent);
+        }
+        .discovered-item {
+            background: var(--bg); border: 1px solid var(--border);
+            border-radius: 8px; padding: 12px; margin-bottom: 8px;
+            display: flex; justify-content: space-between; align-items: center;
+            cursor: pointer; transition: border-color 0.2s;
+        }
+        .discovered-item:hover { border-color: var(--accent); }
+        .discovered-info { flex: 1; }
+        .discovered-name { font-weight: 600; font-size: 14px; }
+        .discovered-detail { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+        .spinner {
+            display: inline-block; width: 14px; height: 14px;
+            border: 2px solid var(--border); border-top-color: var(--accent);
+            border-radius: 50%; animation: spin 0.8s linear infinite;
+            vertical-align: middle; margin-right: 6px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .test-ok { color: var(--accent); font-size: 13px; }
+        .test-fail { color: var(--danger); font-size: 13px; }
+
+        /* OrcaSlicer Setup Tab */
+        .orca-setup { max-width: 700px; }
+        .setup-section { margin-bottom: 28px; }
+        .setup-section h3 {
+            font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;
+            color: var(--accent); margin-bottom: 12px; padding-bottom: 6px;
+            border-bottom: 1px solid var(--border);
+        }
+        .setup-details {
+            background: var(--bg); border: 1px solid var(--border);
+            border-radius: 8px; padding: 16px;
+        }
+        .detail-row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 10px 0; border-bottom: 1px solid var(--border);
+        }
+        .detail-row:last-child { border-bottom: none; }
+        .detail-label { font-size: 13px; color: var(--text-muted); font-weight: 500; }
+        .detail-value { font-size: 14px; display: flex; align-items: center; gap: 8px; }
+        .detail-value code {
+            background: rgba(34,197,94,0.1); color: var(--accent);
+            padding: 4px 10px; border-radius: 4px; font-size: 13px;
+            user-select: all;
+        }
+        .btn-copy {
+            background: none; border: 1px solid var(--border); border-radius: 4px;
+            color: var(--text-muted); cursor: pointer; padding: 3px 6px; font-size: 13px;
+            transition: all 0.15s;
+        }
+        .btn-copy:hover { border-color: var(--accent); color: var(--accent); }
+        .setup-steps { display: flex; flex-direction: column; gap: 12px; }
+        .step {
+            display: flex; gap: 14px; align-items: flex-start;
+            background: var(--bg); border: 1px solid var(--border);
+            border-radius: 8px; padding: 14px;
+        }
+        .step-num {
+            min-width: 28px; height: 28px; border-radius: 50%;
+            background: var(--accent); color: var(--bg); display: flex;
+            align-items: center; justify-content: center;
+            font-weight: 700; font-size: 14px; flex-shrink: 0;
+        }
+        .step-text { font-size: 13px; line-height: 1.5; }
+        .step-text code {
+            background: rgba(255,255,255,0.06); padding: 1px 5px;
+            border-radius: 3px; font-size: 12px;
+        }
+        .setup-notes {
+            list-style: none; padding: 0; margin: 0;
+            background: var(--bg); border: 1px solid var(--border);
+            border-radius: 8px; padding: 14px 14px 14px 18px;
+        }
+        .setup-notes li {
+            font-size: 13px; color: var(--text-muted); padding: 4px 0;
+            position: relative; padding-left: 16px;
+        }
+        .setup-notes li::before {
+            content: '•'; position: absolute; left: 0; color: var(--accent);
+        }
+        .script-box {
+            display: flex; align-items: center; gap: 8px;
+            background: var(--bg); border: 1px solid var(--border);
+            border-radius: 6px; padding: 8px 12px; margin: 6px 0 10px;
+            font-size: 12px; word-break: break-all;
+        }
+        .script-box code {
+            flex: 1; user-select: all; color: var(--accent);
+            background: none; padding: 0;
+        }
+
+        /* Tray config modal */
+        .tray-config-form .form-group { margin-bottom: 14px; }
+        .tray-config-form label {
+            display: block; font-size: 12px; font-weight: 500;
+            color: var(--text-muted); margin-bottom: 4px;
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .tray-config-form select,
+        .tray-config-form input[type="text"],
+        .tray-config-form input[type="number"] {
+            width: 100%; padding: 8px 12px; border-radius: 6px;
+            border: 1px solid var(--border); background: var(--bg);
+            color: var(--text); font-size: 14px;
+        }
+        .tray-config-form select:focus,
+        .tray-config-form input:focus { outline: none; border-color: var(--accent); }
+        .color-row { display: flex; align-items: center; gap: 10px; }
+        .color-row input[type="color"] {
+            width: 48px; height: 36px; border: 1px solid var(--border);
+            border-radius: 6px; background: none; cursor: pointer; padding: 2px;
+        }
+        .color-row .color-hex { flex: 1; }
+    </style>
+
+    <script>
+        const BASE = '{{ prefix }}';
+        let isAdmin = false;
+        let cameraStreaming = {};   // {printerName: true/false}
+        let cameraRefreshTimers = {};  // per-printer snapshot refresh intervals
+
+        // ── Auth ─────────────────────────────────────────────
+        async function checkAuth() {
+            try {
+                const res = await fetch(BASE + '/api/auth/status');
+                const data = await res.json();
+                isAdmin = data.admin === true;
+            } catch (e) {
+                isAdmin = false;
+            }
+            updateAuthUI();
+        }
+
+        function updateAuthUI() {
+            const area = document.getElementById('authArea');
+            if (isAdmin) {
+                document.body.classList.add('is-admin');
+                area.innerHTML = `<span style="font-size:12px; color:var(--accent); margin-right:8px;">Admin</span>
+                    <button class="btn" onclick="doLogout()" style="font-size:12px; padding:4px 12px;">Logout</button>`;
+            } else {
+                document.body.classList.remove('is-admin');
+                area.innerHTML = `<button class="btn" onclick="showLoginModal()" style="font-size:12px; padding:4px 12px;">Login</button>`;
+            }
+            // Re-render printers and jobs to show/hide controls
+            lastPrinterNames = [];  // Force full rebuild
+            refreshPrinters();
+            refreshJobs();
+        }
+
+        function showLoginModal() {
+            document.getElementById('loginOverlay').style.display = 'flex';
+            document.getElementById('loginPassword').value = '';
+            document.getElementById('loginError').style.display = 'none';
+            setTimeout(() => document.getElementById('loginPassword').focus(), 100);
+        }
+
+        function closeLoginModal() {
+            document.getElementById('loginOverlay').style.display = 'none';
+        }
+
+        document.getElementById('loginOverlay').addEventListener('click', e => {
+            if (e.target === e.currentTarget) closeLoginModal();
+        });
+
+        async function doLogin() {
+            const pw = document.getElementById('loginPassword').value;
+            const errEl = document.getElementById('loginError');
+            try {
+                const res = await fetch(BASE + '/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: pw }),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    isAdmin = true;
+                    closeLoginModal();
+                    updateAuthUI();
+                } else {
+                    errEl.textContent = 'Invalid password';
+                    errEl.style.display = 'block';
+                }
+            } catch (e) {
+                errEl.textContent = 'Login failed: ' + e.message;
+                errEl.style.display = 'block';
+            }
+        }
+
+        async function doLogout() {
+            try {
+                await fetch(BASE + '/api/auth/logout', { method: 'POST' });
+            } catch (e) {}
+            isAdmin = false;
+            updateAuthUI();
+        }
+
+        checkAuth();
+
+        // ── OrcaSlicer hostname ──────────────────────────────
+        const farmHost = `http://${location.hostname}:5000`;
+        document.getElementById('orcaHost').textContent = farmHost;
+        const hostNote = document.getElementById('orcaHostNote');
+        if (hostNote) hostNote.textContent = farmHost;
+
+        // Set download links for client scripts
+        document.getElementById('dlBat').href = `${BASE}/static/client/upload_to_farm.bat`;
+        document.getElementById('dlPython').href = `${BASE}/static/client/upload_to_farm.py`;
+
+        function copyText(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                // Brief visual feedback — not worth a toast for this
+            }).catch(() => {
+                // Fallback for non-HTTPS
+                const ta = document.createElement('textarea');
+                ta.value = text; document.body.appendChild(ta);
+                ta.select(); document.execCommand('copy');
+                document.body.removeChild(ta);
+            });
+        }
+
+        // ── Tabs ─────────────────────────────────────────────
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+            });
+        });
+
+        // ── Upload ───────────────────────────────────────────
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+        uploadArea.addEventListener('drop', e => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
+        });
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) uploadFiles(fileInput.files);
+        });
+
+        async function uploadFiles(files) {
+            for (const file of files) {
+                const form = new FormData();
+                form.append('file', file);
+                form.append('copies', document.getElementById('uploadCopies').value);
+                form.append('priority', document.getElementById('uploadPriority').value);
+                form.append('printer', document.getElementById('uploadPrinter').value);
+
+                try {
+                    const res = await fetch(BASE + '/api/jobs/upload', { method: 'POST', body: form });
+                    const data = await res.json();
+                    if (data.ok) {
+                        refreshJobs();
+                    } else {
+                        alert('Upload failed: ' + (data.error || 'Unknown error'));
+                    }
+                } catch (err) {
+                    alert('Upload error: ' + err.message);
+                }
+            }
+            fileInput.value = '';
+        }
+
+        // ── API Helpers ──────────────────────────────────────
+        async function apiPost(url, body) {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: body ? JSON.stringify(body) : undefined,
+            });
+            return res.json();
+        }
+
+        // ── Printer Rendering ────────────────────────────────
+        function formatTime(minutes) {
+            if (!minutes) return '--';
+            const h = Math.floor(minutes / 60);
+            const m = minutes % 60;
+            return h > 0 ? `${h}h ${m}m` : `${m}m`;
+        }
+
+        let lastPrinterNames = [];  // Track which printers are in the grid
+        let availablePrinters = [];  // Track available printers for manual assign
+
+        function renderPrinterCard(name, p) {
+            const status = p.status.toLowerCase();
+            const connected = p.connected;
+            const connClass = connected ? 'conn-online' : 'conn-offline';
+            const statusLabel = connected ? p.status : 'OFFLINE';
+            const statusBadge = connected ? `status-badge-${status}` : 'status-badge-unknown';
+            const cardClass = connected ? `status-${status}` : 'status-unknown';
+
+            const isRunning = status === 'running';
+            const isPaused = status === 'paused' || status === 'pause_filament';
+
+            return `
+                <div class="printer-card ${cardClass}" data-printer="${name}">
+                    <div class="printer-header">
+                        <span class="printer-name">
+                            <span class="conn-badge ${connClass}"></span>${name}
+                            ${isAdmin ? `<button class="printer-rename-btn" onclick="renamePrinter('${name}')" title="Rename printer">&#9998;</button>` : ''}
+                        </span>
+                        <span class="printer-status ${statusBadge}" data-field="status">${statusLabel}</span>
+                        ${isAdmin ? `<button class="printer-remove-btn" onclick="removePrinter('${name}')" title="Remove printer">&times;</button>` : ''}
+                    </div>
+                    <div class="printer-job" data-field="job">${p.subtask_name || 'No active job'}</div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" data-field="progress" style="width:${isRunning || isPaused ? p.mc_percent : 0}%"></div>
+                    </div>
+                    <div class="camera-section" id="cam-${name}">
+                        ${cameraStreaming[name]
+                            ? `<img class="camera-feed" src="${BASE}/api/camera/${encodeURIComponent(name)}/snapshot?t=${Date.now()}" alt="Camera" onclick="openCameraModal('${name}')">
+                               <button class="camera-btn" onclick="event.stopPropagation();toggleCamera('${name}',false)">&#x25A0; Stop</button>`
+                            : `<div class="camera-placeholder" onclick="toggleCamera('${name}',true)">&#x1F4F7; Start Camera</div>`
+                        }
+                    </div>
+                    <div class="printer-meta">
+                        <span data-field="percent">${isRunning ? p.mc_percent + '%' : '--'}</span>
+                        <span data-field="layers">Layer ${p.layer_num || 0}/${p.total_layers || 0}</span>
+                        <span data-field="eta">ETA: ${isRunning ? formatTime(p.mc_remaining_time) : '--'}</span>
+                        <span data-field="speed">Speed: ${p.spd_mag}%</span>
+                    </div>
+                    <div class="printer-temps">
+                        <div class="temp-item">
+                            <div class="temp-label">Nozzle</div>
+                            <div class="temp-value" data-field="nozzle-temp">${p.nozzle_temper?.toFixed(0) || 0}°</div>
+                            <div class="temp-target" data-field="nozzle-target">/ ${p.nozzle_target_temper?.toFixed(0) || 0}°</div>
+                            ${isAdmin ? `<div class="temp-control">
+                                <input type="number" class="temp-input" id="nozzle-${name}" placeholder="°C" min="0" max="300">
+                                <button class="temp-set-btn" onclick="setNozzleTemp('${name}')">Set</button>
+                                <button class="temp-off-btn" onclick="setTemp('${name}','nozzle_temp',0)">Off</button>
+                            </div>` : ''}
+                        </div>
+                        <div class="temp-item">
+                            <div class="temp-label">Bed</div>
+                            <div class="temp-value" data-field="bed-temp">${p.bed_temper?.toFixed(0) || 0}°</div>
+                            <div class="temp-target" data-field="bed-target">/ ${p.bed_target_temper?.toFixed(0) || 0}°</div>
+                            ${isAdmin ? `<div class="temp-control">
+                                <input type="number" class="temp-input" id="bed-${name}" placeholder="°C" min="0" max="120">
+                                <button class="temp-set-btn" onclick="setBedTemp('${name}')">Set</button>
+                                <button class="temp-off-btn" onclick="setTemp('${name}','bed_temp',0)">Off</button>
+                            </div>` : ''}
+                        </div>
+                        <div class="temp-item">
+                            <div class="temp-label">Chamber</div>
+                            <div class="temp-value" data-field="chamber-temp">${p.chamber_temper?.toFixed(0) || 0}°</div>
+                            <div class="temp-target">&nbsp;</div>
+                        </div>
+                    </div>
+                    ${isAdmin ? `<div class="printer-controls" data-field="controls">
+                        ${isPaused ? `<button class="btn btn-success" onclick="printerCmd('${name}','resume')">Resume</button>` : ''}
+                        ${isRunning ? `<button class="btn btn-warning" onclick="printerCmd('${name}','pause')">Pause</button>` : ''}
+                        ${isRunning || isPaused ? `<button class="btn btn-danger" onclick="printerCmd('${name}','stop')">Stop</button>` : ''}
+                        <button class="btn" onclick="printerCmd('${name}','light')" title="Toggle light">
+                            ${p.chamber_light ? '💡' : '🔅'}
+                        </button>
+                    </div>` : ''}
+                    ${renderAmsSection(name, p)}
+                </div>
+            `;
+        }
+
+        function renderAmsSection(name, p) {
+            if (p.has_ams && p.ams_trays && p.ams_trays.length > 0) {
+                const trays = p.ams_trays.map(t => {
+                    const swatchColor = t.color || '#333';
+                    const activeClass = t.active ? 'active' : '';
+                    const emptyClass = !t.loaded ? 'empty' : '';
+                    if (isAdmin) {
+                        return `
+                            <div class="ams-tray ${activeClass} ${emptyClass}"
+                                 onclick="${t.loaded ? `amsLoadTray('${name}', ${t.id})` : ''}"
+                                 title="${t.loaded ? `Click to load · Right-click to configure` : 'Empty slot'}"
+                                 oncontextmenu="${t.loaded ? `event.preventDefault();openTrayConfig('${name}', ${t.id}, ${t.slot}, '${(t.type||'').replace(/'/g,"\\'")}', '${t.color||'#333333'}', '${t.nozzle_temp_min}', '${t.nozzle_temp_max}')` : ''}">
+                                <div class="ams-tray-swatch" style="background:${t.loaded ? swatchColor : '#333'}"></div>
+                                <div class="ams-tray-type">${t.type || '—'}</div>
+                                <div class="ams-tray-slot">#${t.slot + 1}</div>
+                                ${t.loaded && t.remain >= 0 ? `<div class="ams-tray-remain">${t.remain}%</div>` : ''}
+                                ${t.loaded ? `<div class="ams-tray-edit" onclick="event.stopPropagation();openTrayConfig('${name}', ${t.id}, ${t.slot}, '${(t.type||'').replace(/'/g,"\\'")}', '${t.color||'#333333'}', '${t.nozzle_temp_min}', '${t.nozzle_temp_max}')" title="Configure filament">&#9998;</div>` : ''}
+                            </div>
+                        `;
+                    } else {
+                        return `
+                            <div class="ams-tray ${activeClass} ${emptyClass}" title="${t.loaded ? t.type + ' · ' + (t.color || '') : 'Empty slot'}">
+                                <div class="ams-tray-swatch" style="background:${t.loaded ? swatchColor : '#333'}"></div>
+                                <div class="ams-tray-type">${t.type || '—'}</div>
+                                <div class="ams-tray-slot">#${t.slot + 1}</div>
+                                ${t.loaded && t.remain >= 0 ? `<div class="ams-tray-remain">${t.remain}%</div>` : ''}
+                            </div>
+                        `;
+                    }
+                }).join('');
+
+                const humLabel = p.ams_humidity ? ` · Humidity: ${p.ams_humidity}` : '';
+                const externalActive = p.ams_tray_now === 254;
+
+                return `
+                    <div class="ams-section" data-field="ams">
+                        <div class="ams-header">
+                            <span>AMS${p.ams_serial ? ` <span style="font-size:10px;color:var(--text-muted)">(${p.ams_serial})</span>` : ''}${humLabel}</span>
+                            <span>${p.ams_tray_now < 254 ? `Tray ${p.ams_tray_now + 1}` : p.ams_tray_now === 254 ? 'External' : 'None'}</span>
+                        </div>
+                        <div class="ams-trays">${trays}</div>
+                        ${isAdmin ? `<div class="ams-external ${externalActive ? 'active' : ''}">
+                            <span onclick="amsLoadTray('${name}', 254)" style="cursor:pointer">🔗 External Spool${externalActive ? ' (active)' : ''}</span>
+                            <span style="margin-left:auto;">
+                                <button class="btn" onclick="amsLoadTray('${name}', 255)" style="font-size:10px;padding:2px 8px;">Unload</button>
+                            </span>
+                        </div>` : `<div class="ams-external ${externalActive ? 'active' : ''}">
+                            <span>🔗 External Spool${externalActive ? ' (active)' : ''}</span>
+                        </div>`}
+                    </div>
+                `;
+            } else {
+                // No AMS — show simple filament controls (admin only)
+                if (isAdmin) {
+                    return `
+                        <div class="filament-controls" data-field="filament">
+                            <button class="btn btn-primary" onclick="filamentCmd('${name}','unload_filament')">Unload Filament</button>
+                            <button class="btn btn-success" onclick="filamentCmd('${name}','load_filament')">Load Filament</button>
+                        </div>
+                    `;
+                }
+                return '';
+            }
+        }
+
+        function updatePrinterCard(card, name, p) {
+            const status = p.status.toLowerCase();
+            const connected = p.connected;
+            const isRunning = status === 'running';
+            const isPaused = status === 'paused' || status === 'pause_filament';
+
+            // Update card class (border color)
+            const newClass = connected ? `status-${status}` : 'status-unknown';
+            card.className = `printer-card ${newClass}`;
+
+            // Connection badge
+            const badge = card.querySelector('.conn-badge');
+            if (badge) badge.className = `conn-badge ${connected ? 'conn-online' : 'conn-offline'}`;
+
+            // Status label
+            const statusEl = card.querySelector('[data-field="status"]');
+            const statusLabel = connected ? p.status : 'OFFLINE';
+            const statusBadge = connected ? `status-badge-${status}` : 'status-badge-unknown';
+            if (statusEl) { statusEl.textContent = statusLabel; statusEl.className = `printer-status ${statusBadge}`; }
+
+            // Job name
+            const jobEl = card.querySelector('[data-field="job"]');
+            if (jobEl) jobEl.textContent = p.subtask_name || 'No active job';
+
+            // Progress bar
+            const progEl = card.querySelector('[data-field="progress"]');
+            if (progEl) progEl.style.width = (isRunning || isPaused ? p.mc_percent : 0) + '%';
+
+            // Meta row
+            const pctEl = card.querySelector('[data-field="percent"]');
+            if (pctEl) pctEl.textContent = isRunning ? p.mc_percent + '%' : '--';
+            const layEl = card.querySelector('[data-field="layers"]');
+            if (layEl) layEl.textContent = `Layer ${p.layer_num || 0}/${p.total_layers || 0}`;
+            const etaEl = card.querySelector('[data-field="eta"]');
+            if (etaEl) etaEl.textContent = `ETA: ${isRunning ? formatTime(p.mc_remaining_time) : '--'}`;
+            const spdEl = card.querySelector('[data-field="speed"]');
+            if (spdEl) spdEl.textContent = `Speed: ${p.spd_mag}%`;
+
+            // Temperatures (only update display, not input fields)
+            const nt = card.querySelector('[data-field="nozzle-temp"]');
+            if (nt) nt.textContent = (p.nozzle_temper?.toFixed(0) || 0) + '°';
+            const ntt = card.querySelector('[data-field="nozzle-target"]');
+            if (ntt) ntt.textContent = '/ ' + (p.nozzle_target_temper?.toFixed(0) || 0) + '°';
+            const bt = card.querySelector('[data-field="bed-temp"]');
+            if (bt) bt.textContent = (p.bed_temper?.toFixed(0) || 0) + '°';
+            const btt = card.querySelector('[data-field="bed-target"]');
+            if (btt) btt.textContent = '/ ' + (p.bed_target_temper?.toFixed(0) || 0) + '°';
+            const ct = card.querySelector('[data-field="chamber-temp"]');
+            if (ct) ct.textContent = (p.chamber_temper?.toFixed(0) || 0) + '°';
+
+            // Controls (need rebuild since buttons change with status)
+            const ctrlEl = card.querySelector('[data-field="controls"]');
+            if (ctrlEl && isAdmin) {
+                ctrlEl.innerHTML = `
+                    ${isPaused ? `<button class="btn btn-success" onclick="printerCmd('${name}','resume')">Resume</button>` : ''}
+                    ${isRunning ? `<button class="btn btn-warning" onclick="printerCmd('${name}','pause')">Pause</button>` : ''}
+                    ${isRunning || isPaused ? `<button class="btn btn-danger" onclick="printerCmd('${name}','stop')">Stop</button>` : ''}
+                    <button class="btn" onclick="printerCmd('${name}','light')" title="Toggle light">
+                        ${p.chamber_light ? '💡' : '🔅'}
+                    </button>
+                `;
+            }
+
+            // AMS / Filament section — replace in place
+            const amsEl = card.querySelector('[data-field="ams"]') || card.querySelector('[data-field="filament"]');
+            if (amsEl) {
+                const newHtml = renderAmsSection(name, p);
+                const temp = document.createElement('div');
+                temp.innerHTML = newHtml;
+                amsEl.replaceWith(temp.firstElementChild);
+            }
+        }
+
+        async function printerCmd(name, cmd) {
+            await apiPost(`${BASE}/api/printer/${encodeURIComponent(name)}/${cmd}`);
+        }
+
+        // ── Temperature & Filament Controls ──────────────────
+        async function setTemp(name, endpoint, temp) {
+            await apiPost(`${BASE}/api/printer/${encodeURIComponent(name)}/${endpoint}`, { temp });
+        }
+
+        function setNozzleTemp(name) {
+            const input = document.getElementById(`nozzle-${name}`);
+            const temp = parseInt(input?.value) || 0;
+            if (temp > 300) { alert('Max nozzle temp is 300°C'); return; }
+            setTemp(name, 'nozzle_temp', temp);
+        }
+
+        function setBedTemp(name) {
+            const input = document.getElementById(`bed-${name}`);
+            const temp = parseInt(input?.value) || 0;
+            if (temp > 120) { alert('Max bed temp is 120°C'); return; }
+            setTemp(name, 'bed_temp', temp);
+        }
+
+        async function filamentCmd(name, cmd) {
+            if (!confirm(`${cmd.replace('_', ' ')} on ${name}?`)) return;
+            await apiPost(`${BASE}/api/printer/${encodeURIComponent(name)}/${cmd}`);
+        }
+
+        async function amsLoadTray(name, trayId) {
+            const label = trayId === 255 ? 'Unload filament' : trayId === 254 ? 'Load from external spool' : `Load from AMS tray ${trayId + 1}`;
+            if (!confirm(`${label} on ${name}?`)) return;
+            await apiPost(`${BASE}/api/printer/${encodeURIComponent(name)}/ams_load`, { tray_id: trayId });
+        }
+
+        // ── Tray Config ──────────────────────────────────────
+        const FILAMENT_TEMPS = {
+            'PLA': [190, 230], 'PLA-S': [190, 230], 'PLA-CF': [190, 230],
+            'PETG': [220, 260], 'PETG-CF': [220, 260],
+            'ABS': [240, 270], 'ASA': [240, 270],
+            'TPU': [200, 230],
+            'PA': [260, 290], 'PA-CF': [260, 290],
+            'PC': [260, 280], 'PVA': [190, 210],
+        };
+
+        function openTrayConfig(printerName, trayId, slot, currentType, currentColor, tempMin, tempMax) {
+            document.getElementById('trayConfigPrinter').value = printerName;
+            document.getElementById('trayConfigId').value = trayId;
+            document.getElementById('trayConfigSlotLabel').textContent = `#${slot + 1}`;
+            document.getElementById('trayConfigResult').innerHTML = '';
+
+            // Set type (default to PLA if not in list)
+            const typeSelect = document.getElementById('trayConfigType');
+            typeSelect.value = currentType && [...typeSelect.options].some(o => o.value === currentType) ? currentType : 'PLA';
+
+            // Set color
+            const safeColor = currentColor && currentColor.startsWith('#') && currentColor.length >= 7 ? currentColor.substring(0, 7) : '#FFFFFF';
+            document.getElementById('trayConfigColor').value = safeColor;
+            document.getElementById('trayConfigColorHex').value = safeColor;
+
+            // Set temps
+            const mins = parseInt(tempMin) || 190;
+            const maxs = parseInt(tempMax) || 230;
+            document.getElementById('trayConfigTempMin').value = mins;
+            document.getElementById('trayConfigTempMax').value = maxs;
+
+            document.getElementById('trayConfigOverlay').style.display = 'flex';
+        }
+
+        function closeTrayConfig() {
+            document.getElementById('trayConfigOverlay').style.display = 'none';
+        }
+
+        // Sync color picker ↔ hex input
+        document.getElementById('trayConfigColor').addEventListener('input', function() {
+            document.getElementById('trayConfigColorHex').value = this.value;
+        });
+        document.getElementById('trayConfigColorHex').addEventListener('input', function() {
+            if (/^#[0-9a-fA-F]{6}$/.test(this.value)) {
+                document.getElementById('trayConfigColor').value = this.value;
+            }
+        });
+        // Auto-fill temp range when type changes
+        document.getElementById('trayConfigType').addEventListener('change', function() {
+            const temps = FILAMENT_TEMPS[this.value];
+            if (temps) {
+                document.getElementById('trayConfigTempMin').value = temps[0];
+                document.getElementById('trayConfigTempMax').value = temps[1];
+            }
+        });
+
+        async function saveTrayConfig() {
+            const name = document.getElementById('trayConfigPrinter').value;
+            const trayId = parseInt(document.getElementById('trayConfigId').value);
+            const type = document.getElementById('trayConfigType').value;
+            const color = document.getElementById('trayConfigColor').value;
+            const tempMin = parseInt(document.getElementById('trayConfigTempMin').value) || 190;
+            const tempMax = parseInt(document.getElementById('trayConfigTempMax').value) || 230;
+            const resultEl = document.getElementById('trayConfigResult');
+            resultEl.innerHTML = '<span class="spinner"></span> Sending to printer...';
+            try {
+                const resp = await apiPost(`${BASE}/api/printer/${encodeURIComponent(name)}/tray_config`, {
+                    tray_id: trayId, type: type, color: color,
+                    nozzle_temp_min: tempMin, nozzle_temp_max: tempMax,
+                });
+                if (resp && resp.ok) {
+                    resultEl.innerHTML = '<span class="test-ok">&#10003; Saved! Tray info sent to printer.</span>';
+                    setTimeout(closeTrayConfig, 1200);
+                } else {
+                    resultEl.innerHTML = '<span class="test-fail">&#10007; Failed to send command.</span>';
+                }
+            } catch (e) {
+                resultEl.innerHTML = `<span class="test-fail">&#10007; Error: ${e.message}</span>`;
+            }
+        }
+
+        // ── Camera Functions ─────────────────────────────────
+        function updateCameraSectionDOM(name, streaming) {
+            const section = document.getElementById(`cam-${name}`);
+            if (!section) return;
+            if (streaming) {
+                section.innerHTML = `<img class="camera-feed" src="${BASE}/api/camera/${encodeURIComponent(name)}/snapshot?t=${Date.now()}" alt="Camera" onclick="openCameraModal('${name}')">
+                    <button class="camera-btn" onclick="event.stopPropagation();toggleCamera('${name}',false)">&#x25A0; Stop</button>`;
+            } else {
+                section.innerHTML = `<div class="camera-placeholder" onclick="toggleCamera('${name}',true)">&#x1F4F7; Start Camera</div>`;
+            }
+        }
+
+        async function toggleCamera(name, start) {
+            const url = `${BASE}/api/camera/${encodeURIComponent(name)}/${start ? 'start' : 'stop'}`;
+            const res = await apiPost(url);
+            if (res.ok) {
+                cameraStreaming[name] = start;
+                if (start) {
+                    // Wait for first frame then show the feed
+                    setTimeout(() => {
+                        updateCameraSectionDOM(name, true);
+                        startCameraRefresh(name);
+                    }, 1500);
+                } else {
+                    stopCameraRefresh(name);
+                    updateCameraSectionDOM(name, false);
+                }
+            }
+        }
+
+        function startCameraRefresh(name) {
+            stopCameraRefresh(name);
+            cameraRefreshTimers[name] = setInterval(() => {
+                const img = document.querySelector(`#cam-${CSS.escape(name)} .camera-feed`);
+                if (img) {
+                    img.src = `${BASE}/api/camera/${encodeURIComponent(name)}/snapshot?t=${Date.now()}`;
+                }
+            }, 2000);  // Refresh snapshot every 2s
+        }
+
+        function stopCameraRefresh(name) {
+            if (cameraRefreshTimers[name]) {
+                clearInterval(cameraRefreshTimers[name]);
+                delete cameraRefreshTimers[name];
+            }
+        }
+
+        function openCameraModal(name) {
+            const overlay = document.getElementById('cameraModalOverlay');
+            const img = document.getElementById('cameraModalImg');
+            const title = document.getElementById('cameraModalTitle');
+            title.textContent = name;
+            // Use MJPEG stream for full-screen view
+            img.src = `${BASE}/api/camera/${encodeURIComponent(name)}/stream`;
+            overlay.classList.add('active');
+        }
+
+        function closeCameraModal() {
+            const overlay = document.getElementById('cameraModalOverlay');
+            const img = document.getElementById('cameraModalImg');
+            overlay.classList.remove('active');
+            img.src = '';  // Stop the stream
+        }
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') closeCameraModal();
+        });
+
+        async function refreshCameraStatus() {
+            try {
+                const res = await fetch(BASE + '/api/camera/status');
+                const data = await res.json();
+                cameraStreaming = data;
+                // Ensure refresh timers and DOM match actual camera state
+                for (const [name, streaming] of Object.entries(data)) {
+                    const section = document.getElementById(`cam-${name}`);
+                    const hasImg = section && section.querySelector('.camera-feed');
+                    if (streaming && !hasImg) {
+                        updateCameraSectionDOM(name, true);
+                    }
+                    if (streaming && !cameraRefreshTimers[name]) {
+                        startCameraRefresh(name);
+                    } else if (!streaming && cameraRefreshTimers[name]) {
+                        stopCameraRefresh(name);
+                    }
+                }
+            } catch (err) {
+                // Camera status endpoint may not be available
+            }
+        }
+
+        // ── Job Rendering ────────────────────────────────────
+        function formatDate(iso) {
+            if (!iso) return '--';
+            const d = new Date(iso);
+            return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+        }
+
+        function formatDuration(seconds) {
+            if (!seconds) return '--';
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            return h > 0 ? `${h}h ${m}m` : `${m}m`;
+        }
+
+        const priorityLabels = { 0: 'Normal', 1: 'High', 2: 'Urgent' };
+
+        function renderJobRow(job) {
+            const status = job.status;
+            const canCancel = isAdmin && (status === 'queued' || status === 'uploading' || status === 'printing');
+            const canRequeue = isAdmin && (status === 'failed' || status === 'cancelled' || status === 'completed');
+            const canDelete = isAdmin;
+            const canAssign = isAdmin && status === 'queued';
+            const canReprint = isAdmin;
+
+            let assignBtn = '';
+            if (canAssign && availablePrinters.length > 0) {
+                const checkboxes = availablePrinters.map(p =>
+                    `<label><input type="checkbox" value="${p.name}"> ${p.name} <span class="send-dropdown-status">(${p.status.toLowerCase()})</span></label>`
+                ).join('');
+                assignBtn = `<div class="send-dropdown" id="send-dd-${job.id}">
+                    <button class="btn send-dropdown-btn" onclick="toggleSendDropdown(${job.id})">Send to…</button>
+                    <div class="send-dropdown-menu">
+                        ${checkboxes}
+                        <div class="send-dropdown-actions">
+                            <button class="btn btn-success" style="font-size:11px;padding:3px 10px;" onclick="sendToSelected(${job.id})">Send</button>
+                            <button class="btn" style="font-size:11px;padding:3px 10px;" onclick="closeSendDropdown(${job.id})">Cancel</button>
+                        </div>
+                    </div>
+                </div>`;
+            } else if (canAssign) {
+                assignBtn = `<button class="btn" disabled title="No available printers">Send to…</button>`;
+            }
+
+            return `
+                <tr>
+                    <td>${job.id}</td>
+                    <td title="${job.original_name}">${job.original_name}</td>
+                    <td><span class="job-status job-${status}">${status}</span></td>
+                    <td>${job.printer_name || '--'}</td>
+                    <td>${job.copies_done}/${job.copies_total}</td>
+                    <td>${priorityLabels[job.priority] || job.priority}</td>
+                    <td>${formatDate(job.created_at)}</td>
+                    <td class="job-actions">
+                        ${assignBtn}
+                        ${canReprint ? `<button class="btn" onclick="reprintJob(${job.id})" title="Create a new copy of this job">Reprint</button>` : ''}
+                        ${canCancel ? `<button class="btn" onclick="jobAction(${job.id},'cancel')">Cancel</button>` : ''}
+                        ${canRequeue ? `<button class="btn btn-primary" onclick="jobAction(${job.id},'requeue')">Requeue</button>` : ''}
+                        ${canDelete ? `<button class="btn btn-danger" onclick="jobAction(${job.id},'delete')">Delete</button>` : ''}
+                    </td>
+                </tr>
+            `;
+        }
+
+        function toggleSendDropdown(jobId) {
+            const dd = document.getElementById(`send-dd-${jobId}`);
+            // Close all other open dropdowns
+            document.querySelectorAll('.send-dropdown.open').forEach(el => {
+                if (el !== dd) el.classList.remove('open');
+            });
+            dd.classList.toggle('open');
+        }
+
+        function closeSendDropdown(jobId) {
+            document.getElementById(`send-dd-${jobId}`)?.classList.remove('open');
+        }
+
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', e => {
+            if (!e.target.closest('.send-dropdown')) {
+                document.querySelectorAll('.send-dropdown.open').forEach(el => el.classList.remove('open'));
+            }
+        });
+
+        async function sendToSelected(jobId) {
+            const dd = document.getElementById(`send-dd-${jobId}`);
+            const checked = [...dd.querySelectorAll('input[type="checkbox"]:checked')].map(cb => cb.value);
+            if (checked.length === 0) {
+                alert('Select at least one printer');
+                return;
+            }
+
+            // Check filament compatibility for each printer
+            let issues = [];
+            for (const printerName of checked) {
+                try {
+                    const res = await fetch(`${BASE}/api/jobs/${jobId}/check_filament`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ printer: printerName }),
+                    });
+                    const check = await res.json();
+                    if (check.ok && !check.match && check.details) {
+                        const printerIssues = check.details.filter(d => !d.match).map(d => d.reason);
+                        if (printerIssues.length) {
+                            issues.push(`${printerName}: ${printerIssues.join(', ')}`);
+                        }
+                    }
+                } catch (e) {}
+            }
+
+            if (issues.length > 0) {
+                const proceed = confirm(`⚠️ Filament mismatch:\n\n${issues.join('\n')}\n\nSend anyway?`);
+                if (!proceed) return;
+            }
+
+            dd.classList.remove('open');
+            await apiPost(`${BASE}/api/jobs/${jobId}/assign`, { printers: checked });
+            refreshJobs();
+        }
+
+        async function reprintJob(jobId) {
+            const res = await apiPost(`${BASE}/api/jobs/${jobId}/reprint`);
+            if (res.ok) {
+                refreshJobs();
+            } else {
+                alert('Reprint failed: ' + (res.error || 'Unknown error'));
+            }
+        }
+
+        async function jobAction(id, action) {
+            await apiPost(`${BASE}/api/jobs/${id}/${action}`);
+            refreshJobs();
+        }
+
+        // ── Refresh Loop ─────────────────────────────────────
+        async function refreshPrinters() {
+            try {
+                const res = await fetch(BASE + '/api/farm/status');
+                const data = await res.json();
+
+                // Update summary
+                document.getElementById('statConnected').textContent = data.summary.connected;
+                document.getElementById('statPrinting').textContent = data.summary.printing;
+                document.getElementById('statIdle').textContent = data.summary.idle;
+                document.getElementById('statErrored').textContent = data.summary.errored;
+
+                // Update printer grid
+                const grid = document.getElementById('printerGrid');
+                const entries = Object.entries(data.printers);
+                const currentNames = entries.map(([n]) => n).sort().join(',');
+                const prevNames = lastPrinterNames.sort().join(',');
+
+                document.getElementById('printerCount').textContent =
+                    entries.length ? `${entries.length} printer${entries.length !== 1 ? 's' : ''}` : 'No printers configured';
+
+                if (entries.length === 0) {
+                    grid.innerHTML = `
+                        <div style="grid-column:1/-1; text-align:center; padding:60px 20px;">
+                            <div style="font-size:48px; margin-bottom:16px;">🖨️</div>
+                            <h3 style="margin-bottom:8px;">No Printers Added Yet</h3>
+                            <p style="color:var(--text-muted); margin-bottom:20px;">Click "Add Printer" to discover BambuLab printers on your network.</p>
+                            <button class="btn btn-success admin-only" onclick="openWizard()">+ Add Printer</button>
+                        </div>`;
+                    lastPrinterNames = [];
+                } else if (currentNames !== prevNames) {
+                    // Printers added/removed — full rebuild
+                    grid.innerHTML = entries
+                        .map(([name, p]) => renderPrinterCard(name, p))
+                        .join('');
+                    lastPrinterNames = entries.map(([n]) => n);
+                } else {
+                    // Same printers — update in place (no flicker)
+                    for (const [name, p] of entries) {
+                        const card = grid.querySelector(`[data-printer="${name}"]`);
+                        if (card) {
+                            updatePrinterCard(card, name, p);
+                        }
+                    }
+                }
+
+                // Update printer dropdown in upload form
+                const sel = document.getElementById('uploadPrinter');
+                const current = sel.value;
+                sel.innerHTML = '<option value="">Auto (next idle)</option>';
+                Object.keys(data.printers).forEach(name => {
+                    sel.innerHTML += `<option value="${name}" ${name === current ? 'selected' : ''}>${name}</option>`;
+                });
+
+                // Track available printers for manual job assignment (all connected, not actively printing)
+                availablePrinters = Object.entries(data.printers)
+                    .filter(([_, p]) => p.connected && p.status !== 'RUNNING' && p.status !== 'PAUSED')
+                    .map(([name, p]) => ({ name, status: p.status }));
+            } catch (err) {
+                console.error('Failed to refresh printers:', err);
+            }
+        }
+
+        async function refreshJobs() {
+            try {
+                const res = await fetch(BASE + '/api/jobs');
+                const data = await res.json();
+
+                document.getElementById('queueStats').textContent =
+                    `${data.stats.queued || 0} queued · ${data.stats.printing || 0} printing · ${data.stats.completed || 0} completed`;
+
+                document.getElementById('jobTableBody').innerHTML =
+                    data.jobs.map(renderJobRow).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);">No jobs</td></tr>';
+            } catch (err) {
+                console.error('Failed to refresh jobs:', err);
+            }
+        }
+
+        async function refreshHistory() {
+            try {
+                const res = await fetch(BASE + '/api/jobs/history');
+                const data = await res.json();
+
+                document.getElementById('historyTableBody').innerHTML =
+                    data.map(h => `
+                        <tr>
+                            <td>${h.original_name || 'Job #' + h.job_id}</td>
+                            <td>${h.printer_name}</td>
+                            <td><span class="job-status job-${h.status}">${h.status}</span></td>
+                            <td>${formatDuration(h.duration_seconds)}</td>
+                            <td>${formatDate(h.completed_at)}</td>
+                        </tr>
+                    `).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);">No history</td></tr>';
+            } catch (err) {
+                console.error('Failed to refresh history:', err);
+            }
+        }
+
+        // Initial load + polling
+        refreshPrinters();
+        refreshJobs();
+        refreshHistory();
+        refreshCameraStatus();
+        setInterval(refreshPrinters, 2000);
+        setInterval(refreshJobs, 5000);
+        setInterval(refreshHistory, 10000);
+        setInterval(refreshCameraStatus, 10000);
+
+        // ── Discovery Wizard ─────────────────────────────────
+        function openWizard() {
+            document.getElementById('wizardOverlay').style.display = 'flex';
+            document.getElementById('wiz-step-1').style.display = 'block';
+            document.getElementById('wiz-step-2').style.display = 'none';
+            document.getElementById('scanResults').innerHTML = '';
+            document.getElementById('scanStatus').textContent = '';
+        }
+
+        function closeWizard() {
+            document.getElementById('wizardOverlay').style.display = 'none';
+        }
+
+        // Close on overlay click
+        document.getElementById('wizardOverlay').addEventListener('click', e => {
+            if (e.target === e.currentTarget) closeWizard();
+        });
+
+        async function startScan(deepScan) {
+            const statusEl = document.getElementById('scanStatus');
+            const resultsEl = document.getElementById('scanResults');
+            const btnScan = document.getElementById('btnScan');
+            const btnDeep = document.getElementById('btnDeepScan');
+
+            btnScan.disabled = true;
+            btnDeep.disabled = true;
+            resultsEl.innerHTML = '';
+            statusEl.innerHTML = `<span class="spinner"></span> ${deepScan ? 'Deep scanning network (this may take 15-30s)...' : 'Listening for printer broadcasts...'}`;
+
+            try {
+                const res = await fetch(BASE + '/api/discover/scan', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({timeout: deepScan ? 10 : 5, port_scan: deepScan}),
+                });
+                const data = await res.json();
+                const all = [...data.discovered, ...data.port_scan];
+
+                if (all.length === 0) {
+                    statusEl.textContent = 'No printers found. Make sure LAN mode is enabled, or try "Add Manually".';
+                } else {
+                    statusEl.textContent = `Found ${all.length} printer${all.length !== 1 ? 's' : ''}:`;
+                    resultsEl.innerHTML = all.map((p, i) => `
+                        <div class="discovered-item" onclick="selectDiscovered(${i})">
+                            <div class="discovered-info">
+                                <div class="discovered-name">${p.name || 'Unknown Printer'}</div>
+                                <div class="discovered-detail">${p.host} · ${p.model || 'BambuLab'} ${p.serial ? '· SN: ' + p.serial : ''}</div>
+                            </div>
+                            <button class="btn btn-primary" style="flex-shrink:0">Select</button>
+                        </div>
+                    `).join('');
+                    // Store for selection
+                    window._discoveredPrinters = all;
+                }
+            } catch (err) {
+                statusEl.textContent = 'Scan failed: ' + err.message;
+            }
+            btnScan.disabled = false;
+            btnDeep.disabled = false;
+        }
+
+        function selectDiscovered(idx) {
+            const p = window._discoveredPrinters[idx];
+            document.getElementById('wizName').value = p.name || '';
+            document.getElementById('wizHost').value = p.host || '';
+            document.getElementById('wizSerial').value = p.serial || '';
+            document.getElementById('wizAccessCode').value = '';
+            document.getElementById('wizAmsSerial').value = '';
+            showStep2();
+        }
+
+        function showManualAdd() {
+            document.getElementById('wizName').value = '';
+            document.getElementById('wizHost').value = '';
+            document.getElementById('wizSerial').value = '';
+            document.getElementById('wizAccessCode').value = '';
+            document.getElementById('wizAmsSerial').value = '';
+            showStep2();
+        }
+
+        function showStep2() {
+            document.getElementById('wiz-step-1').style.display = 'none';
+            document.getElementById('wiz-step-2').style.display = 'block';
+            document.getElementById('wizTestResult').innerHTML = '';
+            document.getElementById('btnAdd').disabled = true;
+        }
+
+        function wizBack() {
+            document.getElementById('wiz-step-1').style.display = 'block';
+            document.getElementById('wiz-step-2').style.display = 'none';
+        }
+
+        async function wizTest() {
+            const resultEl = document.getElementById('wizTestResult');
+            const btnTest = document.getElementById('btnTest');
+            const host = document.getElementById('wizHost').value.trim();
+            const serial = document.getElementById('wizSerial').value.trim();
+            const access_code = document.getElementById('wizAccessCode').value.trim();
+
+            if (!host || !serial || !access_code) {
+                resultEl.innerHTML = '<span class="test-fail">Please fill in all fields</span>';
+                return;
+            }
+
+            btnTest.disabled = true;
+            resultEl.innerHTML = '<span class="spinner"></span> Testing connection...';
+
+            try {
+                const res = await fetch(BASE + '/api/discover/test', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({host, serial, access_code}),
+                });
+                const data = await res.json();
+
+                if (data.ok) {
+                    let detail = '';
+                    if (data.state) {
+                        const s = data.state;
+                        detail = ` — Status: ${s.status || 'idle'}`;
+                        if (s.nozzle_temper) detail += `, Nozzle: ${s.nozzle_temper}°C`;
+                        if (s.bed_temper) detail += `, Bed: ${s.bed_temper}°C`;
+                    }
+                    resultEl.innerHTML = `<span class="test-ok">&#10003; ${data.message}${detail}</span>`;
+                    document.getElementById('btnAdd').disabled = false;
+                } else {
+                    resultEl.innerHTML = `<span class="test-fail">&#10007; ${data.message}</span>`;
+                    document.getElementById('btnAdd').disabled = true;
+                }
+            } catch (err) {
+                resultEl.innerHTML = `<span class="test-fail">&#10007; ${err.message}</span>`;
+            }
+            btnTest.disabled = false;
+        }
+
+        async function wizAdd() {
+            const btnAdd = document.getElementById('btnAdd');
+            btnAdd.disabled = true;
+
+            const payload = {
+                name: document.getElementById('wizName').value.trim(),
+                host: document.getElementById('wizHost').value.trim(),
+                serial: document.getElementById('wizSerial').value.trim(),
+                access_code: document.getElementById('wizAccessCode').value.trim(),
+                ams_serial: document.getElementById('wizAmsSerial').value.trim(),
+            };
+
+            if (!payload.name) {
+                document.getElementById('wizTestResult').innerHTML = '<span class="test-fail">Please enter a printer name</span>';
+                btnAdd.disabled = false;
+                return;
+            }
+
+            try {
+                const res = await fetch(BASE + '/api/discover/add', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload),
+                });
+                const data = await res.json();
+
+                if (data.ok) {
+                    closeWizard();
+                    refreshPrinters();
+                } else {
+                    document.getElementById('wizTestResult').innerHTML = `<span class="test-fail">${data.message}</span>`;
+                    btnAdd.disabled = false;
+                }
+            } catch (err) {
+                document.getElementById('wizTestResult').innerHTML = `<span class="test-fail">${err.message}</span>`;
+                btnAdd.disabled = false;
+            }
+        }
+
+        async function renamePrinter(oldName) {
+            const newName = prompt(`Rename printer "${oldName}" to:`, oldName);
+            if (!newName || newName === oldName) return;
+            try {
+                await apiPost(BASE + '/api/discover/rename', {old_name: oldName, new_name: newName});
+                refreshPrinters();
+            } catch (err) {
+                alert('Failed to rename: ' + err.message);
+            }
+        }
+
+        async function removePrinter(name) {
+            if (!confirm(`Remove printer "${name}"? This will disconnect and remove it from your config.`)) return;
+            try {
+                await apiPost(BASE + '/api/discover/remove', {name});
+                refreshPrinters();
+            } catch (err) {
+                alert('Failed to remove: ' + err.message);
+            }
+        }
+    </script>
+</body>
+</html>
