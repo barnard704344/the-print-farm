@@ -1,4 +1,4 @@
-# BambuLab Print Farm - OrcaSlicer Post-Processing Upload Script (PowerShell)
+# The Print Farm - OrcaSlicer Post-Processing Upload Script (PowerShell)
 #
 # Setup in OrcaSlicer:
 #   Print Settings → Others → Post-processing Scripts:

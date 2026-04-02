@@ -61,7 +61,8 @@ class JobQueue:
                 created_at TEXT NOT NULL,
                 started_at TEXT,
                 completed_at TEXT,
-                notes TEXT
+                notes TEXT,
+                submitted_by TEXT NOT NULL DEFAULT ''
             );
 
             CREATE TABLE IF NOT EXISTS job_history (
@@ -78,17 +79,28 @@ class JobQueue:
         conn.commit()
         conn.close()
 
+        # Migration: add submitted_by column if missing
+        conn = self._get_conn()
+        try:
+            conn.execute("SELECT submitted_by FROM jobs LIMIT 1")
+        except sqlite3.OperationalError:
+            conn.execute("ALTER TABLE jobs ADD COLUMN submitted_by TEXT NOT NULL DEFAULT ''")
+            conn.commit()
+            logger.info("Migrated jobs table: added submitted_by column")
+        conn.close()
+
     def add_job(self, filename: str, original_name: str, file_path: str,
-                copies: int = 1, priority: int = 0, notes: str = "") -> int:
+                copies: int = 1, priority: int = 0, notes: str = "",
+                submitted_by: str = "") -> int:
         """Add a new job to the queue. Returns the job ID."""
         with self._lock:
             conn = self._get_conn()
             cursor = conn.execute(
                 """INSERT INTO jobs (filename, original_name, file_path, copies_total,
-                   priority, notes, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                   priority, notes, created_at, submitted_by)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (filename, original_name, file_path, copies, priority, notes,
-                 datetime.now(timezone.utc).isoformat()),
+                 datetime.now(timezone.utc).isoformat(), submitted_by),
             )
             job_id = cursor.lastrowid
             conn.commit()
@@ -257,6 +269,7 @@ class JobQueue:
             copies=1,
             priority=job["priority"],
             notes=f"Reprint of job #{job_id}",
+            submitted_by=job.get("submitted_by", ""),
         )
 
     def clone_job_for_printer(self, job_id: int) -> Optional[int]:
@@ -271,6 +284,7 @@ class JobQueue:
             copies=1,
             priority=job["priority"],
             notes=job.get("notes", ""),
+            submitted_by=job.get("submitted_by", ""),
         )
 
     def delete_job(self, job_id: int) -> bool:
@@ -285,12 +299,24 @@ class JobQueue:
             conn.execute("DELETE FROM job_history WHERE job_id = ?", (job_id,))
             conn.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
             conn.commit()
+
+            # Only remove file if it's not in the file library
+            file_path = job.get("file_path", "")
+            in_library = False
+            if file_path:
+                try:
+                    row = conn.execute(
+                        "SELECT id FROM files WHERE file_path = ? LIMIT 1", (file_path,)
+                    ).fetchone()
+                    in_library = row is not None
+                except Exception:
+                    pass  # files table may not exist yet
+
             conn.close()
 
-            # Remove file
-            if job.get("file_path") and os.path.exists(job["file_path"]):
+            if file_path and not in_library and os.path.exists(file_path):
                 try:
-                    os.remove(job["file_path"])
+                    os.remove(file_path)
                 except OSError:
                     pass
             return True

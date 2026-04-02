@@ -1,1 +1,1 @@
-"""BambuLab Print Farm Manager."""
+"""The Print Farm Manager."""

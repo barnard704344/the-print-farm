@@ -1,5 +1,5 @@
 """
-Main entry point for the BambuLab Print Farm Manager.
+Main entry point for The Print Farm Manager.
 
 Usage:
     python -m src.main                  # Start the farm manager
@@ -21,6 +21,7 @@ import yaml
 from .farm_manager import FarmManager
 from .gcode_to_3mf import wrap_gcode_as_3mf
 from .job_queue import JobQueue
+from .file_library import FileLibrary
 from .camera import CameraManager
 from .web import create_app, start_web_server
 
@@ -73,6 +74,12 @@ def cmd_run(args, config: dict):
         upload_dir=queue_cfg.get("upload_dir", "./uploads"),
     )
 
+    library = FileLibrary(
+        db_path=queue_cfg.get("db_path", "./data/farm.db"),
+        storage_dir=queue_cfg.get("upload_dir", "./uploads"),
+    )
+    library.backfill_from_jobs()
+
     # Connect to all printers (if any defined)
     if printers:
         print(f"Connecting to {len(printers)} printers...")
@@ -102,7 +109,8 @@ def cmd_run(args, config: dict):
 
     app = create_app(farm, queue, camera_manager=camera_mgr,
                      api_key=web_cfg.get("api_key", ""),
-                     admin_password=web_cfg.get("admin_password", ""))
+                     admin_password=web_cfg.get("admin_password", ""),
+                     config=config, file_library=library)
     start_web_server(app, host=host, port=port)
     print(f"Dashboard: http://{host}:{port}")
 
@@ -209,7 +217,7 @@ def cmd_run(args, config: dict):
 
 def cmd_status(args, config: dict):
     """Check connectivity to all printers."""
-    print("=== BambuLab Print Farm Status ===\n")
+    print("=== The Print Farm — Status ===\n")
 
     printers = config.get("printers") or []
     if not printers:
@@ -244,8 +252,8 @@ def cmd_status(args, config: dict):
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="bambulab-farm",
-        description="BambuLab Print Farm Manager — manage multiple P1S printers via MQTT",
+        prog="print-farm",
+        description="The Print Farm — manage BambuLab and Klipper printers",
     )
     parser.add_argument(
         "-c", "--config",

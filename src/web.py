@@ -1,5 +1,5 @@
 """
-Flask Web Server + REST API for the BambuLab Print Farm.
+Flask Web Server + REST API for The Print Farm.
 
 Provides a dashboard and API endpoints to monitor printers,
 manage the job queue, and control individual printers.
@@ -19,8 +19,10 @@ import yaml
 from flask import Flask, Response, jsonify, render_template, request, send_from_directory, session
 from werkzeug.utils import secure_filename
 
-from .discovery import discover_printers, scan_subnet, get_local_subnets, test_bambu_connection
+from .discovery import discover_printers, scan_subnet, get_local_subnets, test_bambu_connection, test_klipper_connection, scan_moonraker_port
 from .gcode_to_3mf import wrap_gcode_as_3mf, parse_gcode_filaments, parse_gcode_model_name
+from .ldap_auth import authenticate_user, test_ad_connection, lookup_user
+from .file_library import parse_gcode_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +33,7 @@ def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin_password=None):
+def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin_password=None, config=None, file_library=None):
     """Create the Flask app with references to farm manager, job queue, and camera manager."""
     app = Flask(
         __name__,
@@ -41,18 +43,108 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024  # 500MB max upload
     app.secret_key = secrets.token_hex(32)
 
+    # Full config reference for AD settings management
+    if config is None:
+        config = {}
+    app_config = config
+
     # Support running behind a reverse proxy at /bambulab-farm
     prefix = os.environ.get("APP_PREFIX", "/bambulab-farm")
 
+    def _get_ad_config():
+        return app_config.get("active_directory", {})
+
+    def _ad_enabled():
+        return _get_ad_config().get("enabled", False)
+
+    def _is_staff_only_printer(printer_name):
+        """Check if a printer is restricted to staff only."""
+        for p in app_config.get("printers", []):
+            if p.get("name") == printer_name:
+                return p.get("staff_only", False)
+        return False
+
+    def _save_config():
+        """Write the current app_config to the YAML file."""
+        config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
+        with open(config_path, "w") as f:
+            yaml.dump(app_config, f, default_flow_style=False, sort_keys=False)
+
     def is_admin():
-        return session.get("admin") is True
+        """True when user has staff role (AD) or legacy admin session."""
+        return session.get("role") == "staff" or session.get("admin") is True
+
+    def is_authenticated():
+        """True when user is logged in with any role."""
+        return session.get("role") in ("staff", "student") or session.get("admin") is True
 
     def admin_required(f):
+        """Require staff / legacy admin role."""
         @wraps(f)
         def decorated(*args, **kwargs):
             if not is_admin():
                 return jsonify({"error": "Admin login required"}), 403
             return f(*args, **kwargs)
+        return decorated
+
+    def _check_api_key():
+        """Check if a valid API key was provided in the request header."""
+        if not api_key:
+            return False
+        return request.headers.get("X-Api-Key", "") == api_key
+
+    def login_required(f):
+        """Require any authenticated user (student or staff), or a valid API key."""
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if not is_authenticated() and not _check_api_key():
+                return jsonify({"error": "Login required"}), 401
+            return f(*args, **kwargs)
+        return decorated
+
+    def _is_job_owner(job):
+        """True when the current user submitted this job."""
+        uname = session.get("username", "")
+        return uname and job.get("submitted_by") == uname
+
+    def owner_or_admin_required(f):
+        """Require admin OR ownership of the job (job_id must be a route param)."""
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if is_admin():
+                return f(*args, **kwargs)
+            if not is_authenticated():
+                return jsonify({"error": "Login required"}), 401
+            job_id = kwargs.get("job_id")
+            if job_id:
+                job = job_queue.get_job(job_id)
+                if job and _is_job_owner(job):
+                    return f(*args, **kwargs)
+            return jsonify({"error": "Not authorised"}), 403
+        return decorated
+
+    def _has_active_job_on_printer(printer_name):
+        """True when the current user has an active job on the given printer."""
+        uname = session.get("username", "")
+        if not uname:
+            return False
+        for job in job_queue.get_active_jobs():
+            if job.get("printer_name") == printer_name and job.get("submitted_by") == uname:
+                return True
+        return False
+
+    def printer_owner_or_admin_required(f):
+        """Require admin OR having an active job on the printer (name must be a route param)."""
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if is_admin():
+                return f(*args, **kwargs)
+            if not is_authenticated():
+                return jsonify({"error": "Login required"}), 401
+            name = kwargs.get("name")
+            if name and _has_active_job_on_printer(name):
+                return f(*args, **kwargs)
+            return jsonify({"error": "Not authorised"}), 403
         return decorated
 
     @app.route(prefix + "/")
@@ -64,23 +156,92 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     @app.route(prefix + "/api/auth/status")
     @app.route("/api/auth/status")
     def auth_status():
-        return jsonify({"admin": is_admin()})
+        role = session.get("role")
+        return jsonify({
+            "admin": is_admin(),
+            "authenticated": is_authenticated(),
+            "role": role,
+            "display_name": session.get("display_name", ""),
+            "username": session.get("username", ""),
+            "ad_enabled": _ad_enabled(),
+            "has_local_users": bool(app_config.get("local_users")),
+        })
 
     @app.route(prefix + "/api/auth/login", methods=["POST"])
     @app.route("/api/auth/login", methods=["POST"])
     def auth_login():
         data = request.get_json(silent=True) or {}
+        username = data.get("username", "").strip()
         password = data.get("password", "")
-        if admin_password and password == admin_password:
-            session["admin"] = True
-            return jsonify({"ok": True})
-        return jsonify({"ok": False, "error": "Invalid password"}), 401
+
+        # Check local users first (works regardless of AD)
+        local_users = app_config.get("local_users") or []
+        for lu in local_users:
+            if lu.get("username") == username and lu.get("password") == password:
+                role = lu.get("role", "staff")
+                session["role"] = role
+                session["display_name"] = lu.get("display_name", username)
+                session["username"] = username
+                if role == "staff":
+                    session["admin"] = True
+                return jsonify({"ok": True, "role": role, "display_name": session["display_name"]})
+
+        if _ad_enabled():
+            # AD login
+            if not username or not password:
+                return jsonify({"ok": False, "error": "Username and password required"}), 400
+            result = authenticate_user(username, password, _get_ad_config())
+            if result["ok"]:
+                session["role"] = result["role"]
+                session["display_name"] = result.get("display_name", username)
+                session["username"] = result.get("username", username)
+                session.pop("admin", None)
+                return jsonify({"ok": True, "role": result["role"], "display_name": result.get("display_name", username)})
+            return jsonify({"ok": False, "error": result.get("error", "Authentication failed")}), 401
+        else:
+            # Legacy single-password login (no username needed)
+            if admin_password and password == admin_password:
+                session["admin"] = True
+                session["role"] = "staff"
+                return jsonify({"ok": True, "role": "staff"})
+            return jsonify({"ok": False, "error": "Invalid credentials"}), 401
 
     @app.route(prefix + "/api/auth/logout", methods=["POST"])
     @app.route("/api/auth/logout", methods=["POST"])
     def auth_logout():
         session.pop("admin", None)
+        session.pop("role", None)
+        session.pop("display_name", None)
+        session.pop("username", None)
         return jsonify({"ok": True})
+
+    @app.route(prefix + "/api/auth/sso", methods=["POST"])
+    @app.route("/api/auth/sso", methods=["POST"])
+    def auth_sso():
+        """SSO login — accepts username from Apache GSSAPI-verified PHP check."""
+        if not _ad_enabled():
+            return jsonify({"ok": False, "error": "AD not enabled"}), 400
+
+        data = request.get_json(silent=True) or {}
+        username = data.get("username", "").strip().lower()
+        if not username:
+            return jsonify({"ok": False, "error": "No username provided"}), 401
+
+        # Verify user in AD and determine role (prevents spoofed usernames)
+        result = lookup_user(username, _get_ad_config())
+        if not result["ok"]:
+            logger.warning(f"SSO lookup failed for {username}: {result.get('error')}")
+            return jsonify({"ok": False, "error": result.get("error", "SSO lookup failed")}), 401
+
+        session["role"] = result["role"]
+        session["display_name"] = result.get("display_name", username)
+        session["username"] = result.get("username", username)
+        session.pop("admin", None)
+        if result["role"] == "staff":
+            session["admin"] = True
+
+        logger.info(f"SSO auth: {username} -> role={result['role']}")
+        return jsonify({"ok": True, "role": result["role"], "display_name": result.get("display_name", username)})
 
     @app.route(prefix + "/static/<path:filename>")
     def prefixed_static(filename):
@@ -92,9 +253,13 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     @app.route("/api/farm/status")
     def farm_status():
         """Full status of all printers + farm summary."""
+        states = farm_manager.get_all_states()
+        # Merge staff_only flag from config into each printer state
+        for name in states:
+            states[name]["staff_only"] = _is_staff_only_printer(name)
         return jsonify({
             "summary": farm_manager.get_farm_summary(),
-            "printers": farm_manager.get_all_states(),
+            "printers": states,
         })
 
     @app.route(prefix + "/api/farm/summary")
@@ -114,7 +279,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/printer/<name>/pause", methods=["POST"])
     @app.route("/api/printer/<name>/pause", methods=["POST"])
-    @admin_required
+    @printer_owner_or_admin_required
     def printer_pause(name):
         client = farm_manager.get_printer(name)
         if not client:
@@ -124,7 +289,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/printer/<name>/resume", methods=["POST"])
     @app.route("/api/printer/<name>/resume", methods=["POST"])
-    @admin_required
+    @printer_owner_or_admin_required
     def printer_resume(name):
         client = farm_manager.get_printer(name)
         if not client:
@@ -134,7 +299,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/printer/<name>/stop", methods=["POST"])
     @app.route("/api/printer/<name>/stop", methods=["POST"])
-    @admin_required
+    @printer_owner_or_admin_required
     def printer_stop(name):
         client = farm_manager.get_printer(name)
         if not client:
@@ -157,6 +322,19 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         current = client.state.chamber_light
         ok = client.set_chamber_light(not current)
         return jsonify({"ok": ok, "light": not current})
+
+    @app.route(prefix + "/api/printer/<name>/emergency_stop", methods=["POST"])
+    @app.route("/api/printer/<name>/emergency_stop", methods=["POST"])
+    @admin_required
+    def printer_emergency_stop(name):
+        """Emergency stop — Klipper only."""
+        client = farm_manager.get_printer(name)
+        if not client:
+            return jsonify({"error": "Printer not found"}), 404
+        if farm_manager.get_printer_type(name) != "klipper":
+            return jsonify({"ok": False, "message": "Emergency stop only available for Klipper printers"}), 400
+        ok = client.emergency_stop()
+        return jsonify({"ok": ok})
 
     @app.route(prefix + "/api/printer/<name>/bed_temp", methods=["POST"])
     @app.route("/api/printer/<name>/bed_temp", methods=["POST"])
@@ -210,6 +388,8 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         client = farm_manager.get_printer(name)
         if not client:
             return jsonify({"error": "Printer not found"}), 404
+        if farm_manager.get_printer_type(name) == "klipper":
+            return jsonify({"ok": False, "message": "AMS not supported on Klipper printers"}), 400
         data = request.get_json(silent=True) or {}
         tray_id = data.get("tray_id")
         if tray_id is None:
@@ -225,6 +405,8 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         client = farm_manager.get_printer(name)
         if not client:
             return jsonify({"error": "Printer not found"}), 404
+        if farm_manager.get_printer_type(name) == "klipper":
+            return jsonify({"ok": False, "message": "AMS not supported on Klipper printers"}), 400
         data = request.get_json(silent=True) or {}
         tray_id = data.get("tray_id")
         tray_type = data.get("type", "PLA")
@@ -271,6 +453,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/jobs/upload", methods=["POST"])
     @app.route("/api/jobs/upload", methods=["POST"])
+    @login_required
     def upload_job():
         """Upload a G-code/3MF file and add it to the queue."""
         if "file" not in request.files:
@@ -304,7 +487,34 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             copies=copies,
             priority=priority,
             notes=notes,
+            submitted_by=session.get("username", ""),
         )
+
+        # Add to file library for persistent storage
+        # Save uploaded thumbnail if provided
+        uploaded_thumb_path = None
+        if "thumbnail" in request.files:
+            thumb = request.files["thumbnail"]
+            if thumb.filename:
+                thumb_dir = os.path.join(job_queue.upload_dir, "thumbnails")
+                os.makedirs(thumb_dir, exist_ok=True)
+                uploaded_thumb_path = os.path.join(thumb_dir, f"{unique_name}.thumb.png")
+                thumb.save(uploaded_thumb_path)
+
+        if file_library:
+            try:
+                meta = parse_gcode_metadata(file_path)
+                file_library.add_file(
+                    original_name=original_name,
+                    stored_name=unique_name,
+                    file_path=file_path,
+                    file_size=os.path.getsize(file_path),
+                    uploaded_by=session.get("username", ""),
+                    metadata=meta,
+                    thumbnail_override=uploaded_thumb_path,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to add file to library: {e}")
 
         # If a specific printer was requested, assign and send immediately
         if printer:
@@ -330,9 +540,11 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
             file_path = job["file_path"]
             remote_name = job["filename"]
+            printer_type = farm_manager.get_printer_type(printer_name)
 
-            # Wrap .gcode into .3mf for the printer
-            if remote_name.lower().endswith(".gcode"):
+            # BambuLab printers need .gcode wrapped in .3mf
+            # Klipper printers take raw .gcode directly
+            if printer_type == "bambulab" and remote_name.lower().endswith(".gcode"):
                 threemf_path = file_path + ".3mf"
                 try:
                     wrap_gcode_as_3mf(file_path, threemf_path)
@@ -343,13 +555,18 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                     logger.error(f"Failed to wrap gcode as 3mf: {e}")
                     job_queue.mark_failed(job_id)
                     return
+            elif printer_type == "klipper" and remote_name.lower().endswith(".3mf"):
+                # Klipper can't print .3mf files — need the raw gcode
+                logger.error(f"Cannot send .3mf to Klipper printer '{printer_name}'")
+                job_queue.mark_failed(job_id)
+                return
 
             # Upload the file to the printer
             ok = printer.upload_file(file_path, remote_name)
             if ok:
                 job_queue.mark_printing(job_id)
-                # Wait for SD card to flush the file before starting print
-                time.sleep(2)
+                # Wait for file to be ready before starting print
+                time.sleep(2 if printer_type == "bambulab" else 0.5)
                 printer.start_print(remote_name)
                 logger.info(f"Started printing job #{job_id} on {printer_name}")
             else:
@@ -458,7 +675,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/jobs/<int:job_id>/assign", methods=["POST"])
     @app.route("/api/jobs/<int:job_id>/assign", methods=["POST"])
-    @admin_required
+    @owner_or_admin_required
     def assign_job(job_id):
         data = request.get_json(silent=True) or {}
         printer_name = data.get("printer")
@@ -477,6 +694,8 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 return jsonify({"error": f"Printer '{pname}' not found"}), 404
             if not p.is_connected():
                 return jsonify({"error": f"Printer '{pname}' not connected"}), 400
+            if not is_admin() and _is_staff_only_printer(pname):
+                return jsonify({"error": f"Printer '{pname}' is restricted to staff"}), 403
 
         results = []
         # First printer gets the original job
@@ -507,7 +726,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/jobs/<int:job_id>/reprint", methods=["POST"])
     @app.route("/api/jobs/<int:job_id>/reprint", methods=["POST"])
-    @admin_required
+    @owner_or_admin_required
     def reprint_job(job_id):
         """Create a new queued copy of an existing job."""
         new_id = job_queue.reprint_job(job_id)
@@ -517,7 +736,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/jobs/<int:job_id>/cancel", methods=["POST"])
     @app.route("/api/jobs/<int:job_id>/cancel", methods=["POST"])
-    @admin_required
+    @owner_or_admin_required
     def cancel_job(job_id):
         job = job_queue.get_job(job_id)
         if job and job["status"] == "printing" and job.get("printer_name"):
@@ -546,19 +765,156 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         ok = job_queue.delete_job(job_id)
         return jsonify({"ok": ok})
 
+    # ── File Library API ──────────────────────────────────
+
+    @app.route(prefix + "/api/library/files")
+    @app.route("/api/library/files")
+    @login_required
+    def library_list_files():
+        if not file_library:
+            return jsonify({"files": [], "folders": []})
+        folder_id = request.args.get("folder_id")
+        if folder_id is not None:
+            folder_id = int(folder_id)
+        files = file_library.get_files(folder_id)
+        folders = file_library.get_folders(folder_id)
+        return jsonify({"files": files, "folders": folders})
+
+    @app.route(prefix + "/api/library/files/search")
+    @app.route("/api/library/files/search")
+    @login_required
+    def library_search_files():
+        if not file_library:
+            return jsonify({"files": []})
+        q = request.args.get("q", "")
+        return jsonify({"files": file_library.search_files(q)})
+
+    @app.route(prefix + "/api/library/files/<int:file_id>")
+    @app.route("/api/library/files/<int:file_id>")
+    @login_required
+    def library_get_file(file_id):
+        if not file_library:
+            return jsonify({"error": "Library not available"}), 500
+        f = file_library.get_file(file_id)
+        if not f:
+            return jsonify({"error": "File not found"}), 404
+        return jsonify(f)
+
+    @app.route(prefix + "/api/library/files/<int:file_id>/thumbnail")
+    @app.route("/api/library/files/<int:file_id>/thumbnail")
+    @login_required
+    def library_file_thumbnail(file_id):
+        if not file_library:
+            return jsonify({"error": "Library not available"}), 500
+        f = file_library.get_file(file_id)
+        if not f or not f.get("thumbnail_path"):
+            return Response(status=404)
+        thumb_path = f["thumbnail_path"]
+        if not os.path.exists(thumb_path):
+            return Response(status=404)
+        abs_path = os.path.abspath(thumb_path)
+        return send_from_directory(
+            os.path.dirname(abs_path),
+            os.path.basename(abs_path),
+            mimetype="image/png",
+        )
+
+    @app.route(prefix + "/api/library/files/<int:file_id>/toolpath")
+    @app.route("/api/library/files/<int:file_id>/toolpath")
+    @login_required
+    def library_file_toolpath(file_id):
+        if not file_library:
+            return jsonify({"error": "Library not available"}), 500
+        data = file_library.get_toolpath_data(file_id)
+        if not data:
+            return jsonify({"error": "No toolpath data available"}), 404
+        return jsonify(data)
+
+    @app.route(prefix + "/api/library/files/<int:file_id>/move", methods=["POST"])
+    @app.route("/api/library/files/<int:file_id>/move", methods=["POST"])
+    @login_required
+    def library_move_file(file_id):
+        if not file_library:
+            return jsonify({"error": "Library not available"}), 500
+        data = request.get_json(silent=True) or {}
+        folder_id = data.get("folder_id")  # None = root
+        return jsonify(file_library.move_file(file_id, folder_id))
+
+    @app.route(prefix + "/api/library/files/<int:file_id>/delete", methods=["POST"])
+    @app.route("/api/library/files/<int:file_id>/delete", methods=["POST"])
+    @admin_required
+    def library_delete_file(file_id):
+        if not file_library:
+            return jsonify({"error": "Library not available"}), 500
+        return jsonify(file_library.delete_file(file_id))
+
+    @app.route(prefix + "/api/library/files/<int:file_id>/print", methods=["POST"])
+    @app.route("/api/library/files/<int:file_id>/print", methods=["POST"])
+    @login_required
+    def library_print_file(file_id):
+        """Create a new job from a library file."""
+        if not file_library:
+            return jsonify({"error": "Library not available"}), 500
+        lib_file = file_library.get_file(file_id)
+        if not lib_file:
+            return jsonify({"error": "File not found"}), 404
+        if not os.path.exists(lib_file["file_path"]):
+            return jsonify({"error": "File missing from disk"}), 404
+
+        new_job_id = job_queue.add_job(
+            filename=lib_file["stored_name"],
+            original_name=lib_file["original_name"],
+            file_path=lib_file["file_path"],
+            copies=1,
+            priority=0,
+            notes=f"Reprinted from library (file #{file_id})",
+            submitted_by=session.get("username", ""),
+        )
+        file_library.increment_print_count(file_id)
+        return jsonify({"ok": True, "job_id": new_job_id})
+
+    @app.route(prefix + "/api/library/folders", methods=["POST"])
+    @app.route("/api/library/folders", methods=["POST"])
+    @login_required
+    def library_create_folder():
+        if not file_library:
+            return jsonify({"error": "Library not available"}), 500
+        data = request.get_json(silent=True) or {}
+        name = data.get("name", "").strip()
+        parent_id = data.get("parent_id")
+        return jsonify(file_library.create_folder(name, parent_id))
+
+    @app.route(prefix + "/api/library/folders/<int:folder_id>/rename", methods=["POST"])
+    @app.route("/api/library/folders/<int:folder_id>/rename", methods=["POST"])
+    @login_required
+    def library_rename_folder(folder_id):
+        if not file_library:
+            return jsonify({"error": "Library not available"}), 500
+        data = request.get_json(silent=True) or {}
+        name = data.get("name", "").strip()
+        return jsonify(file_library.rename_folder(folder_id, name))
+
+    @app.route(prefix + "/api/library/folders/<int:folder_id>/delete", methods=["POST"])
+    @app.route("/api/library/folders/<int:folder_id>/delete", methods=["POST"])
+    @admin_required
+    def library_delete_folder(folder_id):
+        if not file_library:
+            return jsonify({"error": "Library not available"}), 500
+        return jsonify(file_library.delete_folder(folder_id))
+
     # ── Discovery API ─────────────────────────────────────
 
     @app.route(prefix + "/api/discover/scan", methods=["POST"])
     @app.route("/api/discover/scan", methods=["POST"])
     @admin_required
     def discover_scan():
-        """Listen for Bambu UDP broadcasts + optionally scan subnet."""
+        """Listen for Bambu UDP broadcasts + optionally scan subnet for Bambu and Klipper."""
         data = request.get_json(silent=True) or {}
         timeout = min(float(data.get("timeout", 5)), 15)
         do_port_scan = data.get("port_scan", False)
         subnet = data.get("subnet", "")
 
-        # UDP broadcast discovery
+        # UDP broadcast discovery (Bambu only)
         printers = discover_printers(timeout=timeout)
 
         # Optional port scan fallback
@@ -569,12 +925,16 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             else:
                 subnets = [subnet]
             for s in subnets:
+                # Scan for Bambu (8883) and Klipper/Moonraker (7125)
                 hosts = scan_subnet(s, timeout=1.0)
-                # Filter out already-discovered IPs
+                klipper_hosts = scan_moonraker_port(s, timeout=1.0)
                 known_ips = {p["host"] for p in printers}
                 for h in hosts:
                     if h not in known_ips:
-                        scan_results.append({"host": h, "name": f"Unknown ({h})", "serial": "", "model": "Detected via port scan"})
+                        scan_results.append({"host": h, "name": f"Unknown ({h})", "serial": "", "model": "Detected via port scan (MQTT 8883)", "type": "bambulab"})
+                for h in klipper_hosts:
+                    if h not in known_ips:
+                        scan_results.append({"host": h, "name": f"Klipper ({h})", "serial": "", "model": "Detected via port scan (Moonraker 7125)", "type": "klipper"})
 
         return jsonify({
             "discovered": printers,
@@ -586,17 +946,25 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     @app.route("/api/discover/test", methods=["POST"])
     @admin_required
     def discover_test():
-        """Test MQTT connection to a printer."""
+        """Test connection to a printer (Bambu MQTT or Klipper Moonraker)."""
         data = request.get_json(silent=True) or {}
+        printer_type = data.get("type", "bambulab").lower()
         host = data.get("host", "")
-        access_code = data.get("access_code", "")
-        serial = data.get("serial", "")
 
-        if not host or not access_code or not serial:
-            return jsonify({"ok": False, "message": "host, access_code, and serial are required"}), 400
-
-        result = test_bambu_connection(host, access_code, serial)
-        return jsonify(result)
+        if printer_type == "klipper":
+            moonraker_port = int(data.get("moonraker_port", 7125))
+            api_key = data.get("api_key", "")
+            if not host:
+                return jsonify({"ok": False, "message": "host is required"}), 400
+            result = test_klipper_connection(host, moonraker_port, api_key)
+            return jsonify(result)
+        else:
+            access_code = data.get("access_code", "")
+            serial = data.get("serial", "")
+            if not host or not access_code or not serial:
+                return jsonify({"ok": False, "message": "host, access_code, and serial are required"}), 400
+            result = test_bambu_connection(host, access_code, serial)
+            return jsonify(result)
 
     @app.route(prefix + "/api/discover/add", methods=["POST"])
     @app.route("/api/discover/add", methods=["POST"])
@@ -606,62 +974,111 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         data = request.get_json(silent=True) or {}
         name = data.get("name", "").strip()
         host = data.get("host", "").strip()
-        access_code = data.get("access_code", "").strip()
-        serial = data.get("serial", "").strip()
-        ams_serial = data.get("ams_serial", "").strip()
+        printer_type = data.get("type", "bambulab").lower().strip()
 
-        if not all([name, host, access_code, serial]):
-            return jsonify({"ok": False, "message": "name, host, access_code, and serial are required"}), 400
+        if not name or not host:
+            return jsonify({"ok": False, "message": "name and host are required"}), 400
 
-        # Check for duplicate name
-        existing = farm_manager.get_printer(name)
-        if existing:
-            return jsonify({"ok": False, "message": f"Printer '{name}' already exists"}), 400
+        if printer_type == "klipper":
+            # Klipper printer — only needs name, host, and optional moonraker_port/api_key
+            moonraker_port = int(data.get("moonraker_port", 7125))
+            api_key = data.get("api_key", "").strip()
+            camera_url = data.get("camera_url", "").strip()
 
-        # Save to config file
-        config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
-        try:
-            with open(config_path) as f:
-                config = yaml.safe_load(f) or {}
+            existing = farm_manager.get_printer(name)
+            if existing:
+                return jsonify({"ok": False, "message": f"Printer '{name}' already exists"}), 400
 
-            if not config.get("printers"):
-                config["printers"] = []
+            config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
+            try:
+                with open(config_path) as f:
+                    config = yaml.safe_load(f) or {}
+                if not config.get("printers"):
+                    config["printers"] = []
 
-            new_printer = {
-                "name": name,
-                "host": host,
-                "access_code": access_code,
-                "serial": serial,
-                "mqtt_port": int(data.get("mqtt_port", 8883)),
-                "ftp_port": int(data.get("ftp_port", 990)),
-                "camera_port": int(data.get("camera_port", 6000)),
-            }
-            if ams_serial:
-                new_printer["ams_serial"] = ams_serial
-            config["printers"].append(new_printer)
+                new_printer = {
+                    "name": name,
+                    "type": "klipper",
+                    "host": host,
+                    "moonraker_port": moonraker_port,
+                }
+                if api_key:
+                    new_printer["api_key"] = api_key
+                if camera_url:
+                    new_printer["camera_url"] = camera_url
+                config["printers"].append(new_printer)
 
-            with open(config_path, "w") as f:
-                yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+                with open(config_path, "w") as f:
+                    yaml.dump(config, f, default_flow_style=False, sort_keys=False)
 
-            # Hot-add: create client and connect
-            from .bambu_client import BambuClient
-            client = BambuClient(
-                name=name,
-                host=host,
-                access_code=access_code,
-                serial=serial,
-                port=new_printer["mqtt_port"],
-                ftp_port=new_printer["ftp_port"],
-                camera_port=new_printer["camera_port"],
-                ams_serial=ams_serial,
-            )
-            farm_manager._printers[name] = client
-            connected = client.connect(timeout=10)
+                # Hot-add
+                from .klipper_client import KlipperClient
+                client = KlipperClient(
+                    name=name, host=host, port=moonraker_port,
+                    api_key=api_key, camera_url=camera_url,
+                )
+                farm_manager._printers[name] = client
+                farm_manager._printer_types[name] = "klipper"
+                connected = client.connect(timeout=10)
 
-            return jsonify({"ok": True, "connected": connected, "message": f"Printer '{name}' added"})
-        except Exception as e:
-            logger.error(f"Failed to add printer: {e}")
-            return jsonify({"ok": False, "message": str(e)}), 500
+                return jsonify({"ok": True, "connected": connected, "message": f"Klipper printer '{name}' added"})
+            except Exception as e:
+                logger.error(f"Failed to add Klipper printer: {e}")
+                return jsonify({"ok": False, "message": str(e)}), 500
+        else:
+            # BambuLab printer
+            access_code = data.get("access_code", "").strip()
+            serial = data.get("serial", "").strip()
+            ams_serial = data.get("ams_serial", "").strip()
+
+            if not access_code or not serial:
+                return jsonify({"ok": False, "message": "access_code and serial are required for BambuLab printers"}), 400
+
+            existing = farm_manager.get_printer(name)
+            if existing:
+                return jsonify({"ok": False, "message": f"Printer '{name}' already exists"}), 400
+
+            config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
+            try:
+                with open(config_path) as f:
+                    config = yaml.safe_load(f) or {}
+                if not config.get("printers"):
+                    config["printers"] = []
+
+                new_printer = {
+                    "name": name,
+                    "type": "bambulab",
+                    "host": host,
+                    "access_code": access_code,
+                    "serial": serial,
+                    "mqtt_port": int(data.get("mqtt_port", 8883)),
+                    "ftp_port": int(data.get("ftp_port", 990)),
+                    "camera_port": int(data.get("camera_port", 6000)),
+                }
+                if ams_serial:
+                    new_printer["ams_serial"] = ams_serial
+                config["printers"].append(new_printer)
+
+                with open(config_path, "w") as f:
+                    yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+                # Hot-add
+                from .bambu_client import BambuClient
+                client = BambuClient(
+                    name=name, host=host, access_code=access_code,
+                    serial=serial, port=new_printer["mqtt_port"],
+                    ftp_port=new_printer["ftp_port"],
+                    camera_port=new_printer["camera_port"],
+                    ams_serial=ams_serial,
+                )
+                farm_manager._printers[name] = client
+                farm_manager._printer_types[name] = "bambulab"
+                connected = client.connect(timeout=10)
+
+                return jsonify({"ok": True, "connected": connected, "message": f"Printer '{name}' added"})
+            except Exception as e:
+                logger.error(f"Failed to add printer: {e}")
+                return jsonify({"ok": False, "message": str(e)}), 500
 
     @app.route(prefix + "/api/discover/remove", methods=["POST"])
     @app.route("/api/discover/remove", methods=["POST"])
@@ -678,6 +1095,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         if client:
             client.disconnect()
             del farm_manager._printers[name]
+            farm_manager._printer_types.pop(name, None)
 
         # Remove from config
         config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
@@ -750,6 +1168,99 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         except Exception as e:
             logger.error(f"Failed to rename printer in config: {e}")
             return jsonify({"ok": False, "message": str(e)}), 500
+
+    @app.route(prefix + "/api/printer/<name>/staff_only", methods=["POST"])
+    @app.route("/api/printer/<name>/staff_only", methods=["POST"])
+    @admin_required
+    def set_staff_only(name):
+        """Toggle the staff_only flag for a printer."""
+        data = request.get_json(silent=True) or {}
+        staff_only = bool(data.get("staff_only", False))
+        found = False
+        for p in app_config.get("printers", []):
+            if p.get("name") == name:
+                p["staff_only"] = staff_only
+                found = True
+                break
+        if not found:
+            return jsonify({"ok": False, "error": "Printer not found"}), 404
+        try:
+            _save_config()
+        except Exception as e:
+            logger.error(f"Failed to save staff_only setting: {e}")
+            return jsonify({"ok": False, "error": str(e)}), 500
+        return jsonify({"ok": True, "staff_only": staff_only})
+
+    # ── Active Directory Config API ───────────────────────
+
+    @app.route(prefix + "/api/ad/config", methods=["GET"])
+    @app.route("/api/ad/config", methods=["GET"])
+    @admin_required
+    def ad_get_config():
+        """Get current AD configuration (password masked)."""
+        ad = dict(_get_ad_config())
+        if ad.get("bind_password"):
+            ad["bind_password"] = "********"
+        return jsonify(ad)
+
+    @app.route(prefix + "/api/ad/config", methods=["POST"])
+    @app.route("/api/ad/config", methods=["POST"])
+    @admin_required
+    def ad_save_config():
+        """Save AD configuration to config.yaml."""
+        data = request.get_json(silent=True) or {}
+        config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
+        try:
+            with open(config_path) as f:
+                file_config = yaml.safe_load(f) or {}
+
+            ad = file_config.get("active_directory", {})
+            ad["enabled"] = data.get("enabled", False)
+            ad["server"] = data.get("server", "").strip()
+            ad["port"] = int(data.get("port", 389))
+            ad["use_ssl"] = data.get("use_ssl", False)
+            ad["base_dn"] = data.get("base_dn", "").strip()
+            ad["bind_user"] = data.get("bind_user", "").strip()
+            # Only update password if not the mask placeholder
+            if data.get("bind_password") and data["bind_password"] != "********":
+                ad["bind_password"] = data["bind_password"]
+            ad["student_ou"] = data.get("student_ou", "").strip()
+            ad["staff_ou"] = data.get("staff_ou", "").strip()
+
+            file_config["active_directory"] = ad
+
+            with open(config_path, "w") as f:
+                yaml.dump(file_config, f, default_flow_style=False, sort_keys=False)
+
+            # Update live config
+            app_config["active_directory"] = ad
+
+            return jsonify({"ok": True, "message": "AD configuration saved"})
+        except Exception as e:
+            logger.error(f"Failed to save AD config: {e}")
+            return jsonify({"ok": False, "message": str(e)}), 500
+
+    @app.route(prefix + "/api/ad/test", methods=["POST"])
+    @app.route("/api/ad/test", methods=["POST"])
+    @admin_required
+    def ad_test_connection():
+        """Test AD connection with provided or saved config."""
+        data = request.get_json(silent=True) or {}
+        # Use provided values, falling back to saved config
+        ad = dict(_get_ad_config())
+        if data.get("server"):
+            ad["server"] = data["server"].strip()
+        if data.get("port"):
+            ad["port"] = int(data["port"])
+        if "use_ssl" in data:
+            ad["use_ssl"] = data["use_ssl"]
+        if data.get("bind_user"):
+            ad["bind_user"] = data["bind_user"].strip()
+        if data.get("bind_password") and data["bind_password"] != "********":
+            ad["bind_password"] = data["bind_password"]
+
+        result = test_ad_connection(ad)
+        return jsonify(result)
 
     # ── Camera API ────────────────────────────────────────
 
@@ -830,7 +1341,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         return jsonify({
             "api": "0.1",
             "server": "1.10.0",
-            "text": "BambuLab Print Farm (OctoPrint-compat)",
+            "text": "The Print Farm (OctoPrint-compat)",
         })
 
     @app.route(prefix + "/api/connection")
@@ -847,7 +1358,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             "options": {
                 "ports": ["VIRTUAL"],
                 "baudrates": [250000],
-                "printerProfiles": [{"id": "_default", "name": "BambuLab Farm"}],
+                "printerProfiles": [{"id": "_default", "name": "The Print Farm"}],
             },
         })
 

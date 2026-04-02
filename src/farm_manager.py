@@ -1,5 +1,5 @@
 """
-Farm Manager — coordinates multiple BambuLab printers.
+Farm Manager — coordinates multiple printers (BambuLab + Klipper).
 
 Maintains connections to all printers, tracks their states,
 and provides a unified interface for the web UI and job queue.
@@ -8,33 +8,58 @@ and provides a unified interface for the web UI and job queue.
 import logging
 import threading
 import time
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 
 from .bambu_client import BambuClient, PrintState, PrintStatus
+from .klipper_client import KlipperClient
 
 logger = logging.getLogger(__name__)
 
+# Union type for all supported printer clients
+PrinterClient = Union[BambuClient, KlipperClient]
+
+
+def create_printer_client(cfg: dict) -> PrinterClient:
+    """Factory: create the right client based on printer type in config."""
+    printer_type = cfg.get("type", "bambulab").lower()
+    name = cfg["name"]
+
+    if printer_type == "klipper":
+        return KlipperClient(
+            name=name,
+            host=cfg["host"],
+            port=cfg.get("moonraker_port", 7125),
+            api_key=cfg.get("api_key", ""),
+            camera_url=cfg.get("camera_url", ""),
+        )
+    else:
+        # Default: BambuLab
+        return BambuClient(
+            name=name,
+            host=cfg["host"],
+            access_code=cfg["access_code"],
+            serial=cfg["serial"],
+            port=cfg.get("mqtt_port", 8883),
+            ftp_port=cfg.get("ftp_port", 990),
+            camera_port=cfg.get("camera_port", 6000),
+            ams_serial=cfg.get("ams_serial", ""),
+        )
+
 
 class FarmManager:
-    """Manages multiple BambuLab P1S printers as a farm."""
+    """Manages multiple printers (BambuLab and Klipper) as a farm."""
 
     def __init__(self, printer_configs: list = None):
-        self._printers: Dict[str, BambuClient] = {}
+        self._printers: Dict[str, PrinterClient] = {}
+        self._printer_types: Dict[str, str] = {}
         self._lock = threading.Lock()
 
         for cfg in (printer_configs or []):
             name = cfg["name"]
-            client = BambuClient(
-                name=name,
-                host=cfg["host"],
-                access_code=cfg["access_code"],
-                serial=cfg["serial"],
-                port=cfg.get("mqtt_port", 8883),
-                ftp_port=cfg.get("ftp_port", 990),
-                camera_port=cfg.get("camera_port", 6000),
-                ams_serial=cfg.get("ams_serial", ""),
-            )
+            printer_type = cfg.get("type", "bambulab").lower()
+            client = create_printer_client(cfg)
             self._printers[name] = client
+            self._printer_types[name] = printer_type
 
     def connect_all(self, timeout: float = 10.0) -> Dict[str, bool]:
         """Connect to all printers. Returns {name: success}."""
@@ -60,20 +85,26 @@ class FarmManager:
         for name, client in self._printers.items():
             client.disconnect()
 
-    def get_printer(self, name: str) -> Optional[BambuClient]:
+    def get_printer(self, name: str) -> Optional[PrinterClient]:
         return self._printers.get(name)
 
-    def get_all_printers(self) -> Dict[str, BambuClient]:
+    def get_all_printers(self) -> Dict[str, PrinterClient]:
         return dict(self._printers)
 
+    def get_printer_type(self, name: str) -> str:
+        """Return 'bambulab' or 'klipper' for a given printer name."""
+        return self._printer_types.get(name, "bambulab")
+
     def get_all_states(self) -> Dict[str, dict]:
-        """Get serializable state for all printers."""
+        """Get serializable state for all printers (both Bambu and Klipper)."""
         states = {}
         for name, client in self._printers.items():
             s = client.state
-            states[name] = {
+            printer_type = self._printer_types.get(name, "bambulab")
+            state = {
                 "name": name,
                 "host": client.host,
+                "type": printer_type,
                 "connected": client.is_connected(),
                 "status": s.status.value,
                 "gcode_state": s.gcode_state,
@@ -100,12 +131,13 @@ class FarmManager:
                 "print_error": s.print_error,
                 "hms": s.hms or [],
                 "has_ams": s.has_ams,
-                "ams_serial": client.ams_serial,
+                "ams_serial": getattr(client, 'ams_serial', ''),
                 "ams_trays": s.ams_trays,
                 "ams_tray_now": s.ams_tray_now,
                 "ams_humidity": s.ams_humidity,
                 "vt_tray": s.vt_tray,
             }
+            states[name] = state
         return states
 
     def get_idle_printers(self) -> list:

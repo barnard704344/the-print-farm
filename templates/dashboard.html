@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BambuLab Print Farm</title>
+    <title>The Print Farm</title>
     <style>
         :root {
             --bg: #0f1117;
@@ -522,6 +522,59 @@
 
         .admin-only { display: none; }
         body.is-admin .admin-only { display: inline-block; }
+        body.is-admin .tab.admin-only { display: inline-block; }
+
+        /* File Library */
+        .library-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+        .library-toolbar input[type="text"] {
+            flex: 1; min-width: 200px; padding: 8px 12px; border-radius: 8px;
+            border: 1px solid var(--border); background: var(--surface); color: var(--text);
+            font-size: 13px;
+        }
+        .library-breadcrumb { display: flex; gap: 4px; align-items: center; margin-bottom: 12px; font-size: 13px; flex-wrap: wrap; }
+        .library-breadcrumb a { color: var(--accent); cursor: pointer; text-decoration: none; }
+        .library-breadcrumb a:hover { text-decoration: underline; }
+        .library-breadcrumb span { color: var(--text-muted); }
+        .library-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+        .library-card {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+            overflow: hidden; transition: border-color 0.2s; cursor: pointer; position: relative;
+        }
+        .library-card:hover { border-color: var(--accent); }
+        .library-card.folder-card {
+            display: flex; align-items: center; gap: 12px; padding: 16px;
+            min-height: 60px;
+        }
+        .library-card.folder-card .folder-icon { font-size: 28px; flex-shrink: 0; }
+        .library-card.folder-card .folder-name { font-size: 14px; font-weight: 500; word-break: break-word; }
+        .library-card-thumb {
+            width: 100%; aspect-ratio: 1; background: var(--bg);
+            display: flex; align-items: center; justify-content: center;
+            overflow: hidden;
+        }
+        .library-card-thumb img { width: 100%; height: 100%; object-fit: contain; }
+        .library-card-thumb .no-thumb { font-size: 48px; color: var(--text-muted); opacity: 0.3; }
+        .library-card-info { padding: 10px 12px; }
+        .library-card-name { font-size: 13px; font-weight: 500; word-break: break-word; margin-bottom: 4px;
+            overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+        .library-card-meta { font-size: 11px; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 6px; }
+        .library-card-actions { padding: 6px 12px 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+        .library-card-actions .btn { font-size: 11px; padding: 3px 10px; }
+        .library-empty { grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: var(--text-muted); }
+
+        .ad-input {
+            width: 100%;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg);
+            color: var(--text);
+            font-size: 13px;
+        }
+        .ad-input:focus {
+            border-color: var(--accent);
+            outline: none;
+        }
 
         /* Multi-printer send dropdown */
         .send-dropdown {
@@ -702,14 +755,45 @@
             .farm-stats { display: none; }
             .main { padding: 12px; }
         }
+        /* 3D Viewer Modal */
+        .viewer-overlay {
+            display: none; position: fixed; inset: 0; z-index: 9999;
+            background: rgba(0,0,0,0.85); align-items: center; justify-content: center;
+        }
+        .viewer-overlay.active { display: flex; }
+        .viewer-container {
+            position: relative; width: 90vw; height: 90vh; max-width: 1200px;
+            background: #0f1117; border-radius: 16px; overflow: hidden;
+            border: 1px solid var(--border);
+        }
+        .viewer-close {
+            position: absolute; top: 12px; right: 16px; z-index: 10;
+            background: rgba(0,0,0,0.6); border: 1px solid var(--border);
+            color: var(--text); font-size: 20px; width: 36px; height: 36px;
+            border-radius: 50%; cursor: pointer; display: flex;
+            align-items: center; justify-content: center;
+        }
+        .viewer-close:hover { background: var(--danger); }
+        .viewer-loading {
+            position: absolute; inset: 0; display: flex; align-items: center;
+            justify-content: center; color: var(--text-muted); font-size: 14px;
+        }
+        .viewer-hint {
+            position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+            color: var(--text-muted); font-size: 12px; opacity: 0.6;
+            pointer-events: none;
+        }
+        #viewerCanvas { width: 100%; height: 100%; display: block; }
     </style>
+    <script src="{{ prefix }}/static/three.min.js"></script>
 </head>
 <body>
     <div class="header">
         <h1>
             <span class="logo">&#x25B2;</span>
-            BambuLab Print Farm
+            The Print Farm
         </h1>
+        <span style="font-size:11px;color:var(--text-muted);margin-left:-6px;">BambuLab &amp; Klipper</span>
         <div style="display:flex; align-items:center; gap:20px;">
             <div class="farm-stats" id="farmStats">
                 <div class="farm-stat"><span class="dot dot-connected"></span> <span id="statConnected">0</span> Connected</div>
@@ -728,7 +812,9 @@
             <button class="tab active" data-tab="printers">Printers</button>
             <button class="tab" data-tab="queue">Job Queue</button>
             <button class="tab" data-tab="history">History</button>
+            <button class="tab" data-tab="library">File Library</button>
             <button class="tab" data-tab="orca">OrcaSlicer Setup</button>
+            <button class="tab admin-only" data-tab="settings">Settings</button>
         </div>
 
         <!-- Printers Tab -->
@@ -746,32 +832,11 @@
                 <h3>Upload G-code File</h3>
                 <p>Drag &amp; drop files here or click to browse</p>
                 <input type="file" id="fileInput" accept=".gcode" style="display:none" multiple>
-                <div class="upload-options">
-                    <div class="upload-option">
-                        <label>Copies:</label>
-                        <input type="number" id="uploadCopies" value="1" min="1" max="100" style="width:60px">
-                    </div>
-                    <div class="upload-option admin-only">
-                        <label>Priority:</label>
-                        <select id="uploadPriority">
-                            <option value="0">Normal</option>
-                            <option value="1">High</option>
-                            <option value="2">Urgent</option>
-                        </select>
-                    </div>
-                    <div class="upload-option admin-only">
-                        <label>Printer:</label>
-                        <select id="uploadPrinter">
-                            <option value="">Auto (next idle)</option>
-                        </select>
-                    </div>
-                </div>
             </div>
 
-            <div class="queue-header">
-                <h2 style="font-size:16px;">Print Queue</h2>
-                <div id="queueStats" style="font-size:13px; color:var(--text-muted);"></div>
-            </div>
+            <h2 style="font-size:16px; margin:24px 0 12px;">
+                <span id="queueStats" style="font-size:12px; color:var(--text-muted); margin-left:8px;"></span>
+            </h2>
             <table class="job-table">
                 <thead>
                     <tr>
@@ -779,6 +844,7 @@
                         <th>File</th>
                         <th>Status</th>
                         <th>Printer</th>
+                        <th>Submitted By</th>
                         <th>Copies</th>
                         <th>Priority</th>
                         <th>Created</th>
@@ -805,6 +871,19 @@
                 <tbody id="historyTableBody"></tbody>
             </table>
         </div>
+        <!-- File Library Tab -->
+        <div class="tab-content" id="tab-library">
+            <div class="library-breadcrumb" id="libraryBreadcrumb">
+                <a onclick="navigateFolder(null)">Library</a>
+            </div>
+            <div class="library-toolbar">
+                <input type="text" id="librarySearch" placeholder="Search files..." oninput="debounceLibrarySearch()">
+                <button class="btn" onclick="showNewFolderDialog()">New Folder</button>
+            </div>
+            <div class="library-grid" id="libraryGrid">
+                <div class="library-empty">Loading...</div>
+            </div>
+        </div>
         <!-- OrcaSlicer Setup Tab -->
         <div class="tab-content" id="tab-orca">
             <div class="orca-setup">
@@ -817,14 +896,11 @@
                     </p>
                     <div style="display:flex; gap:10px; flex-wrap:wrap;">
                         <a class="btn btn-primary" id="dlBat" download="upload_to_farm.bat" style="text-decoration:none;">
-                            &#11015; Windows (.bat)
-                        </a>
-                        <a class="btn btn-success" id="dlPython" download="upload_to_farm.py" style="text-decoration:none;">
-                            &#11015; Python (Any OS)
+                            &#11015; Download Script (.bat)
                         </a>
                     </div>
                     <p style="font-size:11px; color:var(--text-muted); margin-top:8px;">
-                        Windows users: just download the .bat file. No PowerShell or Python needed — it uses <code>curl</code> which is built into Windows.
+                        No PowerShell or Python needed — it uses <code>curl</code> which is built into Windows.
                     </p>
                 </div>
 
@@ -836,8 +912,7 @@
                             <div class="step-text">
                                 <strong>Save the script</strong><br>
                                 Download the script above and save it somewhere permanent, e.g.<br>
-                                Windows: Leave in your <code>Downloads</code> folder (default download location)<br>
-                                Mac/Linux: <code>~/upload_to_farm.py</code>
+                                Leave it in your <code>Downloads</code> folder (default download location).
                             </div>
                         </div>
                         <div class="step">
@@ -859,13 +934,7 @@
                                     <code id="cmdPs">C:\Windows\System32\cmd.exe /c C:\Users\USERNAME\Downloads\upload_to_farm.bat</code>
                                     <button class="btn-copy" onclick="copyText(document.getElementById('cmdPs').textContent)" title="Copy">&#128203;</button>
                                 </div>
-                                <span style="font-size:11px; color:var(--text-muted);">Replace <strong>USERNAME</strong> with your Windows username (e.g. <code>C:\Windows\System32\cmd.exe /c C:\Users\rob.barnard\Downloads\upload_to_farm.bat</code>).</span><br><br>
-                                <strong>Python (any OS):</strong>
-                                <div class="script-box">
-                                    <code id="cmdPy">python3 "/path/to/upload_to_farm.py"</code>
-                                    <button class="btn-copy" onclick="copyText(document.getElementById('cmdPy').textContent)" title="Copy">&#128203;</button>
-                                </div>
-                                <span style="font-size:11px; color:var(--text-muted);">Update the path to match where you saved the script.</span>
+                                <span id="cmdPsHint" style="font-size:11px; color:var(--text-muted);">Replace <strong>USERNAME</strong> with your Windows username (e.g. <code>C:\Windows\System32\cmd.exe /c C:\Users\rob.barnard\Downloads\upload_to_farm.bat</code>).</span>
                             </div>
                         </div>
                         <div class="step">
@@ -913,6 +982,81 @@
                 </div>
             </div>
         </div>
+
+        <!-- Settings Tab (Admin only) -->
+        <div class="tab-content" id="tab-settings">
+            <div class="setup-section" style="max-width:700px;">
+                <h3 style="margin-bottom:16px;">Active Directory Configuration</h3>
+                <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
+                    Configure LDAP/Active Directory authentication. When enabled, users log in with their AD credentials.
+                    Students get print access; staff get full admin access.
+                </p>
+                <div style="display:flex; flex-direction:column; gap:14px;">
+                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                        <input type="checkbox" id="adEnabled" style="width:18px; height:18px;">
+                        <span>Enable Active Directory Login</span>
+                    </label>
+                    <div id="adFields">
+                        <div style="display:flex; flex-direction:column; gap:12px;">
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">AD Server</label>
+                                    <input type="text" id="adServer" placeholder="e.g. dc01.school.internal" class="ad-input">
+                                </div>
+                                <div style="display:grid; grid-template-columns:1fr auto; gap:8px;">
+                                    <div>
+                                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Port</label>
+                                        <input type="number" id="adPort" placeholder="389" value="389" class="ad-input">
+                                    </div>
+                                    <div>
+                                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">SSL</label>
+                                        <label style="display:flex; align-items:center; gap:6px; height:38px; cursor:pointer;">
+                                            <input type="checkbox" id="adSSL" style="width:16px; height:16px;">
+                                            <span style="font-size:13px;">LDAPS</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Base DN</label>
+                                <input type="text" id="adBaseDN" placeholder="e.g. DC=school,DC=internal" class="ad-input">
+                            </div>
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Bind User (Service Account DN)</label>
+                                    <input type="text" id="adBindUser" placeholder="e.g. CN=svc_ldap,OU=Service,DC=school,DC=internal" class="ad-input">
+                                </div>
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Bind Password</label>
+                                    <input type="password" id="adBindPassword" placeholder="Service account password" class="ad-input">
+                                </div>
+                            </div>
+                            <hr style="border:none; border-top:1px solid var(--border); margin:8px 0;">
+                            <h4 style="font-size:14px; margin-bottom:8px;">Role Mapping (OU Paths)</h4>
+                            <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
+                                Users whose DN contains the Staff OU path get full admin access.
+                                Users whose DN contains the Student OU path get print-only access.
+                            </p>
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Staff OU (Admin Access)</label>
+                                    <input type="text" id="adStaffOU" placeholder="e.g. OU=Staff,DC=school,DC=internal" class="ad-input">
+                                </div>
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Student OU (Print Access)</label>
+                                    <input type="text" id="adStudentOU" placeholder="e.g. OU=Students,DC=school,DC=internal" class="ad-input">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:8px; margin-top:8px;">
+                        <button class="btn btn-primary" onclick="testADConnection()">Test Connection</button>
+                        <button class="btn btn-success" onclick="saveADConfig()">Save Configuration</button>
+                    </div>
+                    <div id="adTestResult" style="font-size:13px; margin-top:4px;"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Camera Full-Screen Modal -->
@@ -928,11 +1072,16 @@
     <div class="modal-overlay" id="loginOverlay" style="display:none">
         <div class="modal" style="max-width:360px;">
             <div class="modal-header">
-                <h2 style="font-size:18px;">Admin Login</h2>
+                <h2 style="font-size:18px;" id="loginTitle">Login</h2>
                 <button class="modal-close" onclick="closeLoginModal()">&times;</button>
             </div>
             <div style="padding:20px;">
-                <input type="password" id="loginPassword" placeholder="Password" autofocus
+                <div id="loginUsernameRow">
+                    <input type="text" id="loginUsername" placeholder="Username" autocomplete="username"
+                           style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:14px; margin-bottom:12px;"
+                           onkeydown="if(event.key==='Enter')document.getElementById('loginPassword').focus()">
+                </div>
+                <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password"
                        style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:14px; margin-bottom:12px;"
                        onkeydown="if(event.key==='Enter')doLogin()">
                 <div id="loginError" style="color:var(--danger); font-size:13px; margin-bottom:12px; display:none;"></div>
@@ -952,7 +1101,7 @@
             <!-- Step 1: Discover -->
             <div class="wizard-step" id="wiz-step-1">
                 <p style="color:var(--text-muted); margin-bottom:16px;">
-                    Search for BambuLab printers on your network. Make sure LAN mode is enabled on each printer.
+                    Search for printers on your network (BambuLab and Klipper/Moonraker).
                 </p>
                 <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
                     <button class="btn btn-primary" id="btnScan" onclick="startScan(false)">
@@ -961,17 +1110,21 @@
                     <button class="btn" id="btnDeepScan" onclick="startScan(true)">
                         Deep Scan (Port Scan)
                     </button>
-                    <button class="btn" onclick="showManualAdd()">
-                        Add Manually
+                    <button class="btn" onclick="showManualAdd('bambulab')">
+                        Add BambuLab
+                    </button>
+                    <button class="btn" onclick="showManualAdd('klipper')" style="border-color:#ff6600;color:#ff6600;">
+                        Add Klipper
                     </button>
                 </div>
                 <div id="scanStatus" style="font-size:13px; color:var(--text-muted); margin-bottom:12px;"></div>
                 <div id="scanResults"></div>
             </div>
 
-            <!-- Step 2: Configure -->
+            <!-- Step 2: Configure (BambuLab) -->
             <div class="wizard-step" id="wiz-step-2" style="display:none">
                 <div class="wizard-form">
+                    <input type="hidden" id="wizType" value="bambulab">
                     <div class="form-group">
                         <label>Printer Name</label>
                         <input type="text" id="wizName" placeholder="e.g. P1S-01">
@@ -980,18 +1133,36 @@
                         <label>IP Address</label>
                         <input type="text" id="wizHost" placeholder="192.168.1.x">
                     </div>
-                    <div class="form-group">
-                        <label>Serial Number</label>
-                        <input type="text" id="wizSerial" placeholder="From LCD: Settings → Device Info">
+                    <!-- BambuLab-specific fields -->
+                    <div id="wizBambuFields">
+                        <div class="form-group">
+                            <label>Serial Number</label>
+                            <input type="text" id="wizSerial" placeholder="From LCD: Settings → Device Info">
+                        </div>
+                        <div class="form-group">
+                            <label>LAN Access Code</label>
+                            <input type="text" id="wizAccessCode" placeholder="From LCD: Settings → LAN Mode">
+                            <span style="font-size:11px; color:var(--text-muted);">8-digit code from the printer's LCD screen</span>
+                        </div>
+                        <div class="form-group">
+                            <label>AMS Serial Number <span style="font-size:11px; color:var(--text-muted);">(optional)</span></label>
+                            <input type="text" id="wizAmsSerial" placeholder="Leave blank if no AMS attached">
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>LAN Access Code</label>
-                        <input type="text" id="wizAccessCode" placeholder="From LCD: Settings → LAN Mode">
-                        <span style="font-size:11px; color:var(--text-muted);">8-digit code from the printer's LCD screen</span>
-                    </div>
-                    <div class="form-group">
-                        <label>AMS Serial Number <span style="font-size:11px; color:var(--text-muted);">(optional)</span></label>
-                        <input type="text" id="wizAmsSerial" placeholder="Leave blank if no AMS attached">
+                    <!-- Klipper-specific fields -->
+                    <div id="wizKlipperFields" style="display:none;">
+                        <div class="form-group">
+                            <label>Moonraker Port <span style="font-size:11px; color:var(--text-muted);">(default: 7125)</span></label>
+                            <input type="number" id="wizMoonrakerPort" placeholder="7125" value="7125">
+                        </div>
+                        <div class="form-group">
+                            <label>API Key <span style="font-size:11px; color:var(--text-muted);">(optional)</span></label>
+                            <input type="text" id="wizKlipperApiKey" placeholder="Leave blank if not required">
+                        </div>
+                        <div class="form-group">
+                            <label>Camera URL <span style="font-size:11px; color:var(--text-muted);">(optional)</span></label>
+                            <input type="text" id="wizCameraUrl" placeholder="e.g. http://192.168.1.x/webcam/?action=stream">
+                        </div>
                     </div>
                     <div id="wizTestResult" style="margin:12px 0;"></div>
                     <div style="display:flex; gap:8px;">
@@ -1206,6 +1377,13 @@
     <script>
         const BASE = '{{ prefix }}';
         let isAdmin = false;
+        let isAuthenticated = false;
+        let userRole = null;
+        let displayName = '';
+        let userName = '';
+        let adEnabled = false;
+        let hasLocalUsers = false;
+        let myActivePrinters = new Set();  // printers with the current user's active jobs
         let cameraStreaming = {};   // {printerName: true/false}
         let cameraRefreshTimers = {};  // per-printer snapshot refresh intervals
 
@@ -1215,17 +1393,32 @@
                 const res = await fetch(BASE + '/api/auth/status');
                 const data = await res.json();
                 isAdmin = data.admin === true;
+                isAuthenticated = data.authenticated === true;
+                userRole = data.role || null;
+                displayName = data.display_name || '';
+                userName = data.username || '';
+                adEnabled = data.ad_enabled === true;
+                hasLocalUsers = data.has_local_users === true;
             } catch (e) {
                 isAdmin = false;
+                isAuthenticated = false;
+                userRole = null;
             }
             updateAuthUI();
         }
 
         function updateAuthUI() {
             const area = document.getElementById('authArea');
-            if (isAdmin) {
-                document.body.classList.add('is-admin');
-                area.innerHTML = `<span style="font-size:12px; color:var(--accent); margin-right:8px;">Admin</span>
+            if (isAuthenticated) {
+                if (isAdmin) {
+                    document.body.classList.add('is-admin');
+                } else {
+                    document.body.classList.remove('is-admin');
+                }
+                const roleLabel = userRole === 'staff' ? 'Staff' : userRole === 'student' ? 'Student' : 'Admin';
+                const roleColor = isAdmin ? 'var(--accent)' : 'var(--info)';
+                const nameStr = displayName ? ` — ${displayName}` : '';
+                area.innerHTML = `<span style="font-size:12px; color:${roleColor}; margin-right:8px;">${roleLabel}${nameStr}</span>
                     <button class="btn" onclick="doLogout()" style="font-size:12px; padding:4px 12px;">Logout</button>`;
             } else {
                 document.body.classList.remove('is-admin');
@@ -1235,13 +1428,26 @@
             lastPrinterNames = [];  // Force full rebuild
             refreshPrinters();
             refreshJobs();
+            if (typeof updateOrcaSlicerCommand === 'function') updateOrcaSlicerCommand();
         }
 
         function showLoginModal() {
             document.getElementById('loginOverlay').style.display = 'flex';
+            const usernameRow = document.getElementById('loginUsernameRow');
+            const usernameInput = document.getElementById('loginUsername');
+            const needsUsername = adEnabled || hasLocalUsers;
+            if (needsUsername) {
+                usernameRow.style.display = 'block';
+                document.getElementById('loginTitle').textContent = 'Login';
+                usernameInput.value = '';
+                setTimeout(() => usernameInput.focus(), 100);
+            } else {
+                usernameRow.style.display = 'none';
+                document.getElementById('loginTitle').textContent = 'Admin Login';
+                setTimeout(() => document.getElementById('loginPassword').focus(), 100);
+            }
             document.getElementById('loginPassword').value = '';
             document.getElementById('loginError').style.display = 'none';
-            setTimeout(() => document.getElementById('loginPassword').focus(), 100);
         }
 
         function closeLoginModal() {
@@ -1255,19 +1461,32 @@
         async function doLogin() {
             const pw = document.getElementById('loginPassword').value;
             const errEl = document.getElementById('loginError');
+            const body = { password: pw };
+            if (adEnabled || hasLocalUsers) {
+                body.username = document.getElementById('loginUsername').value.trim();
+                if (!body.username) {
+                    errEl.textContent = 'Username is required';
+                    errEl.style.display = 'block';
+                    return;
+                }
+            }
             try {
                 const res = await fetch(BASE + '/api/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password: pw }),
+                    body: JSON.stringify(body),
                 });
                 const data = await res.json();
                 if (data.ok) {
-                    isAdmin = true;
+                    userRole = data.role || 'staff';
+                    isAdmin = (userRole === 'staff');
+                    isAuthenticated = true;
+                    displayName = data.display_name || '';
+                    userName = body.username || '';
                     closeLoginModal();
                     updateAuthUI();
                 } else {
-                    errEl.textContent = 'Invalid password';
+                    errEl.textContent = data.error || 'Login failed';
                     errEl.style.display = 'block';
                 }
             } catch (e) {
@@ -1281,10 +1500,120 @@
                 await fetch(BASE + '/api/auth/logout', { method: 'POST' });
             } catch (e) {}
             isAdmin = false;
+            isAuthenticated = false;
+            userRole = null;
+            displayName = '';
+            userName = '';
             updateAuthUI();
         }
 
-        checkAuth();
+        // ── AD Settings ──────────────────────────────────────
+        async function loadADConfig() {
+            try {
+                const res = await fetch(BASE + '/api/ad/config');
+                if (!res.ok) return;
+                const data = await res.json();
+                document.getElementById('adEnabled').checked = data.enabled || false;
+                document.getElementById('adServer').value = data.server || '';
+                document.getElementById('adPort').value = data.port || 389;
+                document.getElementById('adSSL').checked = data.use_ssl || false;
+                document.getElementById('adBaseDN').value = data.base_dn || '';
+                document.getElementById('adBindUser').value = data.bind_user || '';
+                document.getElementById('adBindPassword').value = data.bind_password || '';
+                document.getElementById('adStudentOU').value = data.student_ou || '';
+                document.getElementById('adStaffOU').value = data.staff_ou || '';
+            } catch (e) {}
+        }
+
+        async function saveADConfig() {
+            const resultEl = document.getElementById('adTestResult');
+            const payload = {
+                enabled: document.getElementById('adEnabled').checked,
+                server: document.getElementById('adServer').value,
+                port: parseInt(document.getElementById('adPort').value) || 389,
+                use_ssl: document.getElementById('adSSL').checked,
+                base_dn: document.getElementById('adBaseDN').value,
+                bind_user: document.getElementById('adBindUser').value,
+                bind_password: document.getElementById('adBindPassword').value,
+                student_ou: document.getElementById('adStudentOU').value,
+                staff_ou: document.getElementById('adStaffOU').value,
+            };
+            try {
+                const res = await fetch(BASE + '/api/ad/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    adEnabled = payload.enabled;
+                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; Configuration saved</span>';
+                } else {
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                }
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+            }
+        }
+
+        async function testADConnection() {
+            const resultEl = document.getElementById('adTestResult');
+            resultEl.innerHTML = '<span style="color:var(--text-muted);">Testing connection...</span>';
+            const payload = {
+                server: document.getElementById('adServer').value,
+                port: parseInt(document.getElementById('adPort').value) || 389,
+                use_ssl: document.getElementById('adSSL').checked,
+                bind_user: document.getElementById('adBindUser').value,
+                bind_password: document.getElementById('adBindPassword').value,
+            };
+            try {
+                const res = await fetch(BASE + '/api/ad/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; Connection successful</span>';
+                } else {
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                }
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+            }
+        }
+
+        checkAuth().then(() => {
+            // If not authenticated and AD is enabled, attempt silent SSO via Kerberos
+            if (!isAuthenticated && adEnabled) {
+                attemptSSO();
+            }
+        });
+
+        async function attemptSSO() {
+            try {
+                // Step 1: Fetch the GSSAPI-protected PHP file (Apache handles Kerberos)
+                const checkRes = await fetch('/bambulab-sso-check.php', { credentials: 'include' });
+                if (!checkRes.ok) return;
+                const checkData = await checkRes.json();
+                if (!checkData.ok || !checkData.username) return;
+
+                // Step 2: Send the verified username to Flask to create session
+                const loginRes = await fetch(BASE + '/api/auth/sso', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: checkData.username }),
+                });
+                if (loginRes.ok) {
+                    const loginData = await loginRes.json();
+                    if (loginData.ok) {
+                        await checkAuth();
+                    }
+                }
+            } catch (e) {
+                // SSO not available — user can log in manually
+            }
+        }
 
         // ── OrcaSlicer hostname ──────────────────────────────
         const farmHost = `http://${location.hostname}:5000`;
@@ -1294,7 +1623,20 @@
 
         // Set download links for client scripts
         document.getElementById('dlBat').href = `${BASE}/static/client/upload_to_farm.bat`;
-        document.getElementById('dlPython').href = `${BASE}/static/client/upload_to_farm.py`;
+
+
+        function updateOrcaSlicerCommand() {
+            const cmdEl = document.getElementById('cmdPs');
+            const hintEl = document.getElementById('cmdPsHint');
+            const uname = (userName || '').trim();
+            if (uname) {
+                cmdEl.textContent = `C:\\Windows\\System32\\cmd.exe /c C:\\Users\\${uname}\\Downloads\\upload_to_farm.bat`;
+                hintEl.innerHTML = `<span style="color:var(--accent);">&#10003;</span> Path set to your username <strong>${uname}</strong>. If your Windows username differs, edit the path after copying.`;
+            } else {
+                cmdEl.textContent = 'C:\\Windows\\System32\\cmd.exe /c C:\\Users\\USERNAME\\Downloads\\upload_to_farm.bat';
+                hintEl.innerHTML = 'Replace <strong>USERNAME</strong> with your Windows username (e.g. <code>C:\\Windows\\System32\\cmd.exe /c C:\\Users\\rob.barnard\\Downloads\\upload_to_farm.bat</code>).';
+            }
+        }
 
         function copyText(text) {
             navigator.clipboard.writeText(text).then(() => {
@@ -1315,6 +1657,8 @@
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 tab.classList.add('active');
                 document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+                if (tab.dataset.tab === 'settings') loadADConfig();
+                if (tab.dataset.tab === 'library') refreshLibrary();
             });
         });
 
@@ -1338,9 +1682,9 @@
             for (const file of files) {
                 const form = new FormData();
                 form.append('file', file);
-                form.append('copies', document.getElementById('uploadCopies').value);
-                form.append('priority', document.getElementById('uploadPriority').value);
-                form.append('printer', document.getElementById('uploadPrinter').value);
+                form.append('copies', '1');
+                form.append('priority', '0');
+                form.append('printer', '');
 
                 try {
                     const res = await fetch(BASE + '/api/jobs/upload', { method: 'POST', body: form });
@@ -1385,20 +1729,29 @@
             const statusLabel = connected ? p.status : 'OFFLINE';
             const statusBadge = connected ? `status-badge-${status}` : 'status-badge-unknown';
             const cardClass = connected ? `status-${status}` : 'status-unknown';
+            const pType = p.type || 'bambulab';
+            const isBambu = pType === 'bambulab';
+            const isKlipper = pType === 'klipper';
+            const typeBadge = isKlipper ? '<span style="font-size:9px;background:#ff6600;color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;vertical-align:middle;">Klipper</span>' : '';
 
             const isRunning = status === 'running';
             const isPaused = status === 'paused' || status === 'pause_filament';
 
             return `
-                <div class="printer-card ${cardClass}" data-printer="${name}">
+                <div class="printer-card ${cardClass}" data-printer="${name}" data-type="${pType}">
                     <div class="printer-header">
                         <span class="printer-name">
-                            <span class="conn-badge ${connClass}"></span>${name}
+                            <span class="conn-badge ${connClass}"></span>${name}${typeBadge}
                             ${isAdmin ? `<button class="printer-rename-btn" onclick="renamePrinter('${name}')" title="Rename printer">&#9998;</button>` : ''}
                         </span>
                         <span class="printer-status ${statusBadge}" data-field="status">${statusLabel}</span>
                         ${isAdmin ? `<button class="printer-remove-btn" onclick="removePrinter('${name}')" title="Remove printer">&times;</button>` : ''}
                     </div>
+                    ${isAdmin ? `<div class="staff-only-toggle" style="display:flex;align-items:center;gap:6px;padding:2px 8px;font-size:11px;">
+                        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--text-muted);">
+                            <input type="checkbox" ${p.staff_only ? 'checked' : ''} onchange="toggleStaffOnly('${name}', this.checked)"> Staff only
+                        </label>
+                    </div>` : ''}
                     <div class="printer-job" data-field="job">${p.subtask_name || 'No active job'}</div>
                     <div class="progress-bar-container">
                         <div class="progress-bar" data-field="progress" style="width:${isRunning || isPaused ? p.mc_percent : 0}%"></div>
@@ -1439,17 +1792,18 @@
                         </div>
                         <div class="temp-item">
                             <div class="temp-label">Chamber</div>
-                            <div class="temp-value" data-field="chamber-temp">${p.chamber_temper?.toFixed(0) || 0}°</div>
+                            <div class="temp-value" data-field="chamber-temp">${isBambu ? (p.chamber_temper?.toFixed(0) || 0) + '°' : 'N/A'}</div>
                             <div class="temp-target">&nbsp;</div>
                         </div>
                     </div>
-                    ${isAdmin ? `<div class="printer-controls" data-field="controls">
+                    ${(isAdmin || myActivePrinters.has(name)) ? `<div class="printer-controls" data-field="controls">
                         ${isPaused ? `<button class="btn btn-success" onclick="printerCmd('${name}','resume')">Resume</button>` : ''}
                         ${isRunning ? `<button class="btn btn-warning" onclick="printerCmd('${name}','pause')">Pause</button>` : ''}
                         ${isRunning || isPaused ? `<button class="btn btn-danger" onclick="printerCmd('${name}','stop')">Stop</button>` : ''}
-                        <button class="btn" onclick="printerCmd('${name}','light')" title="Toggle light">
+                        ${isAdmin && isBambu ? `<button class="btn" onclick="printerCmd('${name}','light')" title="Toggle light">
                             ${p.chamber_light ? '💡' : '🔅'}
-                        </button>
+                        </button>` : ''}
+                        ${isAdmin && isKlipper ? `<button class="btn" onclick="printerCmd('${name}','emergency_stop')" title="Emergency Stop" style="color:#ff4444;">&#9888; E-Stop</button>` : ''}
                     </div>` : ''}
                     ${renderAmsSection(name, p)}
                 </div>
@@ -1569,18 +1923,25 @@
             const btt = card.querySelector('[data-field="bed-target"]');
             if (btt) btt.textContent = '/ ' + (p.bed_target_temper?.toFixed(0) || 0) + '°';
             const ct = card.querySelector('[data-field="chamber-temp"]');
-            if (ct) ct.textContent = (p.chamber_temper?.toFixed(0) || 0) + '°';
+            if (ct) {
+                const pType = p.type || 'bambulab';
+                ct.textContent = pType === 'bambulab' ? (p.chamber_temper?.toFixed(0) || 0) + '°' : 'N/A';
+            }
 
             // Controls (need rebuild since buttons change with status)
             const ctrlEl = card.querySelector('[data-field="controls"]');
             if (ctrlEl && isAdmin) {
+                const pType = p.type || 'bambulab';
+                const isBambu = pType === 'bambulab';
+                const isKlipper = pType === 'klipper';
                 ctrlEl.innerHTML = `
                     ${isPaused ? `<button class="btn btn-success" onclick="printerCmd('${name}','resume')">Resume</button>` : ''}
                     ${isRunning ? `<button class="btn btn-warning" onclick="printerCmd('${name}','pause')">Pause</button>` : ''}
                     ${isRunning || isPaused ? `<button class="btn btn-danger" onclick="printerCmd('${name}','stop')">Stop</button>` : ''}
-                    <button class="btn" onclick="printerCmd('${name}','light')" title="Toggle light">
+                    ${isBambu ? `<button class="btn" onclick="printerCmd('${name}','light')" title="Toggle light">
                         ${p.chamber_light ? '💡' : '🔅'}
-                    </button>
+                    </button>` : ''}
+                    ${isKlipper ? `<button class="btn" onclick="printerCmd('${name}','emergency_stop')" title="Emergency Stop" style="color:#ff4444;">&#9888; E-Stop</button>` : ''}
                 `;
             }
 
@@ -1818,11 +2179,12 @@
 
         function renderJobRow(job) {
             const status = job.status;
-            const canCancel = isAdmin && (status === 'queued' || status === 'uploading' || status === 'printing');
+            const isOwner = isAuthenticated && userName && job.submitted_by === userName;
+            const canCancel = (isAdmin || isOwner) && (status === 'queued' || status === 'uploading' || status === 'printing');
             const canRequeue = isAdmin && (status === 'failed' || status === 'cancelled' || status === 'completed');
             const canDelete = isAdmin;
-            const canAssign = isAdmin && status === 'queued';
-            const canReprint = isAdmin;
+            const canAssign = (isAdmin || isOwner) && status === 'queued';
+            const canReprint = isAdmin || isOwner;
 
             let assignBtn = '';
             if (canAssign && availablePrinters.length > 0) {
@@ -1849,6 +2211,7 @@
                     <td title="${job.original_name}">${job.original_name}</td>
                     <td><span class="job-status job-${status}">${status}</span></td>
                     <td>${job.printer_name || '--'}</td>
+                    <td>${job.submitted_by || '--'}</td>
                     <td>${job.copies_done}/${job.copies_total}</td>
                     <td>${priorityLabels[job.priority] || job.priority}</td>
                     <td>${formatDate(job.created_at)}</td>
@@ -1948,7 +2311,9 @@
 
                 // Update printer grid
                 const grid = document.getElementById('printerGrid');
-                const entries = Object.entries(data.printers);
+                const allEntries = Object.entries(data.printers);
+                // Students only see printers not marked staff_only
+                const entries = isAdmin ? allEntries : allEntries.filter(([_, p]) => !p.staff_only);
                 const currentNames = entries.map(([n]) => n).sort().join(',');
                 const prevNames = lastPrinterNames.sort().join(',');
 
@@ -1980,17 +2345,10 @@
                     }
                 }
 
-                // Update printer dropdown in upload form
-                const sel = document.getElementById('uploadPrinter');
-                const current = sel.value;
-                sel.innerHTML = '<option value="">Auto (next idle)</option>';
-                Object.keys(data.printers).forEach(name => {
-                    sel.innerHTML += `<option value="${name}" ${name === current ? 'selected' : ''}>${name}</option>`;
-                });
-
                 // Track available printers for manual job assignment (all connected, not actively printing)
                 availablePrinters = Object.entries(data.printers)
                     .filter(([_, p]) => p.connected && p.status !== 'RUNNING' && p.status !== 'PAUSED')
+                    .filter(([_, p]) => isAdmin || !p.staff_only)
                     .map(([name, p]) => ({ name, status: p.status }));
             } catch (err) {
                 console.error('Failed to refresh printers:', err);
@@ -2002,11 +2360,29 @@
                 const res = await fetch(BASE + '/api/jobs');
                 const data = await res.json();
 
+                // Track which printers have the current user's active jobs
+                const newMyPrinters = new Set();
+                if (userName) {
+                    for (const job of data.jobs) {
+                        if (job.submitted_by === userName && job.printer_name &&
+                            (job.status === 'printing' || job.status === 'uploading')) {
+                            newMyPrinters.add(job.printer_name);
+                        }
+                    }
+                }
+                const printersChanged = newMyPrinters.size !== myActivePrinters.size ||
+                    [...newMyPrinters].some(p => !myActivePrinters.has(p));
+                myActivePrinters = newMyPrinters;
+                if (printersChanged && !isAdmin && isAuthenticated) {
+                    lastPrinterNames = [];  // Force printer card rebuild
+                    refreshPrinters();
+                }
+
                 document.getElementById('queueStats').textContent =
                     `${data.stats.queued || 0} queued · ${data.stats.printing || 0} printing · ${data.stats.completed || 0} completed`;
 
                 document.getElementById('jobTableBody').innerHTML =
-                    data.jobs.map(renderJobRow).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);">No jobs</td></tr>';
+                    data.jobs.map(renderJobRow).join('') || '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);">No jobs</td></tr>';
             } catch (err) {
                 console.error('Failed to refresh jobs:', err);
             }
@@ -2037,6 +2413,224 @@
         refreshJobs();
         refreshHistory();
         refreshCameraStatus();
+
+        // ── File Library ─────────────────────────────────────
+        let libraryCurrentFolder = null;   // null = root
+        let libraryFolderPath = [];        // [{id, name}, ...]
+        let librarySearchTimer = null;
+        let libraryLoaded = false;
+
+        function debounceLibrarySearch() {
+            clearTimeout(librarySearchTimer);
+            librarySearchTimer = setTimeout(() => refreshLibrary(), 300);
+        }
+
+        async function refreshLibrary() {
+            const grid = document.getElementById('libraryGrid');
+            const query = document.getElementById('librarySearch').value.trim();
+            libraryLoaded = true;
+            try {
+                let files, folders = [];
+                if (query) {
+                    const res = await fetch(BASE + '/api/library/files/search?q=' + encodeURIComponent(query));
+                    const data = await res.json();
+                    files = data.files || [];
+                } else {
+                    const params = libraryCurrentFolder ? '?folder_id=' + libraryCurrentFolder : '';
+                    const res = await fetch(BASE + '/api/library/files' + params);
+                    const data = await res.json();
+                    files = data.files || [];
+                    folders = data.folders || [];
+                }
+                let html = '';
+                folders.forEach(f => { html += renderFolderCard(f); });
+                files.forEach(f => { html += renderFileCard(f); });
+                if (!folders.length && !files.length) {
+                    html = '<div class="library-empty">' + (query ? 'No files matching your search' : 'No files in this folder') + '</div>';
+                }
+                grid.innerHTML = html;
+                renderBreadcrumb();
+            } catch (err) {
+                console.error('Library load error:', err);
+                grid.innerHTML = '<div class="library-empty">Failed to load library</div>';
+            }
+        }
+
+        function renderBreadcrumb() {
+            const bc = document.getElementById('libraryBreadcrumb');
+            let html = '<a onclick="navigateFolder(null)">Library</a>';
+            libraryFolderPath.forEach((f, i) => {
+                html += ' <span>/</span> ';
+                if (i < libraryFolderPath.length - 1) {
+                    html += `<a onclick="navigateToPathIndex(${i})">${escapeHtml(f.name)}</a>`;
+                } else {
+                    html += `<span style="color:var(--text)">${escapeHtml(f.name)}</span>`;
+                }
+            });
+            bc.innerHTML = html;
+        }
+
+        function navigateFolder(folderId, folderName) {
+            if (folderId === null) {
+                libraryCurrentFolder = null;
+                libraryFolderPath = [];
+            } else {
+                libraryCurrentFolder = folderId;
+                const existIdx = libraryFolderPath.findIndex(f => f.id === folderId);
+                if (existIdx >= 0) {
+                    libraryFolderPath = libraryFolderPath.slice(0, existIdx + 1);
+                } else {
+                    libraryFolderPath.push({ id: folderId, name: folderName });
+                }
+            }
+            document.getElementById('librarySearch').value = '';
+            refreshLibrary();
+        }
+
+        function navigateToPathIndex(idx) {
+            const target = libraryFolderPath[idx];
+            libraryFolderPath = libraryFolderPath.slice(0, idx + 1);
+            libraryCurrentFolder = target.id;
+            refreshLibrary();
+        }
+
+        function renderFolderCard(folder) {
+            return `<div class="library-card folder-card" onclick="navigateFolder(${folder.id}, '${escapeHtml(folder.name).replace(/'/g, "\\'")}')"
+                    oncontextmenu="event.preventDefault(); showFolderMenu(event, ${folder.id}, '${escapeHtml(folder.name).replace(/'/g, "\\'")}')" title="Click to open">
+                <div class="folder-icon">📁</div>
+                <div class="folder-name">${escapeHtml(folder.name)}</div>
+            </div>`;
+        }
+
+        function renderFileCard(file) {
+            const thumb = file.thumbnail_path
+                ? `<img src="${BASE}/api/library/files/${file.id}/thumbnail" alt="thumb" loading="lazy">`
+                : '<div class="no-thumb">📄</div>';
+            const meta = [];
+            if (file.filament_type) meta.push(file.filament_type);
+            if (file.print_time_seconds) meta.push(formatDuration(file.print_time_seconds));
+            if (file.file_size) meta.push(formatFileSize(file.file_size));
+            if (file.print_count) meta.push('Printed ' + file.print_count + 'x');
+            const actions = `<button class="btn btn-sm" onclick="printFromLibrary(${file.id})">Print</button>`
+                + ` <button class="btn btn-sm" onclick="open3DViewer(${file.id})" title="Interactive 3D view">3D</button>`
+                + (isAdmin ? ` <button class="btn btn-sm" onclick="showMoveDialog(${file.id})">Move</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteLibraryFile(${file.id})">Delete</button>` : '');
+            return `<div class="library-card">
+                <div class="library-card-thumb" onclick="open3DViewer(${file.id})" style="cursor:pointer" title="Click for interactive 3D view">${thumb}</div>
+                <div class="library-card-info">
+                    <div class="library-card-name" title="${escapeHtml(file.original_name)}">${escapeHtml(file.original_name)}</div>
+                    <div class="library-card-meta">${meta.map(m => '<span>' + m + '</span>').join('')}</div>
+                </div>
+                <div class="library-card-actions">${actions}</div>
+            </div>`;
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / 1048576).toFixed(1) + ' MB';
+        }
+
+        function showNewFolderDialog() {
+            const name = prompt('Folder name:');
+            if (!name || !name.trim()) return;
+            fetch(BASE + '/api/library/folders', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name.trim(), parent_id: libraryCurrentFolder })
+            }).then(r => r.json()).then(d => {
+                if (d.error) alert(d.error);
+                else refreshLibrary();
+            }).catch(err => alert('Failed to create folder'));
+        }
+
+        function showFolderMenu(event, folderId, folderName) {
+            const action = prompt(`Folder: ${folderName}\nType "rename" to rename or "delete" to delete:`);
+            if (!action) return;
+            if (action.toLowerCase() === 'rename') {
+                const newName = prompt('New folder name:', folderName);
+                if (!newName || !newName.trim()) return;
+                fetch(BASE + `/api/library/folders/${folderId}/rename`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: newName.trim() })
+                }).then(r => r.json()).then(d => {
+                    if (d.error) alert(d.error);
+                    else refreshLibrary();
+                });
+            } else if (action.toLowerCase() === 'delete') {
+                if (!confirm('Delete folder "' + folderName + '" and all its contents?')) return;
+                fetch(BASE + `/api/library/folders/${folderId}/delete`, { method: 'POST' })
+                    .then(r => r.json()).then(d => {
+                        if (d.error) alert(d.error);
+                        else refreshLibrary();
+                    });
+            }
+        }
+
+        function showMoveDialog(fileId) {
+            fetch(BASE + '/api/library/files').then(r => r.json()).then(data => {
+                const allFolders = data.folders || [];
+                if (!allFolders.length) {
+                    alert('No folders to move to. Create a folder first.');
+                    return;
+                }
+                const choices = ['Root (no folder)', ...allFolders.map(f => f.name)];
+                const choice = prompt('Move to folder:\n' + choices.map((c, i) => i + ': ' + c).join('\n') + '\n\nEnter number:');
+                if (choice === null) return;
+                const idx = parseInt(choice);
+                if (isNaN(idx) || idx < 0 || idx >= choices.length) return;
+                const targetFolderId = idx === 0 ? null : allFolders[idx - 1].id;
+                fetch(BASE + `/api/library/files/${fileId}/move`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder_id: targetFolderId })
+                }).then(r => r.json()).then(d => {
+                    if (d.error) alert(d.error);
+                    else refreshLibrary();
+                });
+            });
+        }
+
+        function deleteLibraryFile(fileId) {
+            if (!confirm('Delete this file from the library?')) return;
+            fetch(BASE + `/api/library/files/${fileId}/delete`, { method: 'POST' })
+                .then(r => r.json()).then(d => {
+                    if (d.error) alert(d.error);
+                    else refreshLibrary();
+                });
+        }
+
+        async function printFromLibrary(fileId) {
+            try {
+                const statusRes = await fetch(BASE + '/api/farm/status');
+                const statusData = await statusRes.json();
+                const allNames = Object.keys(statusData.printers || {});
+                const names = isAdmin ? allNames : allNames.filter(n => !statusData.printers[n].staff_only);
+                if (!names.length) { alert('No printers available'); return; }
+                const choice = prompt('Select printer:\n' + names.map((n, i) => (i + 1) + ': ' + n).join('\n') + '\n\nEnter number:');
+                if (!choice) return;
+                const idx = parseInt(choice) - 1;
+                if (isNaN(idx) || idx < 0 || idx >= names.length) { alert('Invalid selection'); return; }
+                const res = await fetch(BASE + `/api/library/files/${fileId}/print`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ printer_name: names[idx] })
+                });
+                const data = await res.json();
+                if (data.error) alert(data.error);
+                else alert('Print job queued!');
+            } catch (err) {
+                alert('Failed to queue print');
+            }
+        }
+
+        function escapeHtml(text) {
+            const d = document.createElement('div');
+            d.textContent = text;
+            return d.innerHTML;
+        }
+
         setInterval(refreshPrinters, 2000);
         setInterval(refreshJobs, 5000);
         setInterval(refreshHistory, 10000);
@@ -2087,8 +2681,8 @@
                     resultsEl.innerHTML = all.map((p, i) => `
                         <div class="discovered-item" onclick="selectDiscovered(${i})">
                             <div class="discovered-info">
-                                <div class="discovered-name">${p.name || 'Unknown Printer'}</div>
-                                <div class="discovered-detail">${p.host} · ${p.model || 'BambuLab'} ${p.serial ? '· SN: ' + p.serial : ''}</div>
+                                <div class="discovered-name">${p.name || 'Unknown Printer'} ${p.type === 'klipper' ? '<span style="font-size:9px;background:#ff6600;color:#fff;padding:1px 5px;border-radius:3px;">Klipper</span>' : ''}</div>
+                                <div class="discovered-detail">${p.host} · ${p.model || (p.type === 'klipper' ? 'Klipper' : 'BambuLab')} ${p.serial ? '· SN: ' + p.serial : ''}</div>
                             </div>
                             <button class="btn btn-primary" style="flex-shrink:0">Select</button>
                         </div>
@@ -2105,28 +2699,39 @@
 
         function selectDiscovered(idx) {
             const p = window._discoveredPrinters[idx];
+            const pType = p.type || 'bambulab';
+            document.getElementById('wizType').value = pType;
             document.getElementById('wizName').value = p.name || '';
             document.getElementById('wizHost').value = p.host || '';
             document.getElementById('wizSerial').value = p.serial || '';
             document.getElementById('wizAccessCode').value = '';
             document.getElementById('wizAmsSerial').value = '';
-            showStep2();
+            showStep2(pType);
         }
 
-        function showManualAdd() {
+        function showManualAdd(pType) {
+            pType = pType || 'bambulab';
+            document.getElementById('wizType').value = pType;
             document.getElementById('wizName').value = '';
             document.getElementById('wizHost').value = '';
             document.getElementById('wizSerial').value = '';
             document.getElementById('wizAccessCode').value = '';
             document.getElementById('wizAmsSerial').value = '';
-            showStep2();
+            document.getElementById('wizMoonrakerPort').value = '7125';
+            document.getElementById('wizKlipperApiKey').value = '';
+            document.getElementById('wizCameraUrl').value = '';
+            showStep2(pType);
         }
 
-        function showStep2() {
+        function showStep2(pType) {
+            pType = pType || document.getElementById('wizType').value || 'bambulab';
             document.getElementById('wiz-step-1').style.display = 'none';
             document.getElementById('wiz-step-2').style.display = 'block';
             document.getElementById('wizTestResult').innerHTML = '';
             document.getElementById('btnAdd').disabled = true;
+            // Toggle field visibility based on printer type
+            document.getElementById('wizBambuFields').style.display = pType === 'bambulab' ? '' : 'none';
+            document.getElementById('wizKlipperFields').style.display = pType === 'klipper' ? '' : 'none';
         }
 
         function wizBack() {
@@ -2137,57 +2742,103 @@
         async function wizTest() {
             const resultEl = document.getElementById('wizTestResult');
             const btnTest = document.getElementById('btnTest');
+            const pType = document.getElementById('wizType').value || 'bambulab';
             const host = document.getElementById('wizHost').value.trim();
-            const serial = document.getElementById('wizSerial').value.trim();
-            const access_code = document.getElementById('wizAccessCode').value.trim();
 
-            if (!host || !serial || !access_code) {
-                resultEl.innerHTML = '<span class="test-fail">Please fill in all fields</span>';
-                return;
-            }
-
-            btnTest.disabled = true;
-            resultEl.innerHTML = '<span class="spinner"></span> Testing connection...';
-
-            try {
-                const res = await fetch(BASE + '/api/discover/test', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({host, serial, access_code}),
-                });
-                const data = await res.json();
-
-                if (data.ok) {
-                    let detail = '';
-                    if (data.state) {
-                        const s = data.state;
-                        detail = ` — Status: ${s.status || 'idle'}`;
-                        if (s.nozzle_temper) detail += `, Nozzle: ${s.nozzle_temper}°C`;
-                        if (s.bed_temper) detail += `, Bed: ${s.bed_temper}°C`;
-                    }
-                    resultEl.innerHTML = `<span class="test-ok">&#10003; ${data.message}${detail}</span>`;
-                    document.getElementById('btnAdd').disabled = false;
-                } else {
-                    resultEl.innerHTML = `<span class="test-fail">&#10007; ${data.message}</span>`;
-                    document.getElementById('btnAdd').disabled = true;
+            if (pType === 'klipper') {
+                const moonraker_port = parseInt(document.getElementById('wizMoonrakerPort').value) || 7125;
+                const api_key = document.getElementById('wizKlipperApiKey').value.trim();
+                if (!host) {
+                    resultEl.innerHTML = '<span class="test-fail">Please enter an IP address</span>';
+                    return;
                 }
-            } catch (err) {
-                resultEl.innerHTML = `<span class="test-fail">&#10007; ${err.message}</span>`;
+                btnTest.disabled = true;
+                resultEl.innerHTML = '<span class="spinner"></span> Testing Moonraker connection...';
+                try {
+                    const res = await fetch(BASE + '/api/discover/test', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({type: 'klipper', host, moonraker_port, api_key}),
+                    });
+                    const data = await res.json();
+                    if (data.ok) {
+                        let detail = '';
+                        if (data.state) {
+                            const s = data.state;
+                            detail = ` — ${s.software_version || 'Klipper'}`;
+                        }
+                        resultEl.innerHTML = `<span class="test-ok">&#10003; ${data.message}${detail}</span>`;
+                        document.getElementById('btnAdd').disabled = false;
+                    } else {
+                        resultEl.innerHTML = `<span class="test-fail">&#10007; ${data.message}</span>`;
+                        document.getElementById('btnAdd').disabled = true;
+                    }
+                } catch (err) {
+                    resultEl.innerHTML = `<span class="test-fail">&#10007; ${err.message}</span>`;
+                }
+                btnTest.disabled = false;
+            } else {
+                const serial = document.getElementById('wizSerial').value.trim();
+                const access_code = document.getElementById('wizAccessCode').value.trim();
+                if (!host || !serial || !access_code) {
+                    resultEl.innerHTML = '<span class="test-fail">Please fill in all fields</span>';
+                    return;
+                }
+                btnTest.disabled = true;
+                resultEl.innerHTML = '<span class="spinner"></span> Testing connection...';
+                try {
+                    const res = await fetch(BASE + '/api/discover/test', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({type: 'bambulab', host, serial, access_code}),
+                    });
+                    const data = await res.json();
+                    if (data.ok) {
+                        let detail = '';
+                        if (data.state) {
+                            const s = data.state;
+                            detail = ` — Status: ${s.status || 'idle'}`;
+                            if (s.nozzle_temper) detail += `, Nozzle: ${s.nozzle_temper}°C`;
+                            if (s.bed_temper) detail += `, Bed: ${s.bed_temper}°C`;
+                        }
+                        resultEl.innerHTML = `<span class="test-ok">&#10003; ${data.message}${detail}</span>`;
+                        document.getElementById('btnAdd').disabled = false;
+                    } else {
+                        resultEl.innerHTML = `<span class="test-fail">&#10007; ${data.message}</span>`;
+                        document.getElementById('btnAdd').disabled = true;
+                    }
+                } catch (err) {
+                    resultEl.innerHTML = `<span class="test-fail">&#10007; ${err.message}</span>`;
+                }
+                btnTest.disabled = false;
             }
-            btnTest.disabled = false;
         }
 
         async function wizAdd() {
             const btnAdd = document.getElementById('btnAdd');
             btnAdd.disabled = true;
+            const pType = document.getElementById('wizType').value || 'bambulab';
 
-            const payload = {
-                name: document.getElementById('wizName').value.trim(),
-                host: document.getElementById('wizHost').value.trim(),
-                serial: document.getElementById('wizSerial').value.trim(),
-                access_code: document.getElementById('wizAccessCode').value.trim(),
-                ams_serial: document.getElementById('wizAmsSerial').value.trim(),
-            };
+            let payload;
+            if (pType === 'klipper') {
+                payload = {
+                    type: 'klipper',
+                    name: document.getElementById('wizName').value.trim(),
+                    host: document.getElementById('wizHost').value.trim(),
+                    moonraker_port: parseInt(document.getElementById('wizMoonrakerPort').value) || 7125,
+                    api_key: document.getElementById('wizKlipperApiKey').value.trim(),
+                    camera_url: document.getElementById('wizCameraUrl').value.trim(),
+                };
+            } else {
+                payload = {
+                    type: 'bambulab',
+                    name: document.getElementById('wizName').value.trim(),
+                    host: document.getElementById('wizHost').value.trim(),
+                    serial: document.getElementById('wizSerial').value.trim(),
+                    access_code: document.getElementById('wizAccessCode').value.trim(),
+                    ams_serial: document.getElementById('wizAmsSerial').value.trim(),
+                };
+            }
 
             if (!payload.name) {
                 document.getElementById('wizTestResult').innerHTML = '<span class="test-fail">Please enter a printer name</span>';
@@ -2236,6 +2887,267 @@
                 alert('Failed to remove: ' + err.message);
             }
         }
+
+        async function toggleStaffOnly(name, checked) {
+            try {
+                await apiPost(BASE + `/api/printer/${encodeURIComponent(name)}/staff_only`, {staff_only: checked});
+            } catch (err) {
+                alert('Failed to update: ' + err.message);
+                refreshPrinters();
+            }
+        }
+    </script>
+
+    <!-- 3D Viewer Modal -->
+    <div class="viewer-overlay" id="viewerOverlay" onclick="if(event.target===this)close3DViewer()">
+        <div class="viewer-container">
+            <button class="viewer-close" onclick="close3DViewer()" title="Close">&times;</button>
+            <div class="viewer-loading" id="viewerLoading">Loading 3D model…</div>
+            <canvas id="viewerCanvas"></canvas>
+            <div class="viewer-hint">Drag to rotate · Scroll to zoom · Right-drag to pan</div>
+        </div>
+    </div>
+    <script>
+    // --- Interactive 3D Toolpath Viewer (Three.js) ---
+    (function() {
+        let scene, camera, renderer, controls, animId;
+        const overlay = document.getElementById('viewerOverlay');
+        const canvas = document.getElementById('viewerCanvas');
+        const loading = document.getElementById('viewerLoading');
+
+        const FEATURE_COLORS = {
+            'Outer wall':      0x40d0ff,
+            'Overhang wall':   0x40d0ff,
+            'Inner wall':      0x4070b0,
+            'Top surface':     0xf0c848,
+            'Bottom surface':  0xe0a030,
+            'Bridge':          0xff8040,
+            'Internal Bridge': 0xd08040,
+            'Ironing':         0xc0c0c0,
+            '_default':        0x50a0d0
+        };
+
+        function getFeatureColor(name) {
+            return FEATURE_COLORS[name] !== undefined ? FEATURE_COLORS[name] : FEATURE_COLORS['_default'];
+        }
+
+        window.open3DViewer = function(fileId) {
+            // Clean up any prior viewer
+            if (renderer) close3DViewer();
+            overlay.classList.add('active');
+            loading.style.display = 'flex';
+            loading.textContent = 'Loading 3D model\u2026';
+
+            if (typeof THREE === 'undefined') {
+                loading.textContent = 'Three.js failed to load';
+                console.error('THREE is undefined');
+                return;
+            }
+
+            fetch(BASE + '/api/library/files/' + fileId + '/toolpath')
+                .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                .then(data => { loading.style.display = 'none'; initViewer(data); })
+                .catch(err => { loading.textContent = 'Failed to load: ' + err.message; console.error(err); });
+        };
+
+        window.close3DViewer = function() {
+            overlay.classList.remove('active');
+            if (animId) { cancelAnimationFrame(animId); animId = null; }
+            if (renderer) { renderer.dispose(); renderer = null; }
+            if (controls) { controls.dispose(); controls = null; }
+            if (scene) {
+                scene.traverse(function(obj) {
+                    if (obj.geometry) obj.geometry.dispose();
+                    if (obj.material) obj.material.dispose();
+                });
+            }
+            scene = null; camera = null;
+        };
+
+        // Close on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && overlay.classList.contains('active')) close3DViewer();
+        });
+
+        function initViewer(data) {
+            const container = canvas.parentElement;
+            const w = container.clientWidth;
+            const h = container.clientHeight;
+
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0f1117);
+
+            // Camera — gcode coords: X right, Y back, Z up
+            // Three.js coords: X right, Y up, Z towards viewer
+            // Mapping: gcode(X,Y,Z) -> three(X, Z, -Y)
+            const bounds = data.bounds;
+            const gcx = (bounds.min[0] + bounds.max[0]) / 2;
+            const gcy = (bounds.min[1] + bounds.max[1]) / 2;
+            const gcz = (bounds.min[2] + bounds.max[2]) / 2;
+            // Centre in Three.js space
+            const cx = gcx;
+            const cy = gcz;  // Z up -> Y up
+            const cz = -gcy; // Y back -> -Z
+            const sx = bounds.max[0] - bounds.min[0];
+            const sy = bounds.max[1] - bounds.min[1];
+            const sz = bounds.max[2] - bounds.min[2];
+            const maxDim = Math.max(sx, sy, sz) || 100;
+
+            camera = new THREE.PerspectiveCamera(45, w / h, 0.1, maxDim * 10);
+            camera.position.set(cx + maxDim * 0.9, cy + maxDim * 0.6, cz + maxDim * 0.9);
+            camera.lookAt(cx, cy, cz);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+            renderer.setSize(w, h);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+            // OrbitControls — inline minimal implementation
+            controls = new SimpleOrbitControls(camera, canvas, new THREE.Vector3(cx, cy, cz));
+
+            // Build line segments — remap gcode(x,y,z) to three.js(x,z,-y)
+            const positions = data.positions;
+            const features = data.features;
+            const featureNames = data.feature_names;
+            const numMoves = data.count;
+
+            const groups = {};
+            for (let i = 0; i < numMoves; i++) {
+                const fi = features[i];
+                if (!groups[fi]) groups[fi] = [];
+                const b = i * 6;
+                // gcode: [x1,y1,z1, x2,y2,z2] -> three: [x, z, -y]
+                groups[fi].push(
+                    positions[b],   positions[b+2], -positions[b+1],
+                    positions[b+3], positions[b+5], -positions[b+4]
+                );
+            }
+
+            for (const [fi, verts] of Object.entries(groups)) {
+                const fName = featureNames[fi] || '';
+                const color = getFeatureColor(fName);
+                const geo = new THREE.BufferGeometry();
+                geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+                const mat = new THREE.LineBasicMaterial({
+                    color: color,
+                    linewidth: 1,
+                    transparent: true,
+                    opacity: fName.includes('Inner') ? 0.5 : 0.85,
+                });
+                scene.add(new THREE.LineSegments(geo, mat));
+            }
+
+            // Ground grid at bottom of model
+            const gridSize = Math.ceil(maxDim / 10) * 10;
+            const grid = new THREE.GridHelper(gridSize, gridSize / 10, 0x333340, 0x222230);
+            grid.position.set(cx, bounds.min[2], cz);
+            scene.add(grid);
+
+            // Ambient light (for potential future mesh rendering)
+            scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+
+            // Handle resize
+            const onResize = () => {
+                const nw = container.clientWidth;
+                const nh = container.clientHeight;
+                camera.aspect = nw / nh;
+                camera.updateProjectionMatrix();
+                renderer.setSize(nw, nh);
+            };
+            window.addEventListener('resize', onResize);
+
+            // Animation loop
+            function animate() {
+                animId = requestAnimationFrame(animate);
+                controls.update();
+                renderer.render(scene, camera);
+            }
+            animate();
+        }
+
+        // Minimal OrbitControls (no dependency on three/examples)
+        function SimpleOrbitControls(camera, domElement, target) {
+            this.camera = camera;
+            this.target = target.clone();
+            this.domElement = domElement;
+            this.rotateSpeed = 1.0;
+            this.zoomSpeed = 1.2;
+            this.panSpeed = 1.0;
+
+            let isRotating = false, isPanning = false;
+            let prevX = 0, prevY = 0;
+            let spherical = new THREE.Spherical();
+            let offset = new THREE.Vector3();
+
+            // Initialize spherical from current camera position
+            offset.copy(camera.position).sub(this.target);
+            spherical.setFromVector3(offset);
+
+            const self = this;
+
+            function onPointerDown(e) {
+                if (e.button === 0) { isRotating = true; }
+                else if (e.button === 2) { isPanning = true; }
+                prevX = e.clientX; prevY = e.clientY;
+                e.preventDefault();
+            }
+            function onPointerMove(e) {
+                if (!isRotating && !isPanning) return;
+                const dx = e.clientX - prevX;
+                const dy = e.clientY - prevY;
+                prevX = e.clientX; prevY = e.clientY;
+
+                if (isRotating) {
+                    spherical.theta -= dx * 0.01 * self.rotateSpeed;
+                    spherical.phi -= dy * 0.01 * self.rotateSpeed;
+                    spherical.phi = Math.max(0.05, Math.min(Math.PI - 0.05, spherical.phi));
+                }
+                if (isPanning) {
+                    const panOffset = new THREE.Vector3();
+                    const dist = spherical.radius;
+                    // Pan in camera-local space
+                    const camRight = new THREE.Vector3();
+                    const camUp = new THREE.Vector3();
+                    camRight.setFromMatrixColumn(self.camera.matrix, 0);
+                    camUp.setFromMatrixColumn(self.camera.matrix, 1);
+                    panOffset.addScaledVector(camRight, -dx * dist * 0.001 * self.panSpeed);
+                    panOffset.addScaledVector(camUp, dy * dist * 0.001 * self.panSpeed);
+                    self.target.add(panOffset);
+                }
+            }
+            function onPointerUp(e) {
+                isRotating = false; isPanning = false;
+            }
+            function onWheel(e) {
+                e.preventDefault();
+                if (e.deltaY > 0) spherical.radius *= (1 + 0.05 * self.zoomSpeed);
+                else spherical.radius *= (1 - 0.05 * self.zoomSpeed);
+                spherical.radius = Math.max(0.1, spherical.radius);
+            }
+            function onContextMenu(e) { e.preventDefault(); }
+
+            domElement.addEventListener('pointerdown', onPointerDown);
+            domElement.addEventListener('pointermove', onPointerMove);
+            domElement.addEventListener('pointerup', onPointerUp);
+            domElement.addEventListener('wheel', onWheel, {passive: false});
+            domElement.addEventListener('contextmenu', onContextMenu);
+
+            this.update = function() {
+                offset.setFromSpherical(spherical);
+                self.camera.position.copy(self.target).add(offset);
+                self.camera.lookAt(self.target);
+            };
+
+            this.dispose = function() {
+                domElement.removeEventListener('pointerdown', onPointerDown);
+                domElement.removeEventListener('pointermove', onPointerMove);
+                domElement.removeEventListener('pointerup', onPointerUp);
+                domElement.removeEventListener('wheel', onWheel);
+                domElement.removeEventListener('contextmenu', onContextMenu);
+            };
+        }
+    })();
     </script>
 </body>
 </html>

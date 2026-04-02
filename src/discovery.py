@@ -1,11 +1,8 @@
 """
-Printer Discovery — find BambuLab printers on the local network.
+Printer Discovery — find printers on the local network.
 
-BambuLab printers in LAN mode send periodic UDP broadcast/multicast
-messages on port 2021 containing JSON with their IP, serial, model, etc.
-
-Also provides a fallback TCP port scan on 8883 (MQTT/TLS) for printers
-that may not be broadcasting.
+Supports BambuLab (UDP broadcast on port 2021, MQTT port 8883 scan)
+and Klipper/Moonraker (HTTP port 7125 scan).
 """
 
 import concurrent.futures
@@ -235,3 +232,73 @@ def get_local_subnets() -> List[str]:
             pass
 
     return list(subnets)
+
+
+# ── Klipper / Moonraker Discovery ─────────────────────────
+
+MOONRAKER_PORT = 7125
+
+
+def scan_moonraker_port(subnet_prefix: str, port: int = MOONRAKER_PORT,
+                        timeout: float = 1.0, max_workers: int = 50) -> List[str]:
+    """
+    Scan a /24 subnet for hosts with Moonraker port open.
+    Returns list of IPs with port open.
+    """
+    hosts = [f"{subnet_prefix}.{i}" for i in range(1, 255)]
+    found = []
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(scan_port, h, port, timeout): h for h in hosts}
+        for future in concurrent.futures.as_completed(futures):
+            host = futures[future]
+            try:
+                if future.result():
+                    found.append(host)
+                    logger.info(f"Moonraker port {port} open on {host}")
+            except Exception:
+                pass
+
+    return sorted(found, key=lambda ip: list(map(int, ip.split("."))))
+
+
+def test_klipper_connection(host: str, port: int = MOONRAKER_PORT,
+                            api_key: str = "", timeout: float = 5.0) -> dict:
+    """
+    Test HTTP connection to a Klipper printer via Moonraker.
+    Returns {"ok": True/False, "message": "...", "state": {...}}.
+    """
+    try:
+        import requests
+    except ImportError:
+        return {"ok": False, "message": "requests library not installed"}
+
+    base_url = f"http://{host}:{port}"
+    headers = {}
+    if api_key:
+        headers["X-Api-Key"] = api_key
+
+    try:
+        resp = requests.get(f"{base_url}/printer/info", headers=headers, timeout=timeout)
+        if resp.status_code == 200:
+            info = resp.json().get("result", {})
+            state = {
+                "klipper_state": info.get("state", ""),
+                "software_version": info.get("software_version", ""),
+                "hostname": info.get("hostname", ""),
+            }
+            return {
+                "ok": True,
+                "message": f"Connected — Klipper {info.get('state', 'ready')}",
+                "state": state,
+            }
+        elif resp.status_code == 401:
+            return {"ok": False, "message": "Unauthorized — API key may be required"}
+        else:
+            return {"ok": False, "message": f"Moonraker returned HTTP {resp.status_code}"}
+    except requests.ConnectionError:
+        return {"ok": False, "message": f"Cannot reach Moonraker at {base_url}"}
+    except requests.Timeout:
+        return {"ok": False, "message": "Connection timed out"}
+    except Exception as e:
+        return {"ok": False, "message": str(e)}

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BambuLab Print Farm - OrcaSlicer Post-Processing Upload Script (Python)
+The Print Farm - OrcaSlicer Post-Processing Upload Script (Python)
 
 Setup in OrcaSlicer:
   Print Settings → Others → Post-processing Scripts:
