@@ -18,8 +18,8 @@ A web-based print farm manager for **BambuLab** and **Klipper** 3D printers. Mon
 
 ```bash
 # Clone the repo
-git clone https://github.com/barnard704344/bambulab-farm.git
-cd bambulab-farm
+git clone https://github.com/barnard704344/the-print-farm.git
+cd the-print-farm
 
 # Run the setup script (Debian/Ubuntu/Raspberry Pi)
 sudo bash setup.sh
