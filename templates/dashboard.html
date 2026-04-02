@@ -1792,7 +1792,7 @@
                         </div>
                         <div class="temp-item">
                             <div class="temp-label">Chamber</div>
-                            <div class="temp-value" data-field="chamber-temp">${isBambu ? (p.chamber_temper?.toFixed(0) || 0) + '°' : 'N/A'}</div>
+                            <div class="temp-value" data-field="chamber-temp">${isBambu ? (p.chamber_temper > 5 ? p.chamber_temper.toFixed(0) + '°' : 'N/A') : 'N/A'}</div>
                             <div class="temp-target">&nbsp;</div>
                         </div>
                     </div>
@@ -1925,7 +1925,7 @@
             const ct = card.querySelector('[data-field="chamber-temp"]');
             if (ct) {
                 const pType = p.type || 'bambulab';
-                ct.textContent = pType === 'bambulab' ? (p.chamber_temper?.toFixed(0) || 0) + '°' : 'N/A';
+                ct.textContent = pType === 'bambulab' ? (p.chamber_temper > 5 ? p.chamber_temper.toFixed(0) + '°' : 'N/A') : 'N/A';
             }
 
             // Controls (need rebuild since buttons change with status)
