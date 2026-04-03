@@ -124,6 +124,9 @@ class PrintState:
     ams_humidity: str = ""  # AMS humidity level
     vt_tray: dict = field(default_factory=dict)  # external/virtual tray
     has_ams: bool = False
+    # Happy Hare MMU (Klipper)
+    has_mmu: bool = False
+    mmu: dict = field(default_factory=dict)
     # Errors
     print_error: int = 0
     hms: list = field(default_factory=list)

@@ -105,7 +105,29 @@ def cmd_run(args, config: dict):
             name = cfg.get("name")
             p = farm.get_printer(name)
             if p and p.is_connected():
-                camera_mgr.start_camera(name, cfg["host"], cfg["access_code"])
+                printer_type = cfg.get("type", "bambulab").lower()
+                if printer_type == "klipper":
+                    camera_url = cfg.get("camera_url", "")
+                    if not camera_url:
+                        # Auto-detect from Moonraker
+                        try:
+                            import requests as _requests
+                            base = f"http://{cfg['host']}:{cfg.get('moonraker_port', 7125)}"
+                            resp = _requests.get(f"{base}/server/webcams/list", timeout=5)
+                            if resp.status_code == 200:
+                                webcams = resp.json().get("result", {}).get("webcams", [])
+                                for wc in webcams:
+                                    camera_url = wc.get("stream_url") or wc.get("snapshot_url") or ""
+                                    if camera_url:
+                                        if camera_url.startswith("/"):
+                                            camera_url = f"http://{cfg['host']}{camera_url}"
+                                        break
+                        except Exception:
+                            pass
+                    if camera_url:
+                        camera_mgr.start_http_camera(name, camera_url)
+                else:
+                    camera_mgr.start_camera(name, cfg["host"], cfg["access_code"])
 
     app = create_app(farm, queue, camera_manager=camera_mgr,
                      api_key=web_cfg.get("api_key", ""),

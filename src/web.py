@@ -1262,6 +1262,27 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         result = test_ad_connection(ad)
         return jsonify(result)
 
+    # ── Camera helpers ────────────────────────────────────
+
+    def _detect_klipper_webcam(printer):
+        """Try to auto-detect the webcam URL from Moonraker's /server/webcams/list."""
+        try:
+            import requests as _requests
+            base = f"http://{printer.host}:{printer.port}"
+            resp = _requests.get(f"{base}/server/webcams/list", timeout=5)
+            if resp.status_code == 200:
+                webcams = resp.json().get("result", {}).get("webcams", [])
+                for wc in webcams:
+                    stream_url = wc.get("stream_url") or wc.get("snapshot_url") or ""
+                    if stream_url:
+                        # Resolve relative URLs
+                        if stream_url.startswith("/"):
+                            stream_url = f"http://{printer.host}{stream_url}"
+                        return stream_url
+        except Exception as e:
+            logger.warning(f"Failed to detect Klipper webcam for {printer.name}: {e}")
+        return ""
+
     # ── Camera API ────────────────────────────────────────
 
     @app.route(prefix + "/api/camera/<name>/start", methods=["POST"])
@@ -1273,7 +1294,18 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         printer = farm_manager.get_printer(name)
         if not printer:
             return jsonify({"ok": False, "message": f"Printer '{name}' not found"}), 404
-        camera_manager.start_camera(name, printer.host, printer.access_code)
+
+        printer_type = farm_manager.get_printer_type(name)
+        if printer_type == "klipper":
+            camera_url = getattr(printer, 'camera_url', '')
+            if not camera_url:
+                # Try auto-detecting from Moonraker
+                camera_url = _detect_klipper_webcam(printer)
+            if not camera_url:
+                return jsonify({"ok": False, "message": "No camera URL configured or detected for this Klipper printer"}), 400
+            camera_manager.start_http_camera(name, camera_url)
+        else:
+            camera_manager.start_camera(name, printer.host, printer.access_code)
         return jsonify({"ok": True, "message": f"Camera started for '{name}'"})
 
     @app.route(prefix + "/api/camera/<name>/stop", methods=["POST"])

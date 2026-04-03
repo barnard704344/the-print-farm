@@ -154,6 +154,102 @@ class BambuCamera:
                     raise RuntimeError(f"Unexpected data: {len(data)} bytes")
 
 
+class HttpCamera:
+    """Fetches JPEG snapshots from an HTTP/MJPEG webcam URL (e.g. Klipper crowsnest)."""
+
+    def __init__(self, url: str):
+        self.url = url
+        self._latest_frame: Optional[bytes] = None
+        self._frame_lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        self._connected = False
+
+    @property
+    def latest_frame(self) -> Optional[bytes]:
+        with self._frame_lock:
+            return self._latest_frame
+
+    @property
+    def is_streaming(self) -> bool:
+        return self._thread is not None and self._thread.is_alive() and self._connected
+
+    def start(self):
+        if self._thread and self._thread.is_alive():
+            return
+        self._stop_event.clear()
+        self._thread = threading.Thread(
+            target=self._fetch_loop, daemon=True,
+            name=f"httpcam-{self.url[:40]}"
+        )
+        self._thread.start()
+        logger.info(f"HTTP camera started for {self.url}")
+
+    def stop(self):
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join(timeout=5)
+        self._connected = False
+        logger.info(f"HTTP camera stopped for {self.url}")
+
+    def _fetch_loop(self):
+        import requests as _requests
+        while not self._stop_event.is_set():
+            try:
+                resp = _requests.get(self.url, timeout=5, stream=True)
+                content_type = resp.headers.get("Content-Type", "")
+
+                if "multipart" in content_type:
+                    self._read_mjpeg_stream(resp)
+                else:
+                    # Snapshot URL — poll repeatedly
+                    self._poll_snapshots(_requests)
+                    return
+            except Exception as e:
+                logger.warning(f"HTTP camera {self.url} error: {e}")
+                self._connected = False
+                if not self._stop_event.is_set():
+                    self._stop_event.wait(timeout=5)
+
+    def _read_mjpeg_stream(self, resp):
+        """Read frames from an MJPEG multipart stream."""
+        self._connected = True
+        buf = b""
+        for chunk in resp.iter_content(chunk_size=4096):
+            if self._stop_event.is_set():
+                break
+            buf += chunk
+            # Look for JPEG start/end markers
+            while True:
+                start = buf.find(b'\xff\xd8')
+                if start == -1:
+                    buf = buf[-1:]  # keep last byte in case it's partial marker
+                    break
+                end = buf.find(b'\xff\xd9', start + 2)
+                if end == -1:
+                    break
+                frame = buf[start:end + 2]
+                with self._frame_lock:
+                    self._latest_frame = frame
+                buf = buf[end + 2:]
+
+    def _poll_snapshots(self, _requests):
+        """Poll a snapshot URL for JPEG frames."""
+        self._connected = True
+        while not self._stop_event.is_set():
+            try:
+                resp = _requests.get(self.url, timeout=5)
+                if resp.status_code == 200 and resp.content:
+                    with self._frame_lock:
+                        self._latest_frame = resp.content
+            except Exception as e:
+                logger.warning(f"HTTP camera snapshot error: {e}")
+                self._connected = False
+                self._stop_event.wait(timeout=5)
+                continue
+            self._stop_event.wait(timeout=1)
+
+
 class CameraManager:
     """Manages camera streams for all printers in the farm."""
 
@@ -162,11 +258,20 @@ class CameraManager:
         self._lock = threading.Lock()
 
     def start_camera(self, name: str, host: str, access_code: str, port: int = 6000):
-        """Start a camera stream for a printer."""
+        """Start a BambuLab camera stream for a printer."""
         with self._lock:
             if name in self._cameras:
                 self._cameras[name].stop()
             cam = BambuCamera(host=host, access_code=access_code, port=port)
+            cam.start()
+            self._cameras[name] = cam
+
+    def start_http_camera(self, name: str, url: str):
+        """Start an HTTP/MJPEG camera stream (e.g. Klipper webcam)."""
+        with self._lock:
+            if name in self._cameras:
+                self._cameras[name].stop()
+            cam = HttpCamera(url=url)
             cam.start()
             self._cameras[name] = cam
 

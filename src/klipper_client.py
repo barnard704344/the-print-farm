@@ -28,6 +28,13 @@ from .bambu_client import PrintState, PrintStatus
 
 logger = logging.getLogger(__name__)
 
+# Happy Hare MMU object names
+_MMU_OBJECTS = {
+    "mmu": None,
+    "mmu_machine": None,
+    "mmu_encoder mmu_encoder": None,
+}
+
 # Default polling interval for status updates (seconds)
 POLL_INTERVAL = 2.0
 
@@ -66,6 +73,9 @@ class KlipperClient:
         self._stop_event = threading.Event()
         self._poll_thread: Optional[threading.Thread] = None
 
+        # Detected capabilities (set during connect)
+        self._has_mmu = False
+
     @property
     def state(self) -> PrintState:
         with self._state_lock:
@@ -93,6 +103,18 @@ class KlipperClient:
 
             self._connected.set()
             self._stop_event.clear()
+
+            # Detect Happy Hare MMU
+            try:
+                obj_resp = self._session.get(
+                    f"{self._base_url}/printer/objects/list", timeout=5)
+                if obj_resp.status_code == 200:
+                    objects = obj_resp.json().get("result", {}).get("objects", [])
+                    if "mmu" in objects:
+                        self._has_mmu = True
+                        logger.info(f"[{self.name}] Happy Hare MMU detected")
+            except Exception:
+                pass
 
             # Start background polling thread
             self._poll_thread = threading.Thread(
@@ -260,17 +282,24 @@ class KlipperClient:
 
     def _fetch_status(self):
         """Query Moonraker for current printer state and update self._state."""
+        params = {
+            "heater_bed": "temperature,target",
+            "extruder": "temperature,target,pressure_advance",
+            "print_stats": "state,filename,total_duration,print_duration,filament_used,message",
+            "display_status": "progress,message",
+            "virtual_sdcard": "progress,file_position,file_path",
+            "fan": "speed",
+            "gcode_move": "speed_factor",
+        }
+
+        # Include Happy Hare MMU objects if detected
+        if self._has_mmu:
+            for obj in _MMU_OBJECTS:
+                params[obj] = ""
+
         resp = self._session.get(
             f"{self._base_url}/printer/objects/query",
-            params={
-                "heater_bed": "temperature,target",
-                "extruder": "temperature,target,pressure_advance",
-                "print_stats": "state,filename,total_duration,print_duration,filament_used,message",
-                "display_status": "progress,message",
-                "virtual_sdcard": "progress,file_position,file_path",
-                "fan": "speed",
-                "gcode_move": "speed_factor",
-            },
+            params=params,
             timeout=5,
         )
 
@@ -329,6 +358,59 @@ class KlipperClient:
             # Klipper doesn't have AMS
             self._state.has_ams = False
             self._state.ams_trays = []
+
+            # Happy Hare MMU
+            mmu_data = result.get("mmu", {})
+            if mmu_data and mmu_data.get("enabled"):
+                self._state.has_mmu = True
+                mmu_machine = result.get("mmu_machine", {})
+                mmu_encoder = result.get("mmu_encoder mmu_encoder", {})
+                num_gates = mmu_data.get("num_gates", 0)
+
+                # Build gate/tray info similar to AMS trays
+                gates = []
+                for i in range(num_gates):
+                    gate_status_val = (mmu_data.get("gate_status", []) or [])[i] if i < len(mmu_data.get("gate_status", [])) else 0
+                    # gate_status: 0=empty, 1=unknown, 2=loaded
+                    gates.append({
+                        "gate": i,
+                        "status": gate_status_val,
+                        "material": (mmu_data.get("gate_material", []) or [""])[i] if i < len(mmu_data.get("gate_material", [])) else "",
+                        "color": (mmu_data.get("gate_color", []) or [""])[i] if i < len(mmu_data.get("gate_color", [])) else "",
+                        "filament_name": (mmu_data.get("gate_filament_name", []) or [""])[i] if i < len(mmu_data.get("gate_filament_name", [])) else "",
+                        "spool_id": (mmu_data.get("gate_spool_id", []) or [-1])[i] if i < len(mmu_data.get("gate_spool_id", [])) else -1,
+                        "temperature": (mmu_data.get("gate_temperature", []) or [0])[i] if i < len(mmu_data.get("gate_temperature", [])) else 0,
+                    })
+
+                unit_info = {}
+                if mmu_machine:
+                    unit_info = mmu_machine.get("unit_0", {})
+
+                self._state.mmu = {
+                    "enabled": True,
+                    "print_state": mmu_data.get("print_state", ""),
+                    "tool": mmu_data.get("tool", -1),
+                    "gate": mmu_data.get("gate", -1),
+                    "filament": mmu_data.get("filament", ""),
+                    "num_gates": num_gates,
+                    "num_toolchanges": mmu_data.get("num_toolchanges", 0),
+                    "is_homed": mmu_data.get("is_homed", False),
+                    "is_paused": mmu_data.get("is_paused", False),
+                    "runout": mmu_data.get("runout", False),
+                    "active_filament": mmu_data.get("active_filament", {}),
+                    "ttg_map": mmu_data.get("ttg_map", []),
+                    "endless_spool_groups": mmu_data.get("endless_spool_groups", []),
+                    "gates": gates,
+                    "unit_name": unit_info.get("name", ""),
+                    "unit_vendor": unit_info.get("vendor", ""),
+                    "encoder": {
+                        "enabled": mmu_encoder.get("enabled", False),
+                        "flow_rate": mmu_encoder.get("flow_rate", 0),
+                    } if mmu_encoder else {},
+                }
+            else:
+                self._state.has_mmu = False
+                self._state.mmu = {}
 
             self._state.raw_data = result
 

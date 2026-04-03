@@ -117,7 +117,7 @@
         /* Printer Grid */
         .printer-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
             gap: 16px;
         }
 
@@ -400,6 +400,95 @@
         }
 
         .ams-external.active { color: var(--accent); }
+
+        /* MMU (Happy Hare) Section */
+        .mmu-section {
+            margin-bottom: 12px;
+            padding: 10px;
+            background: var(--bg);
+            border-radius: 8px;
+        }
+
+        .mmu-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .mmu-header-info {
+            font-size: 10px;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        .mmu-gates {
+            display: flex;
+            gap: 4px;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+        }
+
+        .mmu-gate {
+            flex: 1 1 0;
+            min-width: 36px;
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            padding: 5px 3px;
+            text-align: center;
+            transition: all 0.15s;
+            position: relative;
+        }
+
+        .mmu-gate:hover { border-color: var(--text-muted); }
+        .mmu-gate.active { border-color: var(--accent); box-shadow: 0 0 6px rgba(34,197,94,0.3); }
+        .mmu-gate.empty { opacity: 0.4; }
+
+        .mmu-gate-swatch {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            margin: 0 auto 3px;
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+
+        .mmu-gate-label {
+            font-size: 9px;
+            font-weight: 600;
+        }
+
+        .mmu-gate-material {
+            font-size: 8px;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .mmu-status-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px solid var(--border);
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .mmu-status-row .mmu-tag {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+
+        .mmu-tag.loaded { background: rgba(34,197,94,0.15); color: var(--accent); }
+        .mmu-tag.unloaded { background: rgba(239,68,68,0.15); color: var(--danger); }
+        .mmu-tag.unknown { background: rgba(255,255,255,0.08); color: var(--text-muted); }
 
         /* Filament Controls */
         .filament-controls {
@@ -1806,6 +1895,49 @@
                         ${isAdmin && isKlipper ? `<button class="btn" onclick="printerCmd('${name}','emergency_stop')" title="Emergency Stop" style="color:#ff4444;">&#9888; E-Stop</button>` : ''}
                     </div>` : ''}
                     ${renderAmsSection(name, p)}
+                    ${renderMmuSection(name, p)}
+                </div>
+            `;
+        }
+
+        function renderMmuSection(name, p) {
+            if (!p.has_mmu || !p.mmu || !p.mmu.enabled) return '';
+            const mmu = p.mmu;
+            const gates = (mmu.gates || []).map(g => {
+                const isActive = g.gate === mmu.gate;
+                // gate_status: 0=empty, 1=unknown, 2=loaded
+                const isEmpty = g.status === 0;
+                const swatchColor = g.color || (g.status === 2 ? '#888' : '#333');
+                const label = `T${g.gate}`;
+                const material = g.material || g.filament_name || (g.status === 2 ? '?' : '');
+                return `
+                    <div class="mmu-gate ${isActive ? 'active' : ''} ${isEmpty ? 'empty' : ''}" title="Gate ${g.gate}${material ? ' · ' + material : ''}${g.temperature ? ' · ' + g.temperature + '°C' : ''}">
+                        <div class="mmu-gate-swatch" style="background:${isEmpty ? '#333' : swatchColor}"></div>
+                        <div class="mmu-gate-label">${label}</div>
+                        ${material ? `<div class="mmu-gate-material">${material}</div>` : ''}
+                    </div>
+                `;
+            }).join('');
+
+            const filState = mmu.filament || 'Unknown';
+            const filTag = filState === 'Loaded' ? 'loaded' : filState === 'Unloaded' ? 'unloaded' : 'unknown';
+            const toolLabel = mmu.tool >= 0 ? `T${mmu.tool}` : 'None';
+            const tcCount = mmu.num_toolchanges || 0;
+            const encoderFlow = mmu.encoder && mmu.encoder.flow_rate != null ? ` · Flow: ${mmu.encoder.flow_rate}%` : '';
+            const unitLabel = mmu.unit_name ? ` <span class="mmu-header-info">(${mmu.unit_name})</span>` : '';
+
+            return `
+                <div class="mmu-section" data-field="mmu">
+                    <div class="mmu-header">
+                        <span>🔀 MMU${unitLabel} · ${mmu.num_gates} gates</span>
+                        <span>Tool: ${toolLabel}</span>
+                    </div>
+                    <div class="mmu-gates">${gates}</div>
+                    <div class="mmu-status-row">
+                        <span class="mmu-tag ${filTag}">${filState}</span>
+                        <span>Changes: ${tcCount}${encoderFlow}</span>
+                        ${mmu.runout ? '<span style="color:var(--danger)">⚠ Runout</span>' : ''}
+                    </div>
                 </div>
             `;
         }
@@ -1952,6 +2084,23 @@
                 const temp = document.createElement('div');
                 temp.innerHTML = newHtml;
                 amsEl.replaceWith(temp.firstElementChild);
+            }
+
+            // MMU section — replace in place
+            const mmuEl = card.querySelector('[data-field="mmu"]');
+            const newMmuHtml = renderMmuSection(name, p);
+            if (mmuEl && newMmuHtml) {
+                const temp = document.createElement('div');
+                temp.innerHTML = newMmuHtml;
+                mmuEl.replaceWith(temp.firstElementChild);
+            } else if (!mmuEl && newMmuHtml) {
+                // MMU appeared (e.g. reconnect) — append after AMS
+                const amsOrFilament = card.querySelector('[data-field="ams"]') || card.querySelector('[data-field="filament"]');
+                if (amsOrFilament) {
+                    amsOrFilament.insertAdjacentHTML('afterend', newMmuHtml);
+                }
+            } else if (mmuEl && !newMmuHtml) {
+                mmuEl.remove();
             }
         }
 

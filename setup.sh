@@ -177,6 +177,21 @@ else
     ok "config/config.yaml already exists — skipping configuration"
 fi
 
+# ── Determine service user ────────────────────────────────
+# www-data cannot chdir into restricted dirs like /root, so
+# detect whether the install path is accessible and fall back
+# to root when it is not.
+SVC_USER="www-data"
+SVC_GROUP="www-data"
+if ! su -s /bin/sh www-data -c "cd '${SCRIPT_DIR}' 2>/dev/null" 2>/dev/null; then
+    PARENT_DIR=$(dirname "$SCRIPT_DIR")
+    if ! su -s /bin/sh www-data -c "test -x '${PARENT_DIR}'" 2>/dev/null; then
+        warn "www-data cannot access ${SCRIPT_DIR} — service will run as root"
+        SVC_USER="root"
+        SVC_GROUP="root"
+    fi
+fi
+
 # ── Systemd service ──────────────────────────────────────
 info "Installing systemd service..."
 
@@ -188,8 +203,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=www-data
-Group=www-data
+User=${SVC_USER}
+Group=${SVC_GROUP}
 WorkingDirectory=${SCRIPT_DIR}
 ExecStart=${SCRIPT_DIR}/venv/bin/python -m src.main
 Restart=on-failure
@@ -250,8 +265,8 @@ systemctl restart apache2 2>/dev/null || warn "Could not restart Apache — star
 
 # ── Permissions ──────────────────────────────────────────
 info "Setting permissions..."
-chown -R www-data:www-data "$SCRIPT_DIR"
-ok "Ownership set to www-data"
+chown -R "${SVC_USER}:${SVC_GROUP}" "$SCRIPT_DIR"
+ok "Ownership set to ${SVC_USER}"
 
 # ── Start service ────────────────────────────────────────
 echo ""
@@ -268,12 +283,14 @@ fi
 
 # ── Done ─────────────────────────────────────────────────
 HOSTNAME=$(hostname -f 2>/dev/null || hostname)
+LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+LOCAL_IP="${LOCAL_IP:-$HOSTNAME}"
 echo ""
 echo "=============================================="
 echo -e "  ${GREEN}Setup Complete${NC}"
 echo "=============================================="
 echo ""
-echo "  Dashboard:  http://${HOSTNAME}/bambulab-farm"
+echo "  Dashboard:  http://${LOCAL_IP}:${WEB_PORT}/"
 echo ""
 echo "  Commands:"
 echo "    sudo systemctl start bambulab-farm"

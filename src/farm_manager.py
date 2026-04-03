@@ -136,6 +136,8 @@ class FarmManager:
                 "ams_tray_now": s.ams_tray_now,
                 "ams_humidity": s.ams_humidity,
                 "vt_tray": s.vt_tray,
+                "has_mmu": s.has_mmu,
+                "mmu": s.mmu,
             }
             states[name] = state
         return states
