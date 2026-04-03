@@ -1188,6 +1188,56 @@
                     <div id="adTestResult" style="font-size:13px; margin-top:4px;"></div>
                 </div>
             </div>
+
+            <!-- Obico AI Configuration -->
+            <div class="setup-section" style="max-width:700px; margin-top:32px;">
+                <h3 style="margin-bottom:16px;">Obico AI Failure Detection</h3>
+                <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
+                    Connect a self-hosted Obico server to enable AI-based print failure detection for Klipper printers.
+                    Configure per printer — each needs its own Obico printer ID.
+                </p>
+                <div style="display:flex; flex-direction:column; gap:14px;">
+                    <div>
+                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Printer</label>
+                        <select id="obicoTargetPrinter" class="ad-input" onchange="loadObicoForPrinter()">
+                            <option value="">— Select a Klipper printer —</option>
+                        </select>
+                    </div>
+                    <div id="obicoFields" style="display:none;">
+                        <div style="display:flex; flex-direction:column; gap:12px;">
+                            <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                                <input type="checkbox" id="obicoEnabled" style="width:18px; height:18px;">
+                                <span>Enable Obico for this printer</span>
+                            </label>
+                            <div style="display:grid; grid-template-columns:2fr 1fr; gap:12px;">
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Obico Server URL</label>
+                                    <input type="text" id="obicoServer" placeholder="e.g. http://192.168.1.105:3334" class="ad-input">
+                                </div>
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Printer ID</label>
+                                    <input type="number" id="obicoPrinterId" placeholder="e.g. 3" class="ad-input">
+                                </div>
+                            </div>
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Username / Email</label>
+                                    <input type="text" id="obicoUsername" placeholder="e.g. admin@example.com" class="ad-input">
+                                </div>
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Password</label>
+                                    <input type="password" id="obicoPassword" placeholder="Obico account password" class="ad-input">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:8px; margin-top:8px;">
+                        <button class="btn btn-primary" onclick="testObicoConnection()">Test Connection</button>
+                        <button class="btn btn-success" onclick="saveObicoConfig()">Save Configuration</button>
+                    </div>
+                    <div id="obicoTestResult" style="font-size:13px; margin-top:4px;"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1712,6 +1762,100 @@
             }
         }
 
+        // ── Obico Configuration ──────────────────────────────
+        async function populateObicoPrinterDropdown() {
+            const select = document.getElementById('obicoTargetPrinter');
+            select.innerHTML = '<option value="">— Select a Klipper printer —</option>';
+            try {
+                const res = await fetch(BASE + '/api/farm/status');
+                if (!res.ok) return;
+                const data = await res.json();
+                for (const [name, p] of Object.entries(data.printers || {})) {
+                    if (p.type === 'klipper') {
+                        const opt = document.createElement('option');
+                        opt.value = name;
+                        opt.textContent = name;
+                        select.appendChild(opt);
+                    }
+                }
+            } catch (e) {}
+        }
+
+        async function loadObicoForPrinter() {
+            const name = document.getElementById('obicoTargetPrinter').value;
+            const fields = document.getElementById('obicoFields');
+            const resultEl = document.getElementById('obicoTestResult');
+            resultEl.innerHTML = '';
+            if (!name) { fields.style.display = 'none'; return; }
+            fields.style.display = '';
+            try {
+                const res = await fetch(BASE + '/api/obico/config/' + encodeURIComponent(name));
+                if (!res.ok) return;
+                const data = await res.json();
+                document.getElementById('obicoEnabled').checked = data.enabled || false;
+                document.getElementById('obicoServer').value = data.server || '';
+                document.getElementById('obicoPrinterId').value = data.printer_id || '';
+                document.getElementById('obicoUsername').value = data.username || '';
+                document.getElementById('obicoPassword').value = data.password || '';
+            } catch (e) {}
+        }
+
+        async function saveObicoConfig() {
+            const name = document.getElementById('obicoTargetPrinter').value;
+            const resultEl = document.getElementById('obicoTestResult');
+            if (!name) { resultEl.innerHTML = '<span style="color:var(--danger);">Select a printer first</span>'; return; }
+            const payload = {
+                enabled: document.getElementById('obicoEnabled').checked,
+                server: document.getElementById('obicoServer').value,
+                printer_id: parseInt(document.getElementById('obicoPrinterId').value) || 0,
+                username: document.getElementById('obicoUsername').value,
+                password: document.getElementById('obicoPassword').value,
+            };
+            try {
+                const res = await fetch(BASE + '/api/obico/config/' + encodeURIComponent(name), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; Obico configuration saved. Restart service to apply.</span>';
+                } else {
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                }
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+            }
+        }
+
+        async function testObicoConnection() {
+            const name = document.getElementById('obicoTargetPrinter').value;
+            const resultEl = document.getElementById('obicoTestResult');
+            if (!name) { resultEl.innerHTML = '<span style="color:var(--danger);">Select a printer first</span>'; return; }
+            resultEl.innerHTML = '<span style="color:var(--text-muted);">Testing connection...</span>';
+            const payload = {
+                server: document.getElementById('obicoServer').value,
+                printer_id: parseInt(document.getElementById('obicoPrinterId').value) || 0,
+                username: document.getElementById('obicoUsername').value,
+                password: document.getElementById('obicoPassword').value,
+            };
+            try {
+                const res = await fetch(BASE + '/api/obico/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    resultEl.innerHTML = `<span style="color:var(--accent);">&#10003; Connected — printer state: ${data.state || 'unknown'}</span>`;
+                } else {
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                }
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+            }
+        }
+
         checkAuth().then(() => {
             // If not authenticated and AD is enabled, attempt silent SSO via Kerberos
             if (!isAuthenticated && adEnabled) {
@@ -1786,7 +1930,7 @@
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 tab.classList.add('active');
                 document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
-                if (tab.dataset.tab === 'settings') loadADConfig();
+                if (tab.dataset.tab === 'settings') { loadADConfig(); populateObicoPrinterDropdown(); }
                 if (tab.dataset.tab === 'library') refreshLibrary();
             });
         });

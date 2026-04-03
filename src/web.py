@@ -1262,6 +1262,104 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         result = test_ad_connection(ad)
         return jsonify(result)
 
+    # ── Obico Configuration ───────────────────────────────
+
+    def _get_obico_config_for_printer(printer_name):
+        """Return the obico config dict for a given printer, or empty dict."""
+        for p in app_config.get("printers", []):
+            if p.get("name") == printer_name and p.get("type") == "klipper":
+                return dict(p.get("obico", {}))
+        return {}
+
+    @app.route(prefix + "/api/obico/config/<name>", methods=["GET"])
+    @app.route("/api/obico/config/<name>", methods=["GET"])
+    @admin_required
+    def obico_get_config(name):
+        """Get Obico configuration for a printer (password masked)."""
+        cfg = _get_obico_config_for_printer(name)
+        cfg["enabled"] = bool(cfg.get("server"))
+        if cfg.get("password"):
+            cfg["password"] = "********"
+        return jsonify(cfg)
+
+    @app.route(prefix + "/api/obico/config/<name>", methods=["POST"])
+    @app.route("/api/obico/config/<name>", methods=["POST"])
+    @admin_required
+    def obico_save_config(name):
+        """Save Obico configuration for a specific printer."""
+        data = request.get_json(silent=True) or {}
+        config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
+        try:
+            with open(config_path) as f:
+                file_config = yaml.safe_load(f) or {}
+
+            # Find the printer in config
+            printer_found = False
+            for p in file_config.get("printers", []):
+                if p.get("name") == name and p.get("type") == "klipper":
+                    printer_found = True
+                    if data.get("enabled"):
+                        obico = p.get("obico", {})
+                        obico["server"] = data.get("server", "").strip()
+                        obico["printer_id"] = int(data.get("printer_id", 0))
+                        obico["username"] = data.get("username", "").strip()
+                        if data.get("password") and data["password"] != "********":
+                            obico["password"] = data["password"]
+                        p["obico"] = obico
+                    else:
+                        # Disabled — remove obico block
+                        p.pop("obico", None)
+                    break
+
+            if not printer_found:
+                return jsonify({"ok": False, "message": f"Klipper printer '{name}' not found"}), 404
+
+            with open(config_path, "w") as f:
+                yaml.dump(file_config, f, default_flow_style=False, sort_keys=False)
+
+            # Update live config
+            for p in app_config.get("printers", []):
+                if p.get("name") == name:
+                    if data.get("enabled"):
+                        p["obico"] = file_config_obico = next(
+                            (pr.get("obico", {}) for pr in file_config["printers"] if pr.get("name") == name), {}
+                        )
+                    else:
+                        p.pop("obico", None)
+                    break
+
+            return jsonify({"ok": True, "message": "Obico configuration saved"})
+        except Exception as e:
+            logger.error(f"Failed to save Obico config: {e}")
+            return jsonify({"ok": False, "message": str(e)}), 500
+
+    @app.route(prefix + "/api/obico/test", methods=["POST"])
+    @app.route("/api/obico/test", methods=["POST"])
+    @admin_required
+    def obico_test_connection():
+        """Test Obico connection with provided credentials."""
+        data = request.get_json(silent=True) or {}
+        server = data.get("server", "").strip()
+        username = data.get("username", "").strip()
+        password = data.get("password", "").strip()
+        printer_id = int(data.get("printer_id", 0))
+
+        if not server or not username or not password or not printer_id:
+            return jsonify({"ok": False, "message": "All fields are required"}), 400
+
+        try:
+            from .obico_client import ObicoClient
+            client = ObicoClient(server, username, password, printer_id)
+            client._login()
+            status = client.fetch_status()
+            return jsonify({
+                "ok": True,
+                "state": status.get("state", "unknown"),
+                "watching": status.get("watching", False),
+            })
+        except Exception as e:
+            return jsonify({"ok": False, "message": str(e)}), 500
+
     # ── Camera helpers ────────────────────────────────────
 
     def _detect_klipper_webcam(printer):
