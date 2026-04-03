@@ -1193,17 +1193,14 @@
                     Search for printers on your network (BambuLab and Klipper/Moonraker).
                 </p>
                 <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
-                    <button class="btn btn-primary" id="btnScan" onclick="startScan(false)">
-                        Scan for Printers
-                    </button>
-                    <button class="btn" id="btnDeepScan" onclick="startScan(true)">
-                        Deep Scan (Port Scan)
+                    <button class="btn btn-primary" id="btnDeepScan" onclick="startScan(true)">
+                        Scan Network
                     </button>
                     <button class="btn" onclick="showManualAdd('bambulab')">
-                        Add BambuLab
+                        Add BambuLab Manually
                     </button>
                     <button class="btn" onclick="showManualAdd('klipper')" style="border-color:#ff6600;color:#ff6600;">
-                        Add Klipper
+                        Add Klipper Manually
                     </button>
                 </div>
                 <div id="scanStatus" style="font-size:13px; color:var(--text-muted); margin-bottom:12px;"></div>
@@ -2806,13 +2803,11 @@
         async function startScan(deepScan) {
             const statusEl = document.getElementById('scanStatus');
             const resultsEl = document.getElementById('scanResults');
-            const btnScan = document.getElementById('btnScan');
             const btnDeep = document.getElementById('btnDeepScan');
 
-            btnScan.disabled = true;
             btnDeep.disabled = true;
             resultsEl.innerHTML = '';
-            statusEl.innerHTML = `<span class="spinner"></span> ${deepScan ? 'Deep scanning network (this may take 15-30s)...' : 'Listening for printer broadcasts...'}`;
+            statusEl.innerHTML = `<span class="spinner"></span> Scanning network (this may take 15-30s)...`;
 
             try {
                 const res = await fetch(BASE + '/api/discover/scan', {
@@ -2842,7 +2837,6 @@
             } catch (err) {
                 statusEl.textContent = 'Scan failed: ' + err.message;
             }
-            btnScan.disabled = false;
             btnDeep.disabled = false;
         }
 
