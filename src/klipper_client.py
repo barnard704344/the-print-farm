@@ -48,7 +48,8 @@ class KlipperClient:
     """
 
     def __init__(self, name: str, host: str, port: int = 7125,
-                 api_key: str = "", camera_url: str = ""):
+                 api_key: str = "", camera_url: str = "",
+                 obico_config: dict = None):
         self.name = name
         self.host = host
         self.port = port
@@ -75,6 +76,17 @@ class KlipperClient:
 
         # Detected capabilities (set during connect)
         self._has_mmu = False
+
+        # Obico integration
+        self._obico = None
+        if obico_config and obico_config.get("server"):
+            from .obico_client import ObicoClient
+            self._obico = ObicoClient(
+                server_url=obico_config["server"],
+                username=obico_config.get("username", ""),
+                password=obico_config.get("password", ""),
+                printer_id=int(obico_config.get("printer_id", 0)),
+            )
 
     @property
     def state(self) -> PrintState:
@@ -413,6 +425,15 @@ class KlipperClient:
                 self._state.mmu = {}
 
             self._state.raw_data = result
+
+        # Fetch Obico failure detection data (outside the lock, separate request)
+        if self._obico:
+            try:
+                obico_data = self._obico.fetch_status()
+                with self._state_lock:
+                    self._state.obico = obico_data
+            except Exception as e:
+                logger.debug(f"[{self.name}] Obico poll error: {e}")
 
         new_status = self._state.status
         if new_status != prev_status:

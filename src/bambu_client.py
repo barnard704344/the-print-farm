@@ -127,6 +127,8 @@ class PrintState:
     # Happy Hare MMU (Klipper)
     has_mmu: bool = False
     mmu: dict = field(default_factory=dict)
+    # Obico failure detection (Klipper)
+    obico: dict = field(default_factory=dict)
     # Errors
     print_error: int = 0
     hms: list = field(default_factory=list)

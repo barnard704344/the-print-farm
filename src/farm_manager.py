@@ -31,6 +31,7 @@ def create_printer_client(cfg: dict) -> PrinterClient:
             port=cfg.get("moonraker_port", 7125),
             api_key=cfg.get("api_key", ""),
             camera_url=cfg.get("camera_url", ""),
+            obico_config=cfg.get("obico"),
         )
     else:
         # Default: BambuLab
@@ -138,6 +139,7 @@ class FarmManager:
                 "vt_tray": s.vt_tray,
                 "has_mmu": s.has_mmu,
                 "mmu": s.mmu,
+                "obico": s.obico,
             }
             states[name] = state
         return states

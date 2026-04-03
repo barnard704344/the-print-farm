@@ -490,6 +490,49 @@
         .mmu-tag.unloaded { background: rgba(239,68,68,0.15); color: var(--danger); }
         .mmu-tag.unknown { background: rgba(255,255,255,0.08); color: var(--text-muted); }
 
+        /* Obico AI Detection Section */
+        .obico-section {
+            margin-bottom: 12px;
+            padding: 10px;
+            background: var(--bg);
+            border-radius: 8px;
+        }
+
+        .obico-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .obico-bar-track {
+            height: 6px;
+            background: rgba(255,255,255,0.08);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 6px;
+        }
+
+        .obico-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.3s, background 0.3s;
+        }
+
+        .obico-details {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .obico-alert {
+            color: var(--danger);
+            font-weight: 600;
+        }
+
         /* Filament Controls */
         .filament-controls {
             display: flex;
@@ -1893,6 +1936,7 @@
                     </div>` : ''}
                     ${renderAmsSection(name, p)}
                     ${renderMmuSection(name, p)}
+                    ${renderObicoSection(name, p)}
                 </div>
             `;
         }
@@ -1934,6 +1978,37 @@
                         <span class="mmu-tag ${filTag}">${filState}</span>
                         <span>Changes: ${tcCount}${encoderFlow}</span>
                         ${mmu.runout ? '<span style="color:var(--danger)">⚠ Runout</span>' : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderObicoSection(name, p) {
+            if (!p.obico || !p.obico.connected) return '';
+            const o = p.obico;
+            const score = o.normalized_p != null ? Math.round(o.normalized_p * 100) : null;
+            let barClass = 'obico-ok';
+            if (score != null) {
+                if (score > 70) barClass = 'obico-danger';
+                else if (score > 30) barClass = 'obico-warning';
+            }
+            const watchIcon = o.watching ? '👁️ Watching' : '⏸️ Paused';
+            const actionLabel = o.action_on_failure ? `Action: ${o.action_on_failure}` : '';
+            const scoreLabel = score != null ? `${score}%` : '—';
+            const printInfo = o.current_print ? `<span style="opacity:.7">Print #${o.current_print}</span>` : '';
+
+            return `
+                <div class="obico-section" data-field="obico">
+                    <div class="obico-header">
+                        <span>🤖 Obico AI · ${watchIcon}</span>
+                        <span>${actionLabel}</span>
+                    </div>
+                    <div class="obico-meter">
+                        <div class="obico-bar ${barClass}" style="width:${score != null ? score : 0}%"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:.82rem;margin-top:2px;">
+                        <span class="obico-score">Failure likelihood: ${scoreLabel}</span>
+                        ${printInfo}
                     </div>
                 </div>
             `;
@@ -2098,6 +2173,22 @@
                 }
             } else if (mmuEl && !newMmuHtml) {
                 mmuEl.remove();
+            }
+
+            // Obico section — replace in place
+            const obicoEl = card.querySelector('[data-field="obico"]');
+            const newObicoHtml = renderObicoSection(name, p);
+            if (obicoEl && newObicoHtml) {
+                const temp2 = document.createElement('div');
+                temp2.innerHTML = newObicoHtml;
+                obicoEl.replaceWith(temp2.firstElementChild);
+            } else if (!obicoEl && newObicoHtml) {
+                const mmuOrAms = card.querySelector('[data-field="mmu"]') || card.querySelector('[data-field="ams"]') || card.querySelector('[data-field="filament"]');
+                if (mmuOrAms) {
+                    mmuOrAms.insertAdjacentHTML('afterend', newObicoHtml);
+                }
+            } else if (obicoEl && !newObicoHtml) {
+                obicoEl.remove();
             }
         }
 
