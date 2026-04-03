@@ -2139,7 +2139,8 @@
             const watchIcon = o.watching ? '👁️ Watching' : '⏸️ Paused';
             const actionLabel = o.action_on_failure ? `Action: ${o.action_on_failure}` : '';
             const scoreLabel = score != null ? `${score}%` : '—';
-            const printInfo = o.current_print ? `<span style="opacity:.7">Print #${o.current_print}</span>` : '';
+            const printName = o.current_print ? (o.current_print.filename || `#${o.current_print.id || ''}`) : '';
+            const printInfo = printName ? `<span style="opacity:.7">${printName}</span>` : '';
 
             return `
                 <div class="obico-section" data-field="obico">
