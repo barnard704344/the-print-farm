@@ -140,6 +140,7 @@ class FarmManager:
                 "has_mmu": s.has_mmu,
                 "mmu": s.mmu,
                 "obico": s.obico,
+                "adaptive_flow": s.adaptive_flow,
             }
             states[name] = state
         return states

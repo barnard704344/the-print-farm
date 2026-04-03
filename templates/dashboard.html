@@ -2398,6 +2398,7 @@
                     ${renderAmsSection(name, p)}
                     ${renderMmuSection(name, p)}
                     ${renderObicoSection(name, p)}
+                    ${renderAdaptiveFlowSection(name, p)}
                 </div>
             `;
         }
@@ -2477,6 +2478,17 @@
                         <span class="obico-score">Failure likelihood: ${scoreLabel}</span>
                         ${printInfo}
                     </div>
+                </div>
+            `;
+        }
+
+        function renderAdaptiveFlowSection(name, p) {
+            if (!p.adaptive_flow || !p.adaptive_flow.url) return '';
+            const url = p.adaptive_flow.url;
+            return `
+                <div style="padding:6px 10px;background:#1a1c24;border-radius:6px;margin-top:6px;display:flex;align-items:center;justify-content:space-between;">
+                    <span style="font-size:.82rem;">🌊 <a href="${url}" target="_blank" rel="noopener" style="color:#5bc0de;text-decoration:none;">Klipper Adaptive Flow</a></span>
+                    <a href="https://github.com/barnard704344/Klipper-Adaptive-Flow" target="_blank" rel="noopener" title="GitHub" style="font-size:11px;color:var(--text-muted);text-decoration:none;">GitHub ↗</a>
                 </div>
             `;
         }
