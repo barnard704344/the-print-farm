@@ -12,7 +12,8 @@ A web-based print farm manager for **BambuLab** and **Klipper** 3D printers. Mon
 - **Authentication** — Local users, Active Directory/LDAP, student/staff roles
 - **OrcaSlicer integration** — Upload directly from slicer via post-processing script
 - **AMS support** — Full filament tray management for BambuLab printers with AMS
-- **Camera streaming** — Live camera feeds from BambuLab printers
+- **Happy Hare MMU support** — Auto-detected gate status, active tool, filament state, and encoder data for Klipper printers with Happy Hare
+- **Camera streaming** — Live camera feeds from BambuLab printers and Klipper webcams (MJPEG/snapshot auto-detected via Moonraker)
 
 ## Quick Start
 
@@ -29,10 +30,11 @@ The setup script will:
 1. Install Python 3, pip, and Apache
 2. Create a virtual environment and install dependencies
 3. Create an admin user account
-4. Configure the systemd service and Apache reverse proxy
-5. Start the farm manager
+4. Detect whether the install location is accessible by `www-data` (falls back to `root` if under `/root/`)
+5. Configure the systemd service and Apache reverse proxy
+6. Start the farm manager
 
-Access the dashboard at `http://your-server/bambulab-farm`
+Access the dashboard at `http://<your-server-ip>:5000/`
 
 ## Manual Setup
 
@@ -66,7 +68,10 @@ printers:
     type: klipper
     host: 192.168.1.200
     moonraker_port: 7125
+    camera_url: ''  # optional — auto-detected from Moonraker if blank
 ```
+
+Klipper webcams are auto-detected from Moonraker's `/server/webcams/list` endpoint. Happy Hare MMU is auto-detected from Klipper's printer objects.
 
 ## OrcaSlicer Upload Script
 
