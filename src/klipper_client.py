@@ -39,6 +39,16 @@ _MMU_OBJECTS = {
 POLL_INTERVAL = 2.0
 
 
+def _hex_color(val: str) -> str:
+    """Normalise a bare hex color (e.g. 'ff0000') to '#ff0000'."""
+    if not val:
+        return ""
+    val = val.strip().lstrip("#")
+    if len(val) == 6:
+        return "#" + val
+    return ""
+
+
 class KlipperClient:
     """
     HTTP client for a single Klipper printer via Moonraker API.
@@ -388,7 +398,7 @@ class KlipperClient:
                         "gate": i,
                         "status": gate_status_val,
                         "material": (mmu_data.get("gate_material", []) or [""])[i] if i < len(mmu_data.get("gate_material", [])) else "",
-                        "color": (mmu_data.get("gate_color", []) or [""])[i] if i < len(mmu_data.get("gate_color", [])) else "",
+                        "color": _hex_color((mmu_data.get("gate_color", []) or [""])[i] if i < len(mmu_data.get("gate_color", [])) else ""),
                         "filament_name": (mmu_data.get("gate_filament_name", []) or [""])[i] if i < len(mmu_data.get("gate_filament_name", [])) else "",
                         "spool_id": (mmu_data.get("gate_spool_id", []) or [-1])[i] if i < len(mmu_data.get("gate_spool_id", [])) else -1,
                         "temperature": (mmu_data.get("gate_temperature", []) or [0])[i] if i < len(mmu_data.get("gate_temperature", [])) else 0,

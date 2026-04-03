@@ -164,6 +164,13 @@ ADEOF
 
     cat >> config/config.yaml <<LOGEOF
 
+# ── Spoolman (optional) ──────────────────────────────────
+# Set the URL of your Spoolman instance for filament tracking.
+# Leave commented out to disable Spoolman integration.
+# Can also be configured from the dashboard Settings tab.
+#spoolman:
+#  url: http://localhost:7912
+
 logging:
   level: INFO
 LOGEOF

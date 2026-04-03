@@ -1,7 +1,74 @@
-admin_password: changeme
-auto_assign: false
-api_key: changeme
+# ============================================================
+# Print Farm — Configuration
+# ============================================================
+# Copy this file to config.yaml and edit to match your setup.
+#
+# Supports both BambuLab and Klipper printers.
+# Printers can also be added from the dashboard Settings tab.
+# ============================================================
+
+printers: []
+# ── BambuLab Printer ──
+#  - name: P1S-1
+#    type: bambulab             # optional — defaults to bambulab
+#    host: 192.168.1.100
+#    access_code: '12345678'
+#    serial: 01P00C000000000
+#    mqtt_port: 8883
+#    ftp_port: 990
+#    camera_port: 6000
+#    staff_only: false          # optional — restrict to staff users
+#
+# ── Klipper Printer (via Moonraker) ──
+#  - name: Voron-01
+#    type: klipper
+#    host: 192.168.1.200
+#    moonraker_port: 7125       # default Moonraker port
+#    api_key: ''                # optional — Moonraker API key
+#    camera_url: ''             # optional — webcam stream URL
+#    staff_only: false
+
 web:
   host: 0.0.0.0
   port: 5000
-printers: []
+  api_key: CHANGE_ME            # used by OrcaSlicer upload script
+  admin_password: ''            # legacy single-password mode (ignored when local_users set)
+
+queue:
+  upload_dir: ./uploads
+  db_path: ./data/farm.db
+  auto_assign: false
+
+# ── Local Users ──────────────────────────────────────────
+# Works with or without Active Directory.
+# When AD is also enabled, local users are checked first.
+local_users: []
+#  - username: admin
+#    password: CHANGE_ME
+#    role: staff                 # staff = admin access
+#    display_name: Administrator
+#  - username: student1
+#    password: CHANGE_ME
+#    role: student
+
+# ── Active Directory (optional) ──────────────────────────
+# Set enabled: true only if you have an AD/LDAP server.
+active_directory:
+  enabled: false
+#  server: 10.0.0.1
+#  port: 389
+#  use_ssl: false
+#  base_dn: DC=example,DC=local
+#  bind_user: CN=svc_account,OU=Service,DC=example,DC=local
+#  bind_password: CHANGE_ME
+#  student_ou: OU=Students,DC=example,DC=local
+#  staff_ou: OU=Staff,DC=example,DC=local
+
+# ── Spoolman (optional) ──────────────────────────────────
+# Set the URL of your Spoolman instance for filament tracking.
+# Leave commented out to disable. Can also be set from the dashboard.
+#spoolman:
+#  url: http://localhost:7912
+
+logging:
+  level: INFO

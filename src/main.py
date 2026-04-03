@@ -23,6 +23,7 @@ from .gcode_to_3mf import wrap_gcode_as_3mf
 from .job_queue import JobQueue
 from .file_library import FileLibrary
 from .camera import CameraManager
+from .spoolman_client import SpoolmanClient
 from .web import create_app, start_web_server
 
 logger = logging.getLogger("bambulab_farm")
@@ -62,6 +63,67 @@ def setup_logging(config: dict):
 def load_config(path: str) -> dict:
     with open(path) as f:
         return yaml.safe_load(f)
+
+
+def _deduct_filament_usage(spoolman, job, farm):
+    """After a job completes, report filament usage to Spoolman.
+
+    Looks up spools assigned to the printer (by location) and deducts
+    the estimated filament weight parsed from the G-code metadata.
+    """
+    try:
+        from .gcode_to_3mf import parse_gcode_filaments
+        printer_name = job.get("printer_name")
+        if not printer_name:
+            return
+
+        file_path = job.get("file_path", "")
+        if not file_path.lower().endswith(".gcode"):
+            return
+
+        info = parse_gcode_filaments(file_path)
+        used_filaments = info.get("used_filaments", [])
+        if not used_filaments:
+            return
+
+        # Get spools assigned to this printer (location = printer name)
+        printer_spools = spoolman.get_spools_by_location(printer_name)
+        if not printer_spools:
+            logger.debug(f"No Spoolman spools at location '{printer_name}', skipping usage deduction")
+            return
+
+        # For each used filament slot, try to match a spool and deduct weight
+        for filament_info in used_filaments:
+            weight_g = filament_info.get("weight_g") or filament_info.get("weight")
+            if not weight_g or weight_g <= 0:
+                continue
+
+            material = (filament_info.get("type") or filament_info.get("material") or "").upper()
+
+            # Find the best matching spool at this printer
+            matched = None
+            for spool in printer_spools:
+                spool_material = (spool.get("filament", {}).get("material") or "").upper()
+                if material and spool_material == material:
+                    matched = spool
+                    break
+            # Fallback: use first available spool
+            if not matched and printer_spools:
+                matched = printer_spools[0]
+
+            if matched:
+                result = spoolman.use_spool(matched["id"], use_weight=weight_g)
+                if result:
+                    remaining = result.get("remaining_weight", "?")
+                    logger.info(
+                        f"Spoolman: deducted {weight_g:.1f}g from spool #{matched['id']} "
+                        f"({matched.get('filament', {}).get('name', '?')}), "
+                        f"{remaining}g remaining"
+                    )
+                else:
+                    logger.warning(f"Spoolman: failed to deduct usage from spool #{matched['id']}")
+    except Exception as e:
+        logger.warning(f"Spoolman filament deduction failed for job #{job.get('id')}: {e}")
 
 
 def cmd_run(args, config: dict):
@@ -129,10 +191,23 @@ def cmd_run(args, config: dict):
                 else:
                     camera_mgr.start_camera(name, cfg["host"], cfg["access_code"])
 
+    # Spoolman integration (optional)
+    spoolman = None
+    spoolman_cfg = config.get("spoolman", {})
+    spoolman_url = spoolman_cfg.get("url", "")
+    if spoolman_url:
+        spoolman = SpoolmanClient(spoolman_url)
+        info = spoolman.info()
+        if info:
+            print(f"Spoolman connected: {spoolman_url} (v{info.get('version', '?')})")
+        else:
+            print(f"WARNING: Spoolman configured but unreachable at {spoolman_url}")
+
     app = create_app(farm, queue, camera_manager=camera_mgr,
                      api_key=web_cfg.get("api_key", ""),
                      admin_password=web_cfg.get("admin_password", ""),
-                     config=config, file_library=library)
+                     config=config, file_library=library,
+                     spoolman_client=spoolman)
     start_web_server(app, host=host, port=port)
     print(f"Dashboard: http://{host}:{port}")
 
@@ -228,6 +303,9 @@ def cmd_run(args, config: dict):
                         if state.status == PrintStatus.FINISH:
                             queue.mark_completed(job["id"])
                             logger.info(f"Job #{job['id']} completed on {job['printer_name']}")
+                            # Deduct filament usage in Spoolman
+                            if spoolman:
+                                _deduct_filament_usage(spoolman, job, farm)
                         elif state.status == PrintStatus.FAILED:
                             queue.mark_failed(job["id"])
                             logger.warning(f"Job #{job['id']} failed on {job['printer_name']}")

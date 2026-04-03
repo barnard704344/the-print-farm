@@ -491,9 +491,17 @@
             position: relative;
         }
 
+        .mmu-gate { cursor: pointer; }
+        .mmu-gate.empty { cursor: default; }
         .mmu-gate:hover { border-color: var(--text-muted); }
         .mmu-gate.active { border-color: var(--accent); box-shadow: 0 0 6px var(--accent-glow); }
         .mmu-gate.empty { opacity: 0.4; }
+        .mmu-gate-edit {
+            position: absolute; top: 1px; right: 1px; font-size: 9px; opacity: 0;
+            transition: opacity 0.15s; cursor: pointer; color: var(--text-muted); z-index: 2;
+        }
+        .mmu-gate:hover .mmu-gate-edit { opacity: 1; }
+        .mmu-gate-edit:hover { color: var(--accent); }
 
         .mmu-gate-swatch {
             width: 18px;
@@ -538,6 +546,73 @@
         .mmu-tag.loaded { background: var(--accent-dim); color: var(--accent); }
         .mmu-tag.unloaded { background: var(--danger-dim); color: var(--danger); }
         .mmu-tag.unknown { background: rgba(255,255,255,0.08); color: var(--text-muted); }
+
+        .mmu-section { cursor: pointer; transition: border-color 0.2s; border: 1px solid transparent; }
+        .mmu-section:hover { border-color: var(--accent); }
+
+        /* Happy Hare Modal */
+        .hh-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 3000;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .hh-modal {
+            background: var(--bg-card); border-radius: 12px; width: 90vw; max-width: 820px;
+            max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+        .hh-modal-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 20px; border-bottom: 1px solid var(--border);
+        }
+        .hh-modal-header h2 { font-size: 18px; margin: 0; display: flex; align-items: center; gap: 8px; }
+        .hh-modal-close { background: none; border: none; color: var(--text-muted); font-size: 24px; cursor: pointer; padding: 4px 8px; }
+        .hh-modal-close:hover { color: var(--text); }
+        .hh-modal-body { overflow-y: auto; padding: 16px 20px; flex: 1; }
+        .hh-category { margin-bottom: 20px; }
+        .hh-category-title {
+            font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+            color: var(--accent); margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border);
+        }
+        .hh-macro-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+        .hh-macro-btn {
+            display: flex; flex-direction: column; gap: 2px; padding: 10px 12px;
+            background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+            cursor: pointer; transition: all 0.15s; text-align: left;
+        }
+        .hh-macro-btn:hover { border-color: var(--accent); background: rgba(0,210,150,0.05); }
+        .hh-macro-btn .hh-macro-name { font-size: 13px; font-weight: 600; color: var(--text); font-family: monospace; }
+        .hh-macro-btn .hh-macro-desc { font-size: 11px; color: var(--text-muted); }
+        .hh-macro-btn.has-params .hh-macro-name::after { content: ' ▸'; font-size: 10px; color: var(--text-muted); }
+
+        /* Macro params popover */
+        .hh-params-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 3100;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .hh-params-dialog {
+            background: var(--bg-card); border-radius: 10px; padding: 20px; min-width: 320px; max-width: 420px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+        }
+        .hh-params-dialog h3 { margin: 0 0 4px 0; font-size: 16px; font-family: monospace; }
+        .hh-params-dialog .hh-param-desc { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
+        .hh-params-dialog label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 3px; margin-top: 8px; }
+        .hh-params-dialog input {
+            width: 100%; padding: 7px 10px; background: var(--bg); border: 1px solid var(--border);
+            border-radius: 6px; color: var(--text); font-size: 13px;
+        }
+        .hh-params-dialog input:focus { border-color: var(--accent); outline: none; }
+        .hh-params-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+        .hh-result {
+            margin-top: 10px; padding: 8px 10px; border-radius: 6px; font-size: 12px;
+            background: rgba(0,210,150,0.08); border: 1px solid var(--accent); color: var(--accent);
+        }
+        .hh-result.error { background: rgba(255,70,70,0.08); border-color: var(--danger); color: var(--danger); }
+        .hh-mmu-state {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px;
+            padding: 12px; background: var(--bg); border-radius: 8px; margin-bottom: 16px;
+        }
+        .hh-mmu-state .hh-stat { font-size: 12px; }
+        .hh-mmu-state .hh-stat-label { color: var(--text-muted); }
+        .hh-mmu-state .hh-stat-value { font-weight: 600; color: var(--text); }
 
         /* Obico AI Detection Section */
         .obico-section {
@@ -1300,6 +1375,40 @@
                     <div id="obicoTestResult" style="font-size:13px; margin-top:4px;"></div>
                 </div>
             </div>
+
+            <!-- Spoolman Filament Management -->
+            <div class="setup-section" style="max-width:700px; margin-top:32px;">
+                <h3 style="margin-bottom:16px;">Spoolman Filament Tracking</h3>
+                <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
+                    Connect to a <a href="https://github.com/Donkie/Spoolman" target="_blank" style="color:var(--accent);">Spoolman</a> instance
+                    to track filament spool inventory and automatically deduct usage when prints complete.
+                    The API is available at <code>/api/v1/spoolman/</code> once configured.
+                </p>
+                <div style="display:flex; flex-direction:column; gap:14px;">
+                    <div>
+                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Spoolman URL</label>
+                        <input type="text" id="spoolmanUrl" placeholder="e.g. http://localhost:7912" class="ad-input">
+                    </div>
+                    <div id="spoolmanInfo" style="display:none; padding:12px; background:var(--bg-card); border:1px solid var(--border); border-radius:8px;">
+                        <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                            <span id="spoolmanStatusDot" style="width:10px; height:10px; border-radius:50%; background:var(--danger);"></span>
+                            <strong style="font-size:13px;">Spoolman Status</strong>
+                        </div>
+                        <div style="font-size:12px; color:var(--text-muted);">
+                            <span>Version: <span id="spoolmanVersion">—</span></span>
+                            &nbsp;·&nbsp;
+                            <span>Database: <span id="spoolmanDbType">—</span></span>
+                            &nbsp;·&nbsp;
+                            <span>Health: <span id="spoolmanHealth">—</span></span>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:8px; margin-top:8px;">
+                        <button class="btn btn-primary" onclick="testSpoolmanConnection()">Test Connection</button>
+                        <button class="btn btn-success" onclick="saveSpoolmanConfig()">Save Configuration</button>
+                    </div>
+                    <div id="spoolmanTestResult" style="font-size:13px; margin-top:4px;"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1309,6 +1418,25 @@
             <div class="camera-modal-title" id="cameraModalTitle"></div>
             <img id="cameraModalImg" src="" alt="Camera Feed">
             <button class="camera-modal-close" onclick="closeCameraModal()">&times;</button>
+        </div>
+    </div>
+
+    <!-- Happy Hare Modal -->
+    <div class="hh-overlay" id="hhOverlay" style="display:none" onclick="if(event.target===this)closeHappyHareModal()">
+        <div class="hh-modal" onclick="event.stopPropagation()">
+            <div class="hh-modal-header">
+                <h2>🔀 Happy Hare — <span id="hhPrinterName"></span></h2>
+                <button class="hh-modal-close" onclick="closeHappyHareModal()">&times;</button>
+            </div>
+            <div class="hh-modal-body" id="hhModalBody">
+                <p style="color:var(--text-muted)">Loading macros…</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Happy Hare Params Dialog -->
+    <div class="hh-params-overlay" id="hhParamsOverlay" style="display:none" onclick="if(event.target===this)closeHhParams()">
+        <div class="hh-params-dialog" id="hhParamsDialog" onclick="event.stopPropagation()">
         </div>
     </div>
 
@@ -1417,6 +1545,59 @@
     </div>
 
     <!-- Tray Config Modal -->
+    <!-- MMU Gate Config Modal -->
+    <div class="modal-overlay" id="gateConfigOverlay" style="display:none">
+        <div class="modal" style="max-width:420px;">
+            <div class="modal-header">
+                <h2 style="font-size:18px;">Configure Gate <span id="gateConfigLabel"></span></h2>
+                <button class="modal-close" onclick="closeGateConfig()">&times;</button>
+            </div>
+            <div class="tray-config-form">
+                <input type="hidden" id="gateConfigPrinter">
+                <input type="hidden" id="gateConfigGate">
+                <input type="hidden" id="gateConfigSpoolId" value="-1">
+                <div class="form-group" id="gateSpoolSection" style="display:none">
+                    <label>Spoolman Spool</label>
+                    <select id="gateConfigSpool" style="width:100%;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;">
+                        <option value="">— Manual (no spool) —</option>
+                    </select>
+                    <div id="gateSpoolInfo" style="font-size:11px;color:var(--text-muted);margin-top:4px;"></div>
+                </div>
+                <div id="gateManualFields">
+                    <div class="form-group">
+                        <label>Material</label>
+                        <select id="gateConfigMaterial">
+                            <option value="PLA">PLA</option>
+                            <option value="PLA-S">PLA Silk</option>
+                            <option value="PLA-CF">PLA-CF</option>
+                            <option value="PETG">PETG</option>
+                            <option value="PETG-CF">PETG-CF</option>
+                            <option value="ABS">ABS</option>
+                            <option value="ASA">ASA</option>
+                            <option value="TPU">TPU</option>
+                            <option value="PA">PA (Nylon)</option>
+                            <option value="PA-CF">PA-CF</option>
+                            <option value="PC">PC</option>
+                            <option value="PVA">PVA</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Filament Color</label>
+                        <div class="color-row">
+                            <input type="color" id="gateConfigColor" value="#FFFFFF">
+                            <input type="text" id="gateConfigColorHex" class="color-hex" placeholder="#FFFFFF" maxlength="7">
+                        </div>
+                    </div>
+                </div>
+                <div id="gateConfigResult" style="margin:12px 0; font-size:13px;"></div>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn" onclick="closeGateConfig()">Cancel</button>
+                    <button class="btn btn-primary" onclick="saveGateConfig()">Save & Apply</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="trayConfigOverlay" style="display:none">
         <div class="modal" style="max-width:400px;">
             <div class="modal-header">
@@ -1927,6 +2108,71 @@
             }
         }
 
+        // ── Spoolman Settings ────────────────────────────────
+        async function loadSpoolmanConfig() {
+            try {
+                const res = await fetch(BASE + '/api/spoolman/config');
+                if (!res.ok) return;
+                const data = await res.json();
+                document.getElementById('spoolmanUrl').value = data.url || '';
+                if (data.url) testSpoolmanConnection(true);
+            } catch (e) {}
+        }
+
+        async function saveSpoolmanConfig() {
+            const resultEl = document.getElementById('spoolmanTestResult');
+            const url = document.getElementById('spoolmanUrl').value.trim();
+            try {
+                const res = await fetch(BASE + '/api/spoolman/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url }),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; ' + data.message + '</span>';
+                } else {
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                }
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+            }
+        }
+
+        async function testSpoolmanConnection(silent) {
+            const resultEl = document.getElementById('spoolmanTestResult');
+            const infoEl = document.getElementById('spoolmanInfo');
+            const url = document.getElementById('spoolmanUrl').value.trim();
+            if (!url) {
+                if (!silent) resultEl.innerHTML = '<span style="color:var(--danger);">Enter a Spoolman URL first</span>';
+                infoEl.style.display = 'none';
+                return;
+            }
+            if (!silent) resultEl.innerHTML = '<span style="color:var(--text-muted);">Testing connection...</span>';
+            try {
+                const res = await fetch(BASE + '/api/spoolman/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url }),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    infoEl.style.display = 'block';
+                    document.getElementById('spoolmanStatusDot').style.background = data.healthy ? 'var(--accent)' : 'var(--warning)';
+                    document.getElementById('spoolmanVersion').textContent = data.version || '?';
+                    document.getElementById('spoolmanDbType').textContent = data.db_type || '?';
+                    document.getElementById('spoolmanHealth').textContent = data.healthy ? 'Healthy' : 'Degraded';
+                    if (!silent) resultEl.innerHTML = `<span style="color:var(--accent);">&#10003; Connected to Spoolman v${data.version}</span>`;
+                } else {
+                    infoEl.style.display = 'none';
+                    if (!silent) resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                }
+            } catch (e) {
+                infoEl.style.display = 'none';
+                if (!silent) resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+            }
+        }
+
         checkAuth().then(() => {
             // If not authenticated and AD is enabled, attempt silent SSO via Kerberos
             if (!isAuthenticated && adEnabled) {
@@ -2001,7 +2247,7 @@
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 tab.classList.add('active');
                 document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
-                if (tab.dataset.tab === 'settings') { loadADConfig(); populateObicoPrinterDropdown(); }
+                if (tab.dataset.tab === 'settings') { loadADConfig(); populateObicoPrinterDropdown(); loadSpoolmanConfig(); }
                 if (tab.dataset.tab === 'library') refreshLibrary();
             });
         });
@@ -2166,11 +2412,16 @@
                 const swatchColor = g.color || (g.status === 2 ? '#888' : '#333');
                 const label = `T${g.gate}`;
                 const material = g.material || g.filament_name || (g.status === 2 ? '?' : '');
+                const safeColor = (g.color && g.color.startsWith('#')) ? g.color : '#333333';
+                const safeMat = (material || 'PLA').replace(/'/g, "\\'");
                 return `
-                    <div class="mmu-gate ${isActive ? 'active' : ''} ${isEmpty ? 'empty' : ''}" title="Gate ${g.gate}${material ? ' · ' + material : ''}${g.temperature ? ' · ' + g.temperature + '°C' : ''}">
+                    <div class="mmu-gate ${isActive ? 'active' : ''} ${isEmpty ? 'empty' : ''}" data-printer="${name}" data-gate="${g.gate}"
+                         title="Gate ${g.gate}${material ? ' · ' + material : ''}${g.temperature ? ' · ' + g.temperature + '°C' : ''}${!isEmpty ? ' · Click to configure' : ''}"
+                         ${!isEmpty ? `onclick="event.stopPropagation();openGateConfig('${name}', ${g.gate}, '${safeMat}', '${safeColor}', ${g.spool_id || -1})"` : ''}>
                         <div class="mmu-gate-swatch" style="background:${isEmpty ? '#333' : swatchColor}"></div>
                         <div class="mmu-gate-label">${label}</div>
-                        ${material ? `<div class="mmu-gate-material">${material}</div>` : ''}
+                        ${!isEmpty && material ? `<div class="mmu-gate-material">${material}</div>` : ''}
+                        ${!isEmpty ? '<div class="mmu-gate-edit">&#9998;</div>' : ''}
                     </div>
                 `;
             }).join('');
@@ -2183,7 +2434,7 @@
             const unitLabel = mmu.unit_name ? ` <span class="mmu-header-info">(${mmu.unit_name})</span>` : '';
 
             return `
-                <div class="mmu-section" data-field="mmu">
+                <div class="mmu-section" data-field="mmu" onclick="openHappyHareModal('${name}')" title="Click to open Happy Hare controls">
                     <div class="mmu-header">
                         <span>🔀 MMU${unitLabel} · ${mmu.num_gates} gates</span>
                         <span>Tool: ${toolLabel}</span>
@@ -2518,6 +2769,152 @@
                 } else {
                     resultEl.innerHTML = '<span class="test-fail">&#10007; Failed to send command.</span>';
                 }
+            } catch (e) {
+                resultEl.innerHTML = `<span class="test-fail">&#10007; Error: ${e.message}</span>`;
+            }
+        }
+
+        // ── MMU Gate Config ──────────────────────────────────
+        let _gateSpoolsCache = null;
+
+        function openGateConfig(printerName, gate, currentMaterial, currentColor, currentSpoolId) {
+            document.getElementById('gateConfigPrinter').value = printerName;
+            document.getElementById('gateConfigGate').value = gate;
+            document.getElementById('gateConfigSpoolId').value = currentSpoolId || -1;
+            document.getElementById('gateConfigLabel').textContent = `T${gate}`;
+            document.getElementById('gateConfigResult').innerHTML = '';
+
+            const matSelect = document.getElementById('gateConfigMaterial');
+            matSelect.value = currentMaterial && [...matSelect.options].some(o => o.value === currentMaterial) ? currentMaterial : 'PLA';
+
+            const safeColor = currentColor && /^#[0-9a-fA-F]{6}$/.test(currentColor) ? currentColor : '#FFFFFF';
+            document.getElementById('gateConfigColor').value = safeColor;
+            document.getElementById('gateConfigColorHex').value = safeColor;
+
+            // Show manual fields by default, try to load Spoolman spools
+            document.getElementById('gateManualFields').style.display = '';
+            document.getElementById('gateSpoolSection').style.display = 'none';
+            document.getElementById('gateSpoolInfo').innerHTML = '';
+            document.getElementById('gateConfigOverlay').style.display = 'flex';
+
+            loadGateSpools(currentSpoolId || -1);
+        }
+
+        async function loadGateSpools(currentSpoolId) {
+            try {
+                const data = await hhFetch('/api/v1/spoolman/spools');
+                const spools = data.data || [];
+                if (spools.length === 0) return; // No spools — keep manual mode
+
+                _gateSpoolsCache = spools;
+                const sel = document.getElementById('gateConfigSpool');
+                sel.innerHTML = '<option value="">— Manual (no spool) —</option>';
+                for (const s of spools) {
+                    const fil = s.filament || {};
+                    const vendor = fil.vendor ? fil.vendor.name + ' ' : '';
+                    const mat = fil.material || '?';
+                    const name = fil.name || '';
+                    const colorHex = fil.color_hex ? '#' + fil.color_hex : '';
+                    const remaining = s.remaining_weight != null ? ` (${Math.round(s.remaining_weight)}g left)` : '';
+                    const swatch = colorHex ? `\u25CF ` : '';
+                    const label = `${swatch}${vendor}${name || mat}${remaining}`;
+                    const opt = document.createElement('option');
+                    opt.value = s.id;
+                    opt.textContent = label;
+                    if (colorHex) opt.style.color = colorHex;
+                    if (s.id === currentSpoolId) opt.selected = true;
+                    sel.appendChild(opt);
+                }
+                document.getElementById('gateSpoolSection').style.display = '';
+
+                // If a spool is already selected, fill from it
+                if (currentSpoolId > 0) {
+                    onGateSpoolChange();
+                }
+            } catch (e) {
+                // Spoolman not available — just keep manual mode
+            }
+        }
+
+        function onGateSpoolChange() {
+            const sel = document.getElementById('gateConfigSpool');
+            const spoolId = sel.value;
+            const infoEl = document.getElementById('gateSpoolInfo');
+            const manualFields = document.getElementById('gateManualFields');
+
+            if (!spoolId || !_gateSpoolsCache) {
+                manualFields.style.display = '';
+                infoEl.innerHTML = '';
+                document.getElementById('gateConfigSpoolId').value = -1;
+                return;
+            }
+
+            const spool = _gateSpoolsCache.find(s => String(s.id) === spoolId);
+            if (!spool) { manualFields.style.display = ''; return; }
+
+            const fil = spool.filament || {};
+            const mat = fil.material || 'PLA';
+            const colorHex = fil.color_hex ? '#' + fil.color_hex : '#FFFFFF';
+            const vendor = fil.vendor ? fil.vendor.name : '';
+
+            // Auto-fill material and color from spool
+            const matSelect = document.getElementById('gateConfigMaterial');
+            matSelect.value = [...matSelect.options].some(o => o.value === mat) ? mat : 'PLA';
+            document.getElementById('gateConfigColor').value = colorHex;
+            document.getElementById('gateConfigColorHex').value = colorHex;
+            document.getElementById('gateConfigSpoolId').value = spool.id;
+
+            // Hide manual fields, show info
+            manualFields.style.display = 'none';
+            infoEl.innerHTML = `<strong>${vendor ? vendor + ' — ' : ''}${fil.name || mat}</strong> · ${colorHex} · ${spool.remaining_weight != null ? Math.round(spool.remaining_weight) + 'g remaining' : ''}`;
+        }
+
+        function closeGateConfig() {
+            document.getElementById('gateConfigOverlay').style.display = 'none';
+        }
+
+        // Sync gate config color picker ↔ hex input
+        document.getElementById('gateConfigColor').addEventListener('input', function() {
+            document.getElementById('gateConfigColorHex').value = this.value;
+        });
+        document.getElementById('gateConfigColorHex').addEventListener('input', function() {
+            if (/^#[0-9a-fA-F]{6}$/.test(this.value)) {
+                document.getElementById('gateConfigColor').value = this.value;
+            }
+        });
+        document.getElementById('gateConfigSpool').addEventListener('change', onGateSpoolChange);
+
+        async function saveGateConfig() {
+            const name = document.getElementById('gateConfigPrinter').value;
+            const gate = parseInt(document.getElementById('gateConfigGate').value);
+            const material = document.getElementById('gateConfigMaterial').value;
+            const color = document.getElementById('gateConfigColor').value.toUpperCase();
+            const spoolId = parseInt(document.getElementById('gateConfigSpoolId').value) || -1;
+            const resultEl = document.getElementById('gateConfigResult');
+            resultEl.innerHTML = '<span class="spinner"></span> Sending to printer...';
+            try {
+                const params = {GATE: String(gate), MATERIAL: material, COLOR: color.replace('#', '')};
+                if (spoolId > 0) params.SPOOL_ID = String(spoolId);
+                const resp = await hhFetch(`/api/v1/printers/${encodeURIComponent(name)}/happyhare/run`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-Api-Key': hhApiKey()},
+                    body: JSON.stringify({macro: 'MMU_GATE_MAP', params}),
+                });
+                resultEl.innerHTML = '<span class="test-ok">&#10003; Gate updated!</span>';
+                // Immediately update the swatch in the printer card
+                const gateEl = document.querySelector(`.mmu-gate[data-printer="${name}"][data-gate="${gate}"]`);
+                if (gateEl) {
+                    const swatch = gateEl.querySelector('.mmu-gate-swatch');
+                    if (swatch) swatch.style.background = color;
+                    let matEl = gateEl.querySelector('.mmu-gate-material');
+                    if (matEl) {
+                        matEl.textContent = material;
+                    } else {
+                        const lbl = gateEl.querySelector('.mmu-gate-label');
+                        if (lbl) { matEl = document.createElement('div'); matEl.className = 'mmu-gate-material'; matEl.textContent = material; lbl.after(matEl); }
+                    }
+                }
+                setTimeout(closeGateConfig, 1200);
             } catch (e) {
                 resultEl.innerHTML = `<span class="test-fail">&#10007; Error: ${e.message}</span>`;
             }
@@ -3344,6 +3741,164 @@
             } catch (err) {
                 alert('Failed to update: ' + err.message);
                 refreshPrinters();
+            }
+        }
+
+        // ── Happy Hare Modal ─────────────────────────────────
+        let _hhApiKey = null;
+        function hhApiKey() {
+            if (!_hhApiKey) {
+                const el = document.getElementById('orcaApiKey');
+                _hhApiKey = el ? el.textContent.trim() : '';
+            }
+            return _hhApiKey;
+        }
+
+        async function hhFetch(url, opts = {}) {
+            opts.headers = Object.assign({'X-Api-Key': hhApiKey()}, opts.headers || {});
+            const res = await fetch(BASE + url, opts);
+            if (!res.ok) {
+                let msg = `HTTP ${res.status}`;
+                try { const j = await res.json(); msg = (j.error && j.error.message) || j.error || msg; } catch(_) {}
+                throw new Error(msg);
+            }
+            return res.json();
+        }
+
+        async function openHappyHareModal(printerName) {
+            document.getElementById('hhPrinterName').textContent = printerName;
+            document.getElementById('hhModalBody').innerHTML = '<p style="color:var(--text-muted)">Loading macros…</p>';
+            document.getElementById('hhOverlay').style.display = 'flex';
+
+            try {
+                const data = await hhFetch(`/api/v1/printers/${encodeURIComponent(printerName)}/happyhare/macros`);
+                renderHhMacros(printerName, data.data);
+            } catch (err) {
+                document.getElementById('hhModalBody').innerHTML =
+                    `<div class="hh-result error">${err.message}</div>`;
+            }
+        }
+
+        function closeHappyHareModal() {
+            document.getElementById('hhOverlay').style.display = 'none';
+        }
+
+        function renderHhMacros(printerName, macroData) {
+            const body = document.getElementById('hhModalBody');
+            let html = '';
+
+            // MMU state summary
+            if (macroData.mmu_state) {
+                const s = macroData.mmu_state;
+                html += '<div class="hh-mmu-state">';
+                if (s.tool != null) html += `<div class="hh-stat"><div class="hh-stat-label">Tool</div><div class="hh-stat-value">${s.tool >= 0 ? 'T' + s.tool : 'None'}</div></div>`;
+                if (s.filament) html += `<div class="hh-stat"><div class="hh-stat-label">Filament</div><div class="hh-stat-value">${s.filament}</div></div>`;
+                if (s.num_gates) html += `<div class="hh-stat"><div class="hh-stat-label">Gates</div><div class="hh-stat-value">${s.num_gates}</div></div>`;
+                if (s.enabled != null) html += `<div class="hh-stat"><div class="hh-stat-label">Enabled</div><div class="hh-stat-value">${s.enabled ? 'Yes' : 'No'}</div></div>`;
+                html += '</div>';
+            }
+
+            // Macros by category
+            const catList = macroData.categories || [];
+            window._hhMacroCache = window._hhMacroCache || {};
+            let macroIdx = 0;
+            for (const cat of catList) {
+                const macros = cat.macros;
+                if (!macros || macros.length === 0) continue;
+                html += `<div class="hh-category"><div class="hh-category-title">${cat.name}</div><div class="hh-macro-grid">`;
+                for (const m of macros) {
+                    const hasP = m.params && m.params.length > 0;
+                    const mid = 'hh_m_' + (macroIdx++);
+                    window._hhMacroCache[mid] = m;
+                    html += `<div class="hh-macro-btn ${hasP ? 'has-params' : ''}" data-hh-mid="${mid}" data-hh-printer="${printerName}" onclick="hhMacroClick(this)">
+                        <div class="hh-macro-name">${m.name}</div>
+                        ${m.description ? `<div class="hh-macro-desc">${m.description}</div>` : ''}
+                    </div>`;
+                }
+                html += '</div></div>';
+            }
+
+            if (!html) html = '<p style="color:var(--text-muted)">No Happy Hare macros found on this printer.</p>';
+            body.innerHTML = html;
+        }
+
+        function hhMacroClick(el) {
+            const mid = el.getAttribute('data-hh-mid');
+            const printerName = el.getAttribute('data-hh-printer');
+            const macro = window._hhMacroCache[mid];
+            if (!macro) return;
+            if (macro.params && macro.params.length > 0) {
+                openHhParamsDialog(printerName, macro);
+            } else {
+                runHappyHareMacro(printerName, macro.name, {});
+            }
+        }
+
+        function openHhParamsDialog(printerName, macro) {
+            const dlg = document.getElementById('hhParamsDialog');
+            let html = `<h3>${macro.name}</h3>`;
+            if (macro.description) html += `<div class="hh-param-desc">${macro.description}</div>`;
+            for (const p of macro.params) {
+                html += `<label>${p}${macro.param_defaults && macro.param_defaults[p] != null ? ` <span style="opacity:.5">(default: ${macro.param_defaults[p]})</span>` : ''}</label>`;
+                html += `<input type="text" id="hh-param-${p}" placeholder="${p}">`;
+            }
+            const paramKey = 'hh_p_' + Date.now();
+            window._hhMacroCache[paramKey] = {printerName, macroName: macro.name, params: macro.params};
+            html += `<div class="hh-params-actions">
+                <button class="btn" onclick="closeHhParams()">Cancel</button>
+                <button class="btn btn-success" onclick="hhRunFromDialog('${paramKey}')">Run</button>
+            </div>`;
+            html += '<div id="hhParamResult"></div>';
+            dlg.innerHTML = html;
+            document.getElementById('hhParamsOverlay').style.display = 'flex';
+        }
+
+        function closeHhParams() {
+            document.getElementById('hhParamsOverlay').style.display = 'none';
+        }
+
+        function hhRunFromDialog(paramKey) {
+            const info = window._hhMacroCache[paramKey];
+            if (!info) return;
+            const {printerName, macroName, params: paramNames} = info;
+            const params = {};
+            for (const p of paramNames) {
+                const val = document.getElementById('hh-param-' + p).value.trim();
+                if (val) params[p] = val;
+            }
+            runHappyHareMacro(printerName, macroName, params, document.getElementById('hhParamResult'));
+        }
+
+        async function runHappyHareMacro(printerName, macroName, params, resultEl) {
+            const target = resultEl || document.getElementById('hhModalBody');
+            // Show existing result inline
+            let resDiv = resultEl;
+            if (!resDiv) {
+                // Append a result div at the top of the modal body
+                let existing = document.getElementById('hhRunResult');
+                if (!existing) {
+                    existing = document.createElement('div');
+                    existing.id = 'hhRunResult';
+                    target.prepend(existing);
+                }
+                resDiv = existing;
+            }
+            resDiv.className = 'hh-result';
+            resDiv.textContent = `Running ${macroName}…`;
+
+            try {
+                const data = await hhFetch(`/api/v1/printers/${encodeURIComponent(printerName)}/happyhare/run`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-Api-Key': hhApiKey()},
+                    body: JSON.stringify({macro: macroName, params: params}),
+                });
+                if (!data.ok) throw new Error(data.error || 'Command failed');
+                resDiv.className = 'hh-result';
+                resDiv.textContent = `✓ ${macroName} executed successfully`;
+                setTimeout(() => { if (resDiv.id === 'hhRunResult') resDiv.textContent = ''; }, 4000);
+            } catch (err) {
+                resDiv.className = 'hh-result error';
+                resDiv.textContent = `✗ ${err.message}`;
             }
         }
     </script>

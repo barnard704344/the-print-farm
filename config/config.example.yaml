@@ -64,5 +64,11 @@ active_directory:
 #  student_ou: OU=Students,DC=example,DC=local
 #  staff_ou: OU=Staff,DC=example,DC=local
 
+# ── Spoolman (optional) ──────────────────────────────────
+# Set the URL of your Spoolman instance for filament tracking.
+# Leave commented out to disable. Can also be set from the dashboard.
+#spoolman:
+#  url: http://localhost:7912
+
 logging:
   level: INFO

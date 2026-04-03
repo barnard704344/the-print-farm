@@ -23,6 +23,7 @@ from .discovery import discover_printers, scan_subnet, get_local_subnets, test_b
 from .gcode_to_3mf import wrap_gcode_as_3mf, parse_gcode_filaments, parse_gcode_model_name
 from .ldap_auth import authenticate_user, test_ad_connection, lookup_user
 from .file_library import parse_gcode_metadata
+from .api_v1 import create_api_v1
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin_password=None, config=None, file_library=None):
+def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin_password=None, config=None, file_library=None, spoolman_client=None):
     """Create the Flask app with references to farm manager, job queue, and camera manager."""
     app = Flask(
         __name__,
@@ -1360,6 +1361,71 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         except Exception as e:
             return jsonify({"ok": False, "message": str(e)}), 500
 
+    # ── Spoolman Config API ───────────────────────────────
+
+    @app.route(prefix + "/api/spoolman/config", methods=["GET"])
+    @app.route("/api/spoolman/config", methods=["GET"])
+    @admin_required
+    def spoolman_get_config():
+        """Get current Spoolman configuration."""
+        sm = app_config.get("spoolman", {})
+        return jsonify({"url": sm.get("url", "")})
+
+    @app.route(prefix + "/api/spoolman/config", methods=["POST"])
+    @app.route("/api/spoolman/config", methods=["POST"])
+    @admin_required
+    def spoolman_save_config():
+        """Save Spoolman configuration to config.yaml."""
+        data = request.get_json(silent=True) or {}
+        config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
+        try:
+            with open(config_path) as f:
+                file_config = yaml.safe_load(f) or {}
+
+            sm = file_config.get("spoolman", {})
+            url = data.get("url", "").strip().rstrip("/")
+            sm["url"] = url
+            file_config["spoolman"] = sm
+
+            with open(config_path, "w") as f:
+                yaml.dump(file_config, f, default_flow_style=False, sort_keys=False)
+
+            app_config["spoolman"] = sm
+
+            return jsonify({"ok": True, "message": "Spoolman configuration saved. Restart service to apply."})
+        except Exception as e:
+            logger.error(f"Failed to save Spoolman config: {e}")
+            return jsonify({"ok": False, "message": str(e)}), 500
+
+    @app.route(prefix + "/api/spoolman/test", methods=["POST"])
+    @app.route("/api/spoolman/test", methods=["POST"])
+    @admin_required
+    def spoolman_test_connection():
+        """Test connectivity to a Spoolman instance."""
+        data = request.get_json(silent=True) or {}
+        url = data.get("url", "").strip().rstrip("/")
+        if not url:
+            return jsonify({"ok": False, "message": "URL is required"}), 400
+        try:
+            import requests as _requests
+            info_res = _requests.get(url + "/api/v1/info", timeout=5)
+            info_res.raise_for_status()
+            info = info_res.json()
+
+            health_res = _requests.get(url + "/api/v1/health", timeout=5)
+            health = health_res.json() if health_res.ok else {}
+
+            return jsonify({
+                "ok": True,
+                "version": info.get("version", "unknown"),
+                "healthy": health.get("status") == "healthy",
+                "db_type": info.get("db_type", "unknown"),
+            })
+        except _requests.ConnectionError:
+            return jsonify({"ok": False, "message": f"Cannot connect to {url}"}), 502
+        except Exception as e:
+            return jsonify({"ok": False, "message": str(e)}), 500
+
     # ── Camera helpers ────────────────────────────────────
 
     def _detect_klipper_webcam(printer):
@@ -1566,6 +1632,23 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             },
             "done": True,
         }), 201
+
+    # ── REST API v1 ───────────────────────────────────────
+    api_v1 = create_api_v1(
+        farm_manager=farm_manager,
+        job_queue=job_queue,
+        camera_manager=camera_manager,
+        api_key=api_key,
+        config=config,
+        file_library=file_library,
+        send_job_fn=_send_job_to_printer,
+        parse_filaments_fn=parse_gcode_filaments,
+        parse_model_name_fn=parse_gcode_model_name,
+        parse_metadata_fn=parse_gcode_metadata,
+        wrap_gcode_fn=wrap_gcode_as_3mf,
+        spoolman_client=spoolman_client,
+    )
+    app.register_blueprint(api_v1, url_prefix=prefix + "/api/v1")
 
     return app
 
