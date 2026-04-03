@@ -13,7 +13,7 @@ A web-based print farm manager for **BambuLab** and **Klipper** 3D printers. Mon
 - **OrcaSlicer integration** — Upload directly from slicer via post-processing script
 - **AMS support** — Full filament tray management for BambuLab printers with AMS
 - **Camera streaming** — Live camera feeds from BambuLab printers and Klipper webcams (MJPEG/snapshot auto-detected via Moonraker)
-- **Obico integration** — AI-powered failure detection and remote monitoring for Klipper printers with Obico installed
+- **Obico integration** — If a local Obico server is running and the Obico plugin is installed on your Klipper printer, the dashboard will automatically pull failure detection data and remote monitoring info from it
 
 ### REST API v1
 
