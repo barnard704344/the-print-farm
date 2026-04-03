@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>The Print Farm</title>
     <style>
-        :root {
+        :root, [data-theme="dark"] {
             --bg: #0f1117;
             --card: #1a1d27;
             --border: #2a2d3a;
@@ -13,10 +13,40 @@
             --text-muted: #71717a;
             --accent: #22c55e;
             --accent-dim: rgba(34, 197, 94, 0.15);
+            --accent-glow: rgba(34, 197, 94, 0.3);
             --warning: #f59e0b;
+            --warning-dim: rgba(245, 158, 11, 0.15);
             --danger: #ef4444;
+            --danger-dim: rgba(239, 68, 68, 0.15);
             --info: #3b82f6;
+            --info-dim: rgba(59, 130, 246, 0.15);
             --idle: #6b7280;
+            --input-bg: var(--bg);
+            --surface: #1a1d27;
+            --shadow: 0 1px 3px rgba(0,0,0,0.3);
+            color-scheme: dark;
+        }
+
+        [data-theme="light"] {
+            --bg: #f0f2f5;
+            --card: #ffffff;
+            --border: #d9d9d9;
+            --text: #1f1f1f;
+            --text-muted: #8c8c8c;
+            --accent: #22c55e;
+            --accent-dim: rgba(34, 197, 94, 0.10);
+            --accent-glow: rgba(34, 197, 94, 0.2);
+            --warning: #d97706;
+            --warning-dim: rgba(217, 119, 6, 0.10);
+            --danger: #dc2626;
+            --danger-dim: rgba(220, 38, 38, 0.10);
+            --info: #2563eb;
+            --info-dim: rgba(37, 99, 235, 0.10);
+            --idle: #9ca3af;
+            --input-bg: #ffffff;
+            --surface: #ffffff;
+            --shadow: 0 1px 3px rgba(0,0,0,0.08);
+            color-scheme: light;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -55,6 +85,25 @@
             justify-content: center;
             font-size: 14px;
         }
+
+        /* Theme toggle */
+        .theme-toggle {
+            background: none;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            transition: border-color 0.2s;
+        }
+        .theme-toggle:hover { border-color: var(--text-muted); }
+        [data-theme="light"] .theme-icon-dark { display: none; }
+        [data-theme="light"] .theme-icon-light { display: inline; }
+        [data-theme="dark"] .theme-icon-dark,
+        :root:not([data-theme]) .theme-icon-dark { display: inline; }
+        [data-theme="dark"] .theme-icon-light,
+        :root:not([data-theme]) .theme-icon-light { display: none; }
 
         .farm-stats {
             display: flex;
@@ -183,10 +232,10 @@
             letter-spacing: 0.5px;
         }
 
-        .status-badge-running { background: rgba(59,130,246,0.15); color: var(--info); }
-        .status-badge-idle, .status-badge-finish { background: rgba(34,197,94,0.15); color: var(--accent); }
-        .status-badge-paused { background: rgba(245,158,11,0.15); color: var(--warning); }
-        .status-badge-failed, .status-badge-pause_filament { background: rgba(239,68,68,0.15); color: var(--danger); }
+        .status-badge-running { background: var(--info-dim); color: var(--info); }
+        .status-badge-idle, .status-badge-finish { background: var(--accent-dim); color: var(--accent); }
+        .status-badge-paused { background: var(--warning-dim); color: var(--warning); }
+        .status-badge-failed, .status-badge-pause_filament { background: var(--danger-dim); color: var(--danger); }
         .status-badge-unknown { background: rgba(107,114,128,0.15); color: var(--idle); }
 
         .printer-job {
@@ -349,7 +398,7 @@
         }
 
         .ams-tray:hover { border-color: var(--text-muted); }
-        .ams-tray.active { border-color: var(--accent); box-shadow: 0 0 6px rgba(34,197,94,0.3); }
+        .ams-tray.active { border-color: var(--accent); box-shadow: 0 0 6px var(--accent-glow); }
         .ams-tray.empty { opacity: 0.4; cursor: default; }
 
         .ams-tray-edit {
@@ -443,7 +492,7 @@
         }
 
         .mmu-gate:hover { border-color: var(--text-muted); }
-        .mmu-gate.active { border-color: var(--accent); box-shadow: 0 0 6px rgba(34,197,94,0.3); }
+        .mmu-gate.active { border-color: var(--accent); box-shadow: 0 0 6px var(--accent-glow); }
         .mmu-gate.empty { opacity: 0.4; }
 
         .mmu-gate-swatch {
@@ -486,8 +535,8 @@
             font-weight: 600;
         }
 
-        .mmu-tag.loaded { background: rgba(34,197,94,0.15); color: var(--accent); }
-        .mmu-tag.unloaded { background: rgba(239,68,68,0.15); color: var(--danger); }
+        .mmu-tag.loaded { background: var(--accent-dim); color: var(--accent); }
+        .mmu-tag.unloaded { background: var(--danger-dim); color: var(--danger); }
         .mmu-tag.unknown { background: rgba(255,255,255,0.08); color: var(--text-muted); }
 
         /* Obico AI Detection Section */
@@ -850,11 +899,11 @@
             border-radius: 12px;
         }
 
-        .job-queued { background: rgba(59,130,246,0.15); color: var(--info); }
-        .job-printing { background: rgba(34,197,94,0.15); color: var(--accent); }
+        .job-queued { background: var(--info-dim); color: var(--info); }
+        .job-printing { background: var(--accent-dim); color: var(--accent); }
         .job-completed { background: rgba(107,114,128,0.15); color: var(--idle); }
-        .job-failed { background: rgba(239,68,68,0.15); color: var(--danger); }
-        .job-cancelled { background: rgba(245,158,11,0.15); color: var(--warning); }
+        .job-failed { background: var(--danger-dim); color: var(--danger); }
+        .job-cancelled { background: var(--warning-dim); color: var(--warning); }
         .job-uploading { background: rgba(168,85,247,0.15); color: #a855f7; }
 
         .job-actions { display: flex; gap: 4px; }
@@ -895,7 +944,7 @@
         .viewer-overlay.active { display: flex; }
         .viewer-container {
             position: relative; width: 90vw; height: 90vh; max-width: 1200px;
-            background: #0f1117; border-radius: 16px; overflow: hidden;
+            background: var(--bg); border-radius: 16px; overflow: hidden;
             border: 1px solid var(--border);
         }
         .viewer-close {
@@ -919,6 +968,15 @@
     </style>
     <script src="{{ prefix }}/static/three.min.js"></script>
 </head>
+<script>
+    // Apply theme before paint to prevent flash
+    (function() {
+        const saved = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const theme = saved || (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+    })();
+</script>
 <body>
     <div class="header">
         <h1>
@@ -933,6 +991,10 @@
                 <div class="farm-stat"><span class="dot dot-idle"></span> <span id="statIdle">0</span> Idle</div>
                 <div class="farm-stat"><span class="dot dot-error"></span> <span id="statErrored">0</span> Error</div>
             </div>
+            <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark theme">
+                <span class="theme-icon-dark">🌛</span>
+                <span class="theme-icon-light">🔆</span>
+            </button>
             <div id="authArea">
                 <button class="btn" id="loginBtn" onclick="showLoginModal()" style="font-size:12px; padding:4px 12px;">Login</button>
             </div>
@@ -1479,7 +1541,7 @@
         .detail-label { font-size: 13px; color: var(--text-muted); font-weight: 500; }
         .detail-value { font-size: 14px; display: flex; align-items: center; gap: 8px; }
         .detail-value code {
-            background: rgba(34,197,94,0.1); color: var(--accent);
+            background: var(--accent-dim); color: var(--accent);
             padding: 4px 10px; border-radius: 4px; font-size: 13px;
             user-select: all;
         }
@@ -1555,6 +1617,15 @@
 
     <script>
         const BASE = '{{ prefix }}';
+
+        // ── Theme Toggle ─────────────────────────────────────
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('theme', next);
+        }
+
         let isAdmin = false;
         let isAuthenticated = false;
         let userRole = null;
