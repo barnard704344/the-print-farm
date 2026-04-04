@@ -213,7 +213,8 @@ Type=simple
 User=${SVC_USER}
 Group=${SVC_GROUP}
 WorkingDirectory=${SCRIPT_DIR}
-ExecStart=${SCRIPT_DIR}/venv/bin/python -m src.main
+ExecStart=${SCRIPT_DIR}/venv/bin/python -u -m src.main
+Environment=PYTHONUNBUFFERED=1
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
@@ -229,7 +230,7 @@ ok "Service installed (the-print-farm.service)"
 
 # ── Apache reverse proxy ─────────────────────────────────
 info "Configuring Apache reverse proxy..."
-a2enmod proxy proxy_http proxy_wstunnel > /dev/null 2>&1 || true
+a2enmod proxy proxy_http proxy_wstunnel rewrite > /dev/null 2>&1 || true
 
 # Determine the web port from config
 WEB_PORT=$(python3 -c "
@@ -262,13 +263,69 @@ if ! grep -q "the-print-farm proxy" "$APACHE_CONF" 2>/dev/null; then
 \t# the-print-farm proxy\
 \tProxyPreserveHost On\
 \tProxyPass /the-print-farm http://127.0.0.1:'"${WEB_PORT}"'\
-\tProxyPassReverse /the-print-farm http://127.0.0.1:'"${WEB_PORT}"'' "$APACHE_CONF"
+\tProxyPassReverse /the-print-farm http://127.0.0.1:'"${WEB_PORT}"'\
+\t# OrcaSlicer OctoPrint-compat (allows hostname-only config without path prefix)\
+\tProxyPass /api http://127.0.0.1:'"${WEB_PORT}"'/api\
+\tProxyPassReverse /api http://127.0.0.1:'"${WEB_PORT}"'/api' "$APACHE_CONF"
     ok "Apache proxy configured at /the-print-farm"
 else
     ok "Apache proxy already configured"
 fi
 
 systemctl restart apache2 2>/dev/null || warn "Could not restart Apache — start it manually"
+
+# ── Per-printer OrcaSlicer ports ─────────────────────────
+info "Configuring per-printer OrcaSlicer ports..."
+python3 -c "
+import yaml, re, subprocess, os
+config_path = '${SCRIPT_DIR}/config/config.yaml'
+with open(config_path) as f:
+    config = yaml.safe_load(f) or {}
+printers = config.get('printers') or []
+if not printers:
+    print('  No printers configured — skipping')
+else:
+    # Auto-assign orca_port to any printer missing one
+    used_ports = {p.get('orca_port') for p in printers if p.get('orca_port')}
+    changed = False
+    for p in printers:
+        if not p.get('orca_port'):
+            port = 5001
+            while port in used_ports:
+                port += 1
+            p['orca_port'] = port
+            used_ports.add(port)
+            changed = True
+    if changed:
+        with open(config_path, 'w') as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+    # Read ports.conf to see what's already listening
+    with open('/etc/apache2/ports.conf') as f:
+        ports_content = f.read()
+
+    for p in printers:
+        name = p['name']
+        port = p.get('orca_port')
+        if not port:
+            continue
+        safe = re.sub(r'[^a-zA-Z0-9_-]', '-', name).lower()
+        conf_path = f'/etc/apache2/sites-available/printer-{safe}.conf'
+        with open(conf_path, 'w') as f:
+            f.write(f'<VirtualHost *:{port}>\n')
+            f.write(f'    # OrcaSlicer per-printer proxy: {name}\n')
+            f.write(f'    ProxyPass /api http://127.0.0.1:${WEB_PORT}/{name}/api\n')
+            f.write(f'    ProxyPassReverse /api http://127.0.0.1:${WEB_PORT}/{name}/api\n')
+            f.write(f'</VirtualHost>\n')
+        subprocess.run(['a2ensite', f'printer-{safe}'], capture_output=True)
+        if f'Listen {port}' not in ports_content:
+            with open('/etc/apache2/ports.conf', 'a') as f:
+                f.write(f'\nListen {port}\n')
+            ports_content += f'\nListen {port}\n'
+        print(f'  {name} -> port {port}')
+    subprocess.run(['systemctl', 'reload', 'apache2'], capture_output=True)
+" 2>/dev/null
+ok "Per-printer OrcaSlicer ports configured"
 
 # ── Permissions ──────────────────────────────────────────
 info "Setting permissions..."

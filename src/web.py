@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import secrets
+import subprocess
 import threading
 import time
 import uuid
@@ -70,6 +71,65 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
         with open(config_path, "w") as f:
             yaml.dump(app_config, f, default_flow_style=False, sort_keys=False)
+
+    def _next_orca_port():
+        """Return the next available OrcaSlicer port (starting at 5001)."""
+        used = {p.get("orca_port") for p in app_config.get("printers", []) if p.get("orca_port")}
+        port = 5001
+        while port in used:
+            port += 1
+        return port
+
+    def _create_orca_vhost(printer_name, port):
+        """Create an Apache VirtualHost for a per-printer OrcaSlicer port."""
+        safe_name = re.sub(r'[^a-zA-Z0-9_-]', '-', printer_name).lower()
+        conf_name = f"printer-{safe_name}"
+        conf_path = f"/etc/apache2/sites-available/{conf_name}.conf"
+        vhost = (
+            f"<VirtualHost *:{port}>\n"
+            f"    # OrcaSlicer per-printer proxy: {printer_name}\n"
+            f"    ProxyPass /api http://127.0.0.1:5000/{printer_name}/api\n"
+            f"    ProxyPassReverse /api http://127.0.0.1:5000/{printer_name}/api\n"
+            f"</VirtualHost>\n"
+        )
+        try:
+            with open(conf_path, "w") as f:
+                f.write(vhost)
+            # Add Listen directive if not already present
+            ports_conf = "/etc/apache2/ports.conf"
+            with open(ports_conf) as f:
+                ports_content = f.read()
+            if f"Listen {port}" not in ports_content:
+                with open(ports_conf, "a") as f:
+                    f.write(f"\nListen {port}\n")
+            subprocess.run(["a2ensite", conf_name], capture_output=True)
+            subprocess.run(["systemctl", "reload", "apache2"], capture_output=True)
+            logger.info(f"Created Apache vhost for {printer_name} on port {port}")
+        except Exception as e:
+            logger.error(f"Failed to create Apache vhost for {printer_name}: {e}")
+
+    def _remove_orca_vhost(printer_name, port):
+        """Remove the Apache VirtualHost for a printer."""
+        safe_name = re.sub(r'[^a-zA-Z0-9_-]', '-', printer_name).lower()
+        conf_name = f"printer-{safe_name}"
+        try:
+            subprocess.run(["a2dissite", conf_name], capture_output=True)
+            conf_path = f"/etc/apache2/sites-available/{conf_name}.conf"
+            if os.path.exists(conf_path):
+                os.remove(conf_path)
+            # Remove Listen directive
+            if port:
+                ports_conf = "/etc/apache2/ports.conf"
+                with open(ports_conf) as f:
+                    lines = f.readlines()
+                with open(ports_conf, "w") as f:
+                    for line in lines:
+                        if line.strip() != f"Listen {port}":
+                            f.write(line)
+            subprocess.run(["systemctl", "reload", "apache2"], capture_output=True)
+            logger.info(f"Removed Apache vhost for {printer_name}")
+        except Exception as e:
+            logger.error(f"Failed to remove Apache vhost for {printer_name}: {e}")
 
     def is_admin():
         """True when user has staff role (AD) or legacy admin session."""
@@ -250,14 +310,22 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     # ── Farm API ──────────────────────────────────────────
 
+    def _get_printer_orca_port(printer_name):
+        """Get the OrcaSlicer port for a printer from config."""
+        for p in app_config.get("printers", []):
+            if p.get("name") == printer_name:
+                return p.get("orca_port")
+        return None
+
     @app.route(prefix + "/api/farm/status")
     @app.route("/api/farm/status")
     def farm_status():
         """Full status of all printers + farm summary."""
         states = farm_manager.get_all_states()
-        # Merge staff_only flag from config into each printer state
+        # Merge staff_only flag and orca_port from config into each printer state
         for name in states:
             states[name]["staff_only"] = _is_staff_only_printer(name)
+            states[name]["orca_port"] = _get_printer_orca_port(name)
         return jsonify({
             "summary": farm_manager.get_farm_summary(),
             "printers": states,
@@ -1007,10 +1075,16 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                     new_printer["api_key"] = api_key
                 if camera_url:
                     new_printer["camera_url"] = camera_url
+                orca_port = _next_orca_port()
+                new_printer["orca_port"] = orca_port
                 config["printers"].append(new_printer)
 
                 with open(config_path, "w") as f:
                     yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+                # Update live config
+                app_config["printers"] = config["printers"]
+
+                _create_orca_vhost(name, orca_port)
 
                 # Hot-add
                 from .klipper_client import KlipperClient
@@ -1058,10 +1132,16 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 }
                 if ams_serial:
                     new_printer["ams_serial"] = ams_serial
+                orca_port = _next_orca_port()
+                new_printer["orca_port"] = orca_port
                 config["printers"].append(new_printer)
 
                 with open(config_path, "w") as f:
                     yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+                # Update live config
+                app_config["printers"] = config["printers"]
+
+                _create_orca_vhost(name, orca_port)
 
                 # Hot-add
                 from .bambu_client import BambuClient
@@ -1103,9 +1183,19 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         try:
             with open(config_path) as f:
                 config = yaml.safe_load(f) or {}
+            # Find the printer entry to get its orca_port before removing
+            orca_port = None
+            for p in (config.get("printers") or []):
+                if p.get("name") == name:
+                    orca_port = p.get("orca_port")
+                    break
             config["printers"] = [p for p in (config.get("printers") or []) if p.get("name") != name]
             with open(config_path, "w") as f:
                 yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+            app_config["printers"] = config["printers"]
+
+            _remove_orca_vhost(name, orca_port)
+
             return jsonify({"ok": True, "message": f"Printer '{name}' removed"})
         except Exception as e:
             return jsonify({"ok": False, "message": str(e)}), 500
@@ -1159,12 +1249,21 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         try:
             with open(config_path) as f:
                 config = yaml.safe_load(f) or {}
+            orca_port = None
             for p in config.get("printers", []):
                 if p.get("name") == old_name:
                     p["name"] = new_name
+                    orca_port = p.get("orca_port")
                     break
             with open(config_path, "w") as f:
                 yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+            app_config["printers"] = config["printers"]
+
+            # Recreate Apache vhost with new name
+            if orca_port:
+                _remove_orca_vhost(old_name, None)  # Don't remove the Listen port
+                _create_orca_vhost(new_name, orca_port)
+
             return jsonify({"ok": True, "message": f"Printer renamed to '{new_name}'"})
         except Exception as e:
             logger.error(f"Failed to rename printer in config: {e}")
@@ -1537,7 +1636,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         return jsonify({
             "api": "0.1",
             "server": "1.10.0",
-            "text": "The Print Farm (OctoPrint-compat)",
+            "text": "OctoPrint 1.10.0 (The Print Farm)",
         })
 
     @app.route(prefix + "/api/connection")
@@ -1584,6 +1683,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     @app.route("/api/files/local", methods=["POST"])
     @app.route(prefix + "/api/files/local/<printer_target>", methods=["POST"])
     @app.route("/api/files/local/<printer_target>", methods=["POST"])
+    @app.route("/<printer_target>/api/files/local", methods=["POST"])
     def octoprint_upload(printer_target=None):
         """OctoPrint file upload — receives G-code from OrcaSlicer.
         
@@ -1640,14 +1740,13 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 logger.warning(f"OrcaSlicer upload: failed to add to library: {e}")
 
         # If a printer target is specified (per-printer virtual printer),
-        # assign immediately and start the print
+        # assign to that printer but don't auto-send — user sends manually
         if printer_target:
-            ok = job_queue.assign_job(job_id, printer_target)
-            if ok:
-                t = threading.Thread(
-                    target=_send_job_to_printer,
-                    args=(job_id, printer_target), daemon=True)
-                t.start()
+            client = farm_manager.get_printer(printer_target)
+            if not client:
+                job_queue.cancel_job(job_id)
+                return jsonify({"error": f"Printer '{printer_target}' not found"}), 404
+            job_queue.assign_job(job_id, printer_target)
 
         logger.info(f"OrcaSlicer upload: {original_name} -> job {job_id}"
                     f" (print={print_flag}, printer={printer_target or 'queue'})")
@@ -1668,17 +1767,19 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     # Per-printer OctoPrint compat routes (version/connection/printer)
     @app.route(prefix + "/api/version/<printer_target>")
     @app.route("/api/version/<printer_target>")
+    @app.route("/<printer_target>/api/version")
     def octoprint_version_printer(printer_target):
         p = farm_manager.get_printer(printer_target)
         name = printer_target if p else "Unknown"
         return jsonify({
             "api": "0.1",
             "server": "1.10.0",
-            "text": f"The Print Farm — {name}",
+            "text": f"OctoPrint 1.10.0 ({name})",
         })
 
     @app.route(prefix + "/api/connection/<printer_target>")
     @app.route("/api/connection/<printer_target>")
+    @app.route("/<printer_target>/api/connection")
     def octoprint_connection_printer(printer_target):
         p = farm_manager.get_printer(printer_target)
         connected = p.is_connected() if p else False
@@ -1698,6 +1799,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/printer/<printer_target>")
     @app.route("/api/printer/<printer_target>")
+    @app.route("/<printer_target>/api/printer")
     def octoprint_printer_target(printer_target):
         p = farm_manager.get_printer(printer_target)
         connected = p.is_connected() if p else False

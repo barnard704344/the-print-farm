@@ -76,7 +76,7 @@ class FarmManager:
             t.start()
 
         for t in threads:
-            t.join()
+            t.join(timeout=timeout + 5)
 
         connected = sum(1 for v in results.values() if v)
         logger.info(f"Farm: {connected}/{len(results)} printers connected")

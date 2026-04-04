@@ -8,7 +8,8 @@ Type=simple
 User=root
 Group=root
 WorkingDirectory=/root/the-print-farm
-ExecStart=/root/the-print-farm/venv/bin/python -m src.main
+ExecStart=/root/the-print-farm/venv/bin/python -u -m src.main
+Environment=PYTHONUNBUFFERED=1
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal

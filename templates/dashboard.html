@@ -1254,6 +1254,19 @@
 
         <!-- Settings Tab (Admin only) -->
         <div class="tab-content" id="tab-settings">
+            <!-- API Key -->
+            <div class="setup-section" style="max-width:700px; margin-bottom:24px;">
+                <h3 style="margin-bottom:16px;">API Key</h3>
+                <p style="color:var(--text-muted); font-size:13px; margin-bottom:12px;">
+                    Use this key to connect OrcaSlicer, external scripts, or the REST API.
+                </p>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="text" id="apiKeyDisplay" readonly class="ad-input" style="flex:1; font-family:monospace; letter-spacing:1px;">
+                    <button class="btn" onclick="copyApiKey()" title="Copy to clipboard" style="white-space:nowrap;">📋 Copy</button>
+                </div>
+                <div id="apiKeyCopied" style="font-size:12px; color:var(--accent); margin-top:4px; display:none;">Copied to clipboard</div>
+            </div>
+
             <div class="setup-section" style="max-width:700px;">
                 <h3 style="margin-bottom:16px;">Active Directory Configuration</h3>
                 <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
@@ -1938,6 +1951,19 @@
             updateAuthUI();
         }
 
+        // ── API Key Display ───────────────────────────────────
+        function loadApiKey() {
+            document.getElementById('apiKeyDisplay').value = '{{ api_key }}';
+        }
+        function copyApiKey() {
+            const key = document.getElementById('apiKeyDisplay').value;
+            navigator.clipboard.writeText(key).then(() => {
+                const msg = document.getElementById('apiKeyCopied');
+                msg.style.display = '';
+                setTimeout(() => msg.style.display = 'none', 2000);
+            });
+        }
+
         // ── AD Settings ──────────────────────────────────────
         async function loadADConfig() {
             try {
@@ -2247,7 +2273,7 @@
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 tab.classList.add('active');
                 document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
-                if (tab.dataset.tab === 'settings') { loadADConfig(); populateObicoPrinterDropdown(); loadSpoolmanConfig(); }
+                if (tab.dataset.tab === 'settings') { loadApiKey(); loadADConfig(); populateObicoPrinterDropdown(); loadSpoolmanConfig(); }
                 if (tab.dataset.tab === 'library') refreshLibrary();
             });
         });
@@ -2342,6 +2368,7 @@
                             <input type="checkbox" ${p.staff_only ? 'checked' : ''} onchange="toggleStaffOnly('${name}', this.checked)"> Staff only
                         </label>
                     </div>` : ''}
+                    ${p.orca_port ? `<div style="padding:2px 8px;font-size:10px;color:var(--text-muted);">OrcaSlicer: <span style="color:var(--accent);user-select:all;cursor:text;">${location.hostname}:${p.orca_port}</span></div>` : ''}
                     <div class="printer-job" data-field="job">${p.subtask_name || 'No active job'}</div>
                     <div class="progress-bar-container">
                         <div class="progress-bar" data-field="progress" style="width:${isRunning || isPaused ? p.mc_percent : 0}%"></div>
