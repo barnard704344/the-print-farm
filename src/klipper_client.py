@@ -318,7 +318,7 @@ class KlipperClient:
         params = {
             "heater_bed": "temperature,target",
             "extruder": "temperature,target,pressure_advance",
-            "print_stats": "state,filename,total_duration,print_duration,filament_used,message",
+            "print_stats": "state,filename,total_duration,print_duration,filament_used,message,info",
             "display_status": "progress,message",
             "virtual_sdcard": "progress,file_position,file_path",
             "fan": "speed",
@@ -354,6 +354,11 @@ class KlipperClient:
                 raw_filename = raw_filename[33:]
             self._state.subtask_name = raw_filename
             self._state.gcode_file = raw_filename
+
+            # Layer count from print_stats.info (SET_PRINT_STATS_INFO)
+            ps_info = ps.get("info", {}) or {}
+            self._state.layer_num = ps_info.get("current_layer") or 0
+            self._state.total_layers = ps_info.get("total_layer") or 0
 
             # Progress
             ds = result.get("display_status", {})
