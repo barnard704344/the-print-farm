@@ -1740,13 +1740,18 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 logger.warning(f"OrcaSlicer upload: failed to add to library: {e}")
 
         # If a printer target is specified (per-printer virtual printer),
-        # assign to that printer but don't auto-send — user sends manually
+        # tag the job with that printer but keep it queued — user sends manually
         if printer_target:
             client = farm_manager.get_printer(printer_target)
             if not client:
                 job_queue.cancel_job(job_id)
                 return jsonify({"error": f"Printer '{printer_target}' not found"}), 404
-            job_queue.assign_job(job_id, printer_target)
+            # Set printer_name without changing status from 'queued'
+            conn = job_queue._get_conn()
+            conn.execute("UPDATE jobs SET printer_name = ? WHERE id = ?",
+                         (printer_target, job_id))
+            conn.commit()
+            conn.close()
 
         logger.info(f"OrcaSlicer upload: {original_name} -> job {job_id}"
                     f" (print={print_flag}, printer={printer_target or 'queue'})")

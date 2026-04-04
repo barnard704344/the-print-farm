@@ -3076,7 +3076,10 @@
             const canReprint = isAdmin || isOwner;
 
             let assignBtn = '';
-            if (canAssign && availablePrinters.length > 0) {
+            if (canAssign && job.printer_name) {
+                // Job is pre-assigned to a specific printer (uploaded via per-printer port)
+                assignBtn = `<button class="btn btn-success" onclick="sendToAssigned(${job.id}, '${job.printer_name}')">Send to ${job.printer_name}</button>`;
+            } else if (canAssign && availablePrinters.length > 0) {
                 const checkboxes = availablePrinters.map(p =>
                     `<label><input type="checkbox" value="${p.name}"> ${p.name} <span class="send-dropdown-status">(${p.status.toLowerCase()})</span></label>`
                 ).join('');
@@ -3169,6 +3172,27 @@
 
             dd.classList.remove('open');
             await apiPost(`${BASE}/api/jobs/${jobId}/assign`, { printers: checked });
+            refreshJobs();
+        }
+
+        async function sendToAssigned(jobId, printerName) {
+            // Check filament compatibility
+            try {
+                const res = await fetch(`${BASE}/api/jobs/${jobId}/check_filament`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ printer: printerName }),
+                });
+                const check = await res.json();
+                if (check.ok && !check.match && check.details) {
+                    const issues = check.details.filter(d => !d.match).map(d => d.reason);
+                    if (issues.length) {
+                        const proceed = confirm(`⚠️ Filament mismatch:\n\n${printerName}: ${issues.join(', ')}\n\nSend anyway?`);
+                        if (!proceed) return;
+                    }
+                }
+            } catch (e) {}
+            await apiPost(`${BASE}/api/jobs/${jobId}/assign`, { printers: [printerName] });
             refreshJobs();
         }
 
