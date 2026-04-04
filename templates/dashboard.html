@@ -1158,95 +1158,128 @@
             <div class="orca-setup">
                 <h2 style="font-size:18px; margin-bottom:20px;">Send G-code from OrcaSlicer to the Print Farm</h2>
 
+                <!-- Method 1: Virtual Printer (Recommended) -->
                 <div class="setup-section">
-                    <h3>1. Download the Upload Script</h3>
-                    <p style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">
-                        This script runs automatically after OrcaSlicer finishes slicing and sends the G-code to the farm's job queue.
+                    <h3>Virtual Printer Setup (Recommended)</h3>
+                    <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">
+                        Add the farm as a network printer in OrcaSlicer. Slice and send directly — no scripts needed.<br>
+                        Works with <strong>any printer profile</strong> (BambuLab, Klipper, Voron, etc.)
                     </p>
-                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                        <a class="btn btn-primary" id="dlBat" download="upload_to_farm.bat" style="text-decoration:none;">
-                            &#11015; Download Script (.bat)
-                        </a>
-                    </div>
-                    <p style="font-size:11px; color:var(--text-muted); margin-top:8px;">
-                        No PowerShell or Python needed — it uses <code>curl</code> which is built into Windows.
-                    </p>
-                </div>
 
-                <div class="setup-section">
-                    <h3>2. Setup in OrcaSlicer</h3>
                     <div class="setup-steps">
                         <div class="step">
                             <div class="step-num">1</div>
                             <div class="step-text">
-                                <strong>Save the script</strong><br>
-                                Download the script above and save it somewhere permanent, e.g.<br>
-                                Leave it in your <code>Downloads</code> folder (default download location).
+                                <strong>Open Physical Printer Settings</strong><br>
+                                In the left sidebar, click the <strong>printer dropdown</strong>, then click the <strong>edit/gear icon</strong> next to the physical printer name to open the connection dialog.
                             </div>
                         </div>
                         <div class="step">
                             <div class="step-num">2</div>
                             <div class="step-text">
-                                <strong>Open Post-Processing Scripts</strong><br>
-                                First, make sure OrcaSlicer is in <strong>Advanced</strong> or <strong>Expert</strong> mode (top-right corner dropdown — it's hidden in Simple mode).<br>
-                                Then click the <strong>pencil/edit icon</strong> next to your print profile name to open the <strong>Process</strong> settings.<br>
-                                Click the <strong>Others</strong> sub-tab at the top of the settings panel, then scroll to the bottom to find <strong>Post-processing Scripts</strong>.
+                                <strong>Set Host Type to Octo/Klipper</strong><br>
+                                Change the <strong>Host Type</strong> dropdown to <code>Octo/Klipper</code><br>
+                                <span style="font-size:11px; color:var(--text-muted);">This works for all printers including BambuLab — it's just the protocol OrcaSlicer uses to talk to the farm.</span>
                             </div>
                         </div>
                         <div class="step">
                             <div class="step-num">3</div>
                             <div class="step-text">
-                                <strong>Add the script command</strong><br>
-                                Paste this into the Post-processing Scripts box:<br><br>
-                                <strong>Windows:</strong>
-                                <div class="script-box">
-                                    <code id="cmdPs">C:\Windows\System32\cmd.exe /c C:\Users\USERNAME\Downloads\upload_to_farm.bat</code>
-                                    <button class="btn-copy" onclick="copyText(document.getElementById('cmdPs').textContent)" title="Copy">&#128203;</button>
-                                </div>
-                                <span id="cmdPsHint" style="font-size:11px; color:var(--text-muted);">Replace <strong>USERNAME</strong> with your Windows username (e.g. <code>C:\Windows\System32\cmd.exe /c C:\Users\rob.barnard\Downloads\upload_to_farm.bat</code>).</span>
+                                <strong>Enter Hostname &amp; API Key</strong><br>
+                                Copy the <strong>Hostname</strong> and <strong>API Key</strong> from the table below for the printer you want to target.
                             </div>
                         </div>
                         <div class="step">
                             <div class="step-num">4</div>
                             <div class="step-text">
-                                <strong>Slice as normal</strong><br>
-                                Click <em>"Slice"</em> in OrcaSlicer. After slicing completes, the script will automatically upload the G-code to the farm. You'll see a confirmation in OrcaSlicer's console log.
+                                <strong>Test &amp; Print</strong><br>
+                                Click <strong>Test</strong> to verify the connection. Then slice as normal and click the <strong>upload/print icon</strong> to send the G-code to the farm.
                             </div>
                         </div>
+                    </div>
+
+                    <div style="background:var(--card-bg); border:1px solid var(--border); border-radius:8px; padding:12px 16px; margin-top:16px;">
+                        <strong style="font-size:13px;">&#9888; BambuLab printers — extra steps</strong>
+                        <p style="font-size:12px; color:var(--text-muted); margin:6px 0 0;">
+                            BambuLab printer profiles hide the Host Type field by default. You need to enable it first:
+                        </p>
+                        <ol style="font-size:12px; color:var(--text-muted); margin:8px 0 0; padding-left:20px; line-height:1.8;">
+                            <li>Click the <strong>edit icon</strong> next to the printer <em>profile</em> name (e.g. "Bambu Lab P1S 0.4 nozzle") to open <strong>Printer Settings</strong></li>
+                            <li>Go to <strong>Basic Information → Advanced</strong> and tick <strong>"Use 3rd-party print host"</strong></li>
+                            <li>Close the Printer Settings dialog</li>
+                            <li>Now in the <strong>left sidebar printer dropdown</strong>, click the <strong>edit/gear icon</strong> next to the <em>physical printer</em> name (not the profile) — or look for <strong>"Edit Physical Printer"</strong></li>
+                            <li>This opens the connection dialog with Host Type, Hostname, and API Key fields — continue from step 2 above</li>
+                        </ol>
                     </div>
                 </div>
 
                 <div class="setup-section">
                     <h3>Connection Details</h3>
-                    <div class="setup-details">
-                        <div class="detail-row">
-                            <span class="detail-label">Farm URL</span>
-                            <span class="detail-value">
-                                <code id="orcaHost"></code>
-                                <button class="btn-copy" onclick="copyText(document.getElementById('orcaHost').textContent)" title="Copy">&#128203;</button>
-                            </span>
-                        </div>
-                        <div class="detail-row">
-                            <span class="detail-label">API Key</span>
-                            <span class="detail-value">
-                                <code id="orcaApiKey">{{ api_key }}</code>
-                                <button class="btn-copy" onclick="copyText(document.getElementById('orcaApiKey').textContent)" title="Copy">&#128203;</button>
-                            </span>
-                        </div>
-                    </div>
-                    <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">
-                        These are pre-configured in the download scripts. Only change them if you move the server.
+                    <table style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:12px;">
+                        <thead>
+                            <tr style="text-align:left; color:var(--text-muted); border-bottom:1px solid var(--border);">
+                                <th style="padding:6px 8px;">Printer</th>
+                                <th style="padding:6px 8px;">Hostname</th>
+                                <th style="padding:6px 8px;">API Key</th>
+                                <th style="padding:6px 8px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="orca-printer-table"></tbody>
+                    </table>
+                    <p style="font-size:11px; color:var(--text-muted);">
+                        Each printer has its own port. Jobs sent to a specific printer appear in the queue pre-assigned — send them to the machine from the Job Queue tab when ready.
                     </p>
+                </div>
+
+                <div class="setup-section" style="border-top:1px solid var(--border); padding-top:16px; margin-top:8px;">
+                    <h3 style="color:var(--text-muted);">Upload Script (Legacy)</h3>
+                    <p style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">
+                        Alternative method: a post-processing script that uploads G-code after every slice. Jobs go to the general queue (not a specific printer).
+                    </p>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                        <a class="btn" id="dlBat" download="upload_to_farm.bat" style="text-decoration:none;">
+                            &#11015; Download Script (.bat)
+                        </a>
+                    </div>
+                    <details style="margin-top:12px;">
+                        <summary style="font-size:13px; color:var(--text-muted); cursor:pointer;">Script setup instructions</summary>
+                        <div class="setup-steps" style="margin-top:12px;">
+                            <div class="step">
+                                <div class="step-num">1</div>
+                                <div class="step-text">
+                                    <strong>Save the script</strong> to a permanent location (e.g. your Downloads folder).
+                                </div>
+                            </div>
+                            <div class="step">
+                                <div class="step-num">2</div>
+                                <div class="step-text">
+                                    <strong>Open Post-Processing Scripts</strong> in OrcaSlicer:<br>
+                                    Switch to <strong>Advanced</strong> or <strong>Expert</strong> mode, click the edit icon next to your print profile,
+                                    go to <strong>Others</strong> tab, scroll to <strong>Post-processing Scripts</strong>.
+                                </div>
+                            </div>
+                            <div class="step">
+                                <div class="step-num">3</div>
+                                <div class="step-text">
+                                    <strong>Paste:</strong>
+                                    <div class="script-box">
+                                        <code id="cmdPs">C:\Windows\System32\cmd.exe /c C:\Users\USERNAME\Downloads\upload_to_farm.bat</code>
+                                        <button class="btn-copy" onclick="copyText(document.getElementById('cmdPs').textContent)" title="Copy">&#128203;</button>
+                                    </div>
+                                    <span style="font-size:11px; color:var(--text-muted);">Replace <strong>USERNAME</strong> with your Windows username.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
                 </div>
 
                 <div class="setup-section">
                     <h3>Notes</h3>
                     <ul class="setup-notes">
-                        <li>The script runs after every slice — uploaded files appear in the <strong>Job Queue</strong> tab.</li>
-                        <li>Only <code>.gcode</code> files are uploaded. OrcaSlicer passes the file path automatically.</li>
-                        <li>The script is <strong>silent on success</strong> in OrcaSlicer — check the Job Queue to confirm.</li>
-                        <li>Make sure your computer can reach <code id="orcaHostNote"></code> on the network.</li>
-                        <li>You can also drag &amp; drop files directly into the <strong>Job Queue</strong> tab as an alternative.</li>
+                        <li>Jobs uploaded via a per-printer port are <strong>assigned to that printer</strong> but not auto-sent — click "Send" in the Job Queue when ready.</li>
+                        <li>Jobs uploaded to the general queue (port 80) are unassigned — send to any printer.</li>
+                        <li>The farm automatically wraps G-code in .3mf for BambuLab printers.</li>
+                        <li>You can also drag &amp; drop files directly into the <strong>Job Queue</strong> tab.</li>
                     </ul>
                 </div>
             </div>
@@ -2233,12 +2266,41 @@
 
         // ── OrcaSlicer hostname ──────────────────────────────
         const farmHost = `http://${location.hostname}:5000`;
-        document.getElementById('orcaHost').textContent = farmHost;
-        const hostNote = document.getElementById('orcaHostNote');
-        if (hostNote) hostNote.textContent = farmHost;
 
         // Set download links for client scripts
         document.getElementById('dlBat').href = `${BASE}/static/client/upload_to_farm.bat`;
+
+        // Populate per-printer connection table
+        async function populateOrcaPrinterTable() {
+            try {
+                const res = await fetch(BASE + '/api/farm/status');
+                const data = await res.json();
+                const apiKey = '{{ api_key }}';
+                const tbody = document.getElementById('orca-printer-table');
+                if (!tbody) return;
+                let rows = '';
+                // General queue row
+                rows += `<tr style="border-bottom:1px solid var(--border);">
+                    <td style="padding:8px;"><strong>General Queue</strong><br><span style="font-size:11px;color:var(--text-muted);">Any available printer</span></td>
+                    <td style="padding:8px;"><code style="user-select:all;">${location.hostname}</code></td>
+                    <td style="padding:8px;"><code style="user-select:all;font-size:11px;">${apiKey}</code></td>
+                    <td style="padding:8px;"><button class="btn" style="font-size:11px;" onclick="copyText('${location.hostname}')">Copy</button></td>
+                </tr>`;
+                // Per-printer rows
+                for (const [name, p] of Object.entries(data.printers || {})) {
+                    if (!p.orca_port) continue;
+                    const hostname = `${location.hostname}:${p.orca_port}`;
+                    rows += `<tr style="border-bottom:1px solid var(--border);">
+                        <td style="padding:8px;"><strong>${name}</strong><br><span style="font-size:11px;color:var(--text-muted);">${p.type || ''}</span></td>
+                        <td style="padding:8px;"><code style="user-select:all;">${hostname}</code></td>
+                        <td style="padding:8px;"><code style="user-select:all;font-size:11px;">${apiKey}</code></td>
+                        <td style="padding:8px;"><button class="btn" style="font-size:11px;" onclick="copyText('${hostname}')">Copy</button></td>
+                    </tr>`;
+                }
+                tbody.innerHTML = rows;
+            } catch (e) {}
+        }
+        populateOrcaPrinterTable();
 
 
         function updateOrcaSlicerCommand() {
