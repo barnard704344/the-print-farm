@@ -251,6 +251,11 @@ def cmd_run(args, config: dict):
                         remote_name = job["filename"]
                         printer_type = farm.get_printer_type(printer_name)
 
+                        # Use original name for Klipper so the printer shows
+                        # a clean filename instead of the UUID-prefixed one.
+                        if printer_type == "klipper" and job.get("original_name"):
+                            remote_name = job["original_name"]
+
                         # BambuLab printers need .gcode wrapped in .3mf
                         # Klipper printers take raw .gcode directly
                         if printer_type == "bambulab" and remote_name.lower().endswith(".gcode"):
