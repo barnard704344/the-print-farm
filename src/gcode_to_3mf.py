@@ -162,10 +162,15 @@ def parse_gcode_filaments(gcode_path: str) -> dict:
         fil for fil in meta["filaments"]
         if fil["slot"] in meta["used_slots"]
     ]
+    # For single-filament / non-AMS prints (no M620 commands),
+    # treat all defined filaments as used.
+    if not used_filaments and meta["filaments"]:
+        used_filaments = meta["filaments"]
     return {
         "filaments": meta["filaments"],
         "used_slots": meta["used_slots"],
         "used_filaments": used_filaments,
+        "filament_used_g": meta.get("filament_used_g", "0"),
     }
 
 

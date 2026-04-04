@@ -86,17 +86,23 @@ def _deduct_filament_usage(spoolman, job, farm):
         if not used_filaments:
             return
 
+        total_weight_g = float(info.get("filament_used_g", 0))
+        if total_weight_g <= 0:
+            logger.debug(f"No filament weight in gcode for job #{job.get('id')}, skipping Spoolman deduction")
+            return
+
         # Get spools assigned to this printer (location = printer name)
         printer_spools = spoolman.get_spools_by_location(printer_name)
         if not printer_spools:
             logger.debug(f"No Spoolman spools at location '{printer_name}', skipping usage deduction")
             return
 
+        # Split total weight across used filament slots
+        num_used = len(used_filaments)
+
         # For each used filament slot, try to match a spool and deduct weight
         for filament_info in used_filaments:
-            weight_g = filament_info.get("weight_g") or filament_info.get("weight")
-            if not weight_g or weight_g <= 0:
-                continue
+            weight_g = total_weight_g / num_used
 
             material = (filament_info.get("type") or filament_info.get("material") or "").upper()
 
