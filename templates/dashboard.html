@@ -3208,7 +3208,16 @@
         }
 
         async function jobAction(id, action) {
-            const method = action === 'delete' ? 'DELETE' : 'POST';
+            if (action === 'delete') {
+                const deleteLib = confirm('Also delete this file from the library?');
+                const method = 'DELETE';
+                const qs = deleteLib ? '?delete_library=true' : '';
+                await fetch(`${BASE}/api/jobs/${id}/${action}${qs}`, { method });
+                refreshJobs();
+                if (deleteLib) refreshLibrary();
+                return;
+            }
+            const method = 'POST';
             await fetch(`${BASE}/api/jobs/${id}/${action}`, { method });
             refreshJobs();
         }

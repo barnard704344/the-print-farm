@@ -348,8 +348,12 @@ class KlipperClient:
             klipper_state = ps.get("state", "standby")
             self._state.status = self._map_status(klipper_state)
             self._state.gcode_state = klipper_state
-            self._state.subtask_name = ps.get("filename", "")
-            self._state.gcode_file = ps.get("filename", "")
+            raw_filename = ps.get("filename", "")
+            # Strip UUID prefix (32 hex chars + underscore) added during upload
+            if len(raw_filename) > 33 and raw_filename[32] == "_" and all(c in "0123456789abcdef" for c in raw_filename[:32]):
+                raw_filename = raw_filename[33:]
+            self._state.subtask_name = raw_filename
+            self._state.gcode_file = raw_filename
 
             # Progress
             ds = result.get("display_status", {})

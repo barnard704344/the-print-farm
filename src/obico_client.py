@@ -118,9 +118,13 @@ class ObicoClient:
             # Get the latest prediction score from the current/latest print
             if current_print:
                 print_id = current_print.get("id")
+                raw_fn = current_print.get("filename", "")
+                # Strip UUID prefix (32 hex chars + underscore) added during upload
+                if len(raw_fn) > 33 and raw_fn[32] == "_" and all(c in "0123456789abcdef" for c in raw_fn[:32]):
+                    raw_fn = raw_fn[33:]
                 result["current_print"] = {
                     "id": print_id,
-                    "filename": current_print.get("filename", ""),
+                    "filename": raw_fn,
                     "started_at": current_print.get("started_at", ""),
                 }
                 if print_id:

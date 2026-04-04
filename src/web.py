@@ -611,6 +611,11 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             remote_name = job["filename"]
             printer_type = farm_manager.get_printer_type(printer_name)
 
+            # Use original name for Klipper so the printer shows
+            # a clean filename instead of the UUID-prefixed one.
+            if printer_type == "klipper" and job.get("original_name"):
+                remote_name = job["original_name"]
+
             # BambuLab printers need .gcode wrapped in .3mf
             # Klipper printers take raw .gcode directly
             if printer_type == "bambulab" and remote_name.lower().endswith(".gcode"):
@@ -834,6 +839,14 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             if printer:
                 printer.stop_print()
         ok = job_queue.delete_job(job_id)
+        # Optionally delete the matching library file
+        delete_lib = request.args.get("delete_library", "").lower() == "true"
+        if ok and delete_lib and file_library and job:
+            file_path = job.get("file_path", "")
+            if file_path:
+                lib_file = file_library.find_by_path(file_path)
+                if lib_file:
+                    file_library.delete_file(lib_file["id"])
         return jsonify({"ok": ok})
 
     # ── File Library API ──────────────────────────────────
@@ -1730,7 +1743,21 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             notes="Uploaded from OrcaSlicer",
         )
 
-        # Add to file library
+        # If a printer target is specified (per-printer virtual printer),
+        # tag the job with that printer immediately so it shows in the UI
+        # before the slow metadata parse below.
+        if printer_target:
+            client = farm_manager.get_printer(printer_target)
+            if not client:
+                job_queue.cancel_job(job_id)
+                return jsonify({"error": f"Printer '{printer_target}' not found"}), 404
+            conn = job_queue._get_conn()
+            conn.execute("UPDATE jobs SET printer_name = ? WHERE id = ?",
+                         (printer_target, job_id))
+            conn.commit()
+            conn.close()
+
+        # Add to file library (metadata parsing can be slow on large gcode files)
         if file_library:
             try:
                 meta = parse_gcode_metadata(file_path)
@@ -1744,20 +1771,6 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 )
             except Exception as e:
                 logger.warning(f"OrcaSlicer upload: failed to add to library: {e}")
-
-        # If a printer target is specified (per-printer virtual printer),
-        # tag the job with that printer but keep it queued — user sends manually
-        if printer_target:
-            client = farm_manager.get_printer(printer_target)
-            if not client:
-                job_queue.cancel_job(job_id)
-                return jsonify({"error": f"Printer '{printer_target}' not found"}), 404
-            # Set printer_name without changing status from 'queued'
-            conn = job_queue._get_conn()
-            conn.execute("UPDATE jobs SET printer_name = ? WHERE id = ?",
-                         (printer_target, job_id))
-            conn.commit()
-            conn.close()
 
         logger.info(f"OrcaSlicer upload: {original_name} -> job {job_id}"
                     f" (print={print_flag}, printer={printer_target or 'queue'})")

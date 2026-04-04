@@ -7,12 +7,13 @@ A web-based print farm manager for **BambuLab** and **Klipper** 3D printers. Mon
 - **Multi-printer support** — BambuLab (P1S, X1C, A1) via MQTT/FTPS and Klipper via Moonraker HTTP API
 - **Real-time dashboard** — Live status, temperatures, progress, and camera feeds
 - **Job queue** — Upload G-code, queue jobs, auto-assign to idle printers
-- **File library** — Persistent storage with folder organisation, search, and 3D interactive viewer
+- **File library** — Persistent storage with folder organisation, search, and 3D interactive toolpath viewer (supports OrcaSlicer, PrusaSlicer, and Cura gcode)
 - **Printer discovery** — Auto-detect BambuLab (UDP broadcast) and Klipper (Moonraker port scan)
 - **Authentication** — Local users, Active Directory/LDAP, student/staff roles
 - **OrcaSlicer integration** — Slice and print directly from OrcaSlicer via virtual printers (OctoPrint-compatible) — no batch files needed
 - **AMS support** — Full filament tray management for BambuLab printers with AMS
 - **Camera streaming** — Live camera feeds from BambuLab printers and Klipper webcams (MJPEG/snapshot auto-detected via Moonraker)
+- **Job history** — 7-day rolling history preserved independently of job deletion
 - **Obico integration** — If a local Obico server is running and the Obico plugin is installed on your Klipper printer, the dashboard will automatically pull failure detection data and remote monitoring info from it
 - **Klipper Adaptive Flow** — If [Klipper Adaptive Flow](https://github.com/barnard704344/Klipper-Adaptive-Flow) is installed on a Klipper printer, the dashboard auto-detects it and shows a direct link to the Adaptive Flow analysis dashboard on the printer card
 

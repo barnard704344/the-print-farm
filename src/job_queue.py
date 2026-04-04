@@ -9,7 +9,7 @@ import os
 import sqlite3
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Optional
 
@@ -87,6 +87,20 @@ class JobQueue:
             conn.execute("ALTER TABLE jobs ADD COLUMN submitted_by TEXT NOT NULL DEFAULT ''")
             conn.commit()
             logger.info("Migrated jobs table: added submitted_by column")
+        conn.close()
+
+        # Migration: add original_name column to job_history if missing
+        conn = self._get_conn()
+        try:
+            conn.execute("SELECT original_name FROM job_history LIMIT 1")
+        except sqlite3.OperationalError:
+            conn.execute("ALTER TABLE job_history ADD COLUMN original_name TEXT NOT NULL DEFAULT ''")
+            # Backfill from jobs table
+            conn.execute("""UPDATE job_history SET original_name = (
+                SELECT j.original_name FROM jobs j WHERE j.id = job_history.job_id
+            ) WHERE original_name = ''""")
+            conn.commit()
+            logger.info("Migrated job_history table: added original_name column")
         conn.close()
 
     def add_job(self, filename: str, original_name: str, file_path: str,
@@ -208,9 +222,10 @@ class JobQueue:
 
             conn.execute(
                 """INSERT INTO job_history (job_id, printer_name, status, started_at,
-                   completed_at, duration_seconds)
-                   VALUES (?, ?, 'completed', ?, ?, ?)""",
-                (job_id, job.get("printer_name", ""), started, now, duration),
+                   completed_at, duration_seconds, original_name)
+                   VALUES (?, ?, 'completed', ?, ?, ?, ?)""",
+                (job_id, job.get("printer_name", ""), started, now, duration,
+                 job.get("original_name", "")),
             )
             conn.commit()
             conn.close()
@@ -296,7 +311,6 @@ class JobQueue:
                 conn.close()
                 return False
 
-            conn.execute("DELETE FROM job_history WHERE job_id = ?", (job_id,))
             conn.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
             conn.commit()
 
@@ -321,13 +335,14 @@ class JobQueue:
                     pass
             return True
 
-    def get_history(self, limit: int = 50) -> list:
+    def get_history(self, limit: int = 50, days: int = 7) -> list:
         conn = self._get_conn()
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
         rows = conn.execute(
-            """SELECT jh.*, j.original_name FROM job_history jh
-               JOIN jobs j ON jh.job_id = j.id
-               ORDER BY jh.completed_at DESC LIMIT ?""",
-            (limit,),
+            """SELECT * FROM job_history
+               WHERE completed_at >= ?
+               ORDER BY completed_at DESC LIMIT ?""",
+            (cutoff, limit),
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]

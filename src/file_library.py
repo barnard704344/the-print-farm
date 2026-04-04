@@ -170,6 +170,12 @@ class FileLibrary:
         conn.close()
         return dict(row) if row else None
 
+    def find_by_path(self, file_path: str) -> Optional[dict]:
+        conn = self._get_conn()
+        row = conn.execute("SELECT * FROM files WHERE file_path = ? LIMIT 1", (file_path,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
     def get_files(self, folder_id: Optional[int] = None) -> list:
         conn = self._get_conn()
         if folder_id is None:
@@ -428,7 +434,7 @@ class FileLibrary:
             if not stripped:
                 continue
             if stripped.startswith(";"):
-                m = re.match(r";\s*FEATURE:\s*(.+)", stripped)
+                m = re.match(r";\s*(?:FEATURE|TYPE):\s*(.+)", stripped)
                 if m:
                     current_feature = m.group(1).strip()
                 continue
@@ -535,7 +541,7 @@ class FileLibrary:
             if not stripped:
                 continue
             if stripped.startswith(";"):
-                m = re.match(r";\s*FEATURE:\s*(.+)", stripped)
+                m = re.match(r";\s*(?:FEATURE|TYPE):\s*(.+)", stripped)
                 if m:
                     current_feature = m.group(1).strip()
                 continue
