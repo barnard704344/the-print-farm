@@ -10,7 +10,7 @@ A web-based print farm manager for **BambuLab** and **Klipper** 3D printers. Mon
 - **File library** — Persistent storage with folder organisation, search, and 3D interactive viewer
 - **Printer discovery** — Auto-detect BambuLab (UDP broadcast) and Klipper (Moonraker port scan)
 - **Authentication** — Local users, Active Directory/LDAP, student/staff roles
-- **OrcaSlicer integration** — Upload directly from slicer via post-processing script
+- **OrcaSlicer integration** — Slice and print directly from OrcaSlicer via virtual printers (OctoPrint-compatible) — no batch files needed
 - **AMS support** — Full filament tray management for BambuLab printers with AMS
 - **Camera streaming** — Live camera feeds from BambuLab printers and Klipper webcams (MJPEG/snapshot auto-detected via Moonraker)
 - **Obico integration** — If a local Obico server is running and the Obico plugin is installed on your Klipper printer, the dashboard will automatically pull failure detection data and remote monitoring info from it
@@ -106,7 +106,33 @@ printers:
 
 Klipper webcams are auto-detected from Moonraker's `/server/webcams/list` endpoint. Happy Hare MMU is auto-detected from Klipper's printer objects.
 
-## OrcaSlicer Upload Script
+## OrcaSlicer Setup
+
+### Virtual Printer (Recommended)
+
+The print farm exposes OctoPrint-compatible endpoints so OrcaSlicer can send prints directly — no scripts or batch files needed.
+
+**Step 1 — Add a physical printer in OrcaSlicer:**
+
+1. Open **Printer Settings → Connection** (or *File → Preferences → Printer*)
+2. Set **Host Type** to **OctoPrint**
+3. Set the URL depending on how you want to use it:
+
+| Mode | URL | Behaviour |
+|---|---|---|
+| Queue (any printer) | `http://<server-ip>:5000/bambulab-farm` | Job enters the shared queue and is auto-assigned to the next idle printer |
+| Specific printer | `http://<server-ip>:5000/bambulab-farm/api/files/local/<PrinterName>` | Job is sent directly to that printer |
+
+4. Paste your **API Key** (from `config.yaml` → `web.api_key`) into the API Key field
+5. Click **Test** — you should see "Connected to The Print Farm"
+
+**Step 2 — Print:**
+
+Slice your model, then click **Print** (the upload icon next to "Slice"). OrcaSlicer will send the G-code directly to the farm.
+
+> **Tip:** Create one OrcaSlicer printer profile per farm printer (e.g. "Farm — P1S-1", "Farm — Klipper 66") so you can target each from the printer dropdown.
+
+### Upload Script (Legacy)
 
 Copy the appropriate script from `static/client/` to your PC and configure it as a post-processing script in OrcaSlicer:
 

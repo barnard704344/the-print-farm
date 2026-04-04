@@ -1582,8 +1582,14 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/files/local", methods=["POST"])
     @app.route("/api/files/local", methods=["POST"])
-    def octoprint_upload():
-        """OctoPrint file upload — receives G-code from OrcaSlicer."""
+    @app.route(prefix + "/api/files/local/<printer_target>", methods=["POST"])
+    @app.route("/api/files/local/<printer_target>", methods=["POST"])
+    def octoprint_upload(printer_target=None):
+        """OctoPrint file upload — receives G-code from OrcaSlicer.
+        
+        If printer_target is provided in the URL, the job is assigned directly
+        to that printer. Otherwise it enters the general queue.
+        """
         if not _check_octoprint_api_key():
             return jsonify({"error": "Invalid API key"}), 403
 
@@ -1618,7 +1624,33 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             notes="Uploaded from OrcaSlicer",
         )
 
-        logger.info(f"OrcaSlicer upload: {original_name} -> job {job_id} (print={print_flag})")
+        # Add to file library
+        if file_library:
+            try:
+                meta = parse_gcode_metadata(file_path)
+                file_library.add_file(
+                    original_name=original_name,
+                    stored_name=unique_name,
+                    file_path=file_path,
+                    file_size=os.path.getsize(file_path),
+                    uploaded_by="OrcaSlicer",
+                    metadata=meta,
+                )
+            except Exception as e:
+                logger.warning(f"OrcaSlicer upload: failed to add to library: {e}")
+
+        # If a printer target is specified (per-printer virtual printer),
+        # assign immediately and start the print
+        if printer_target:
+            ok = job_queue.assign_job(job_id, printer_target)
+            if ok:
+                t = threading.Thread(
+                    target=_send_job_to_printer,
+                    args=(job_id, printer_target), daemon=True)
+                t.start()
+
+        logger.info(f"OrcaSlicer upload: {original_name} -> job {job_id}"
+                    f" (print={print_flag}, printer={printer_target or 'queue'})")
 
         # OctoPrint-style response
         return jsonify({
@@ -1632,6 +1664,64 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             },
             "done": True,
         }), 201
+
+    # Per-printer OctoPrint compat routes (version/connection/printer)
+    @app.route(prefix + "/api/version/<printer_target>")
+    @app.route("/api/version/<printer_target>")
+    def octoprint_version_printer(printer_target):
+        p = farm_manager.get_printer(printer_target)
+        name = printer_target if p else "Unknown"
+        return jsonify({
+            "api": "0.1",
+            "server": "1.10.0",
+            "text": f"The Print Farm — {name}",
+        })
+
+    @app.route(prefix + "/api/connection/<printer_target>")
+    @app.route("/api/connection/<printer_target>")
+    def octoprint_connection_printer(printer_target):
+        p = farm_manager.get_printer(printer_target)
+        connected = p.is_connected() if p else False
+        return jsonify({
+            "current": {
+                "state": "Operational" if connected else "Closed",
+                "port": "VIRTUAL",
+                "baudrate": 250000,
+                "printerProfile": "_default",
+            },
+            "options": {
+                "ports": ["VIRTUAL"],
+                "baudrates": [250000],
+                "printerProfiles": [{"id": "_default", "name": printer_target}],
+            },
+        })
+
+    @app.route(prefix + "/api/printer/<printer_target>")
+    @app.route("/api/printer/<printer_target>")
+    def octoprint_printer_target(printer_target):
+        p = farm_manager.get_printer(printer_target)
+        connected = p.is_connected() if p else False
+        printing = False
+        if p and connected:
+            from .bambu_client import PrintStatus
+            printing = p.state.status == PrintStatus.RUNNING
+        return jsonify({
+            "state": {
+                "text": "Printing" if printing else ("Operational" if connected else "Closed"),
+                "flags": {
+                    "operational": connected,
+                    "printing": printing,
+                    "cancelling": False,
+                    "pausing": False,
+                    "error": False,
+                    "paused": False,
+                    "ready": connected and not printing,
+                    "sdReady": False,
+                    "closedOrError": not connected,
+                },
+            },
+            "temperature": {},
+        })
 
     # ── REST API v1 ───────────────────────────────────────
     api_v1 = create_api_v1(
