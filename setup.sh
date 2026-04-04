@@ -65,8 +65,8 @@ if [ ! -d "venv" ]; then
 fi
 
 info "Installing Python dependencies..."
-./venv/bin/pip install --upgrade pip -q 2>/dev/null
-./venv/bin/pip install -r requirements.txt -q 2>/dev/null
+./venv/bin/pip install --upgrade pip -q
+./venv/bin/pip install -r requirements.txt -q
 ok "Python dependencies installed"
 
 # ── Configuration ────────────────────────────────────────
@@ -233,7 +233,7 @@ info "Configuring Apache reverse proxy..."
 a2enmod proxy proxy_http proxy_wstunnel rewrite > /dev/null 2>&1 || true
 
 # Determine the web port from config
-WEB_PORT=$(python3 -c "
+WEB_PORT=$(./venv/bin/python -c "
 import yaml
 try:
     c = yaml.safe_load(open('${SCRIPT_DIR}/config/config.yaml'))
@@ -276,7 +276,7 @@ systemctl restart apache2 2>/dev/null || warn "Could not restart Apache — star
 
 # ── Per-printer OrcaSlicer ports ─────────────────────────
 info "Configuring per-printer OrcaSlicer ports..."
-python3 -c "
+./venv/bin/python -c "
 import yaml, re, subprocess, os
 config_path = '${SCRIPT_DIR}/config/config.yaml'
 with open(config_path) as f:
