@@ -10,7 +10,7 @@ param(
 )
 
 # ─── Configuration ───────────────────────────────────────────
-$FARM_URL = "http://0941-webserver.seatonhs.internal:5000"
+$FARM_URL = "http://0941-webserver.seatonhs.internal/the-print-farm"
 $API_KEY  = "the-print-farm-2026"
 # ─────────────────────────────────────────────────────────────
 

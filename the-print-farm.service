@@ -5,10 +5,10 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=www-data
-Group=www-data
-WorkingDirectory=/var/www/html/the-print-farm
-ExecStart=/var/www/html/the-print-farm/venv/bin/python -m src.main
+User=root
+Group=root
+WorkingDirectory=/root/the-print-farm
+ExecStart=/root/the-print-farm/venv/bin/python -m src.main
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
