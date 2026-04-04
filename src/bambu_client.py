@@ -184,7 +184,7 @@ class BambuClient:
         self._stop_event = threading.Event()
 
         self._client = mqtt.Client(
-            client_id=f"bambu_farm_{self.name}_{int(time.time())}",
+            client_id=f"print_farm_{self.name}_{int(time.time())}",
             protocol=mqtt.MQTTv311,
         )
         self._client.username_pw_set("bblp", self.access_code)

@@ -530,7 +530,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
         file = request.files["file"]
         if not file.filename or not allowed_file(file.filename):
-            return jsonify({"error": "Invalid file type. Allowed: .gcode"}), 400
+            return jsonify({"error": "Invalid file type. Allowed: .gcode, .3mf"}), 400
 
         original_name = secure_filename(file.filename)
         unique_name = f"{uuid.uuid4().hex}_{original_name}"
@@ -822,8 +822,10 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         ok = job_queue.requeue_job(job_id)
         return jsonify({"ok": ok})
 
-    @app.route(prefix + "/api/jobs/<int:job_id>/delete", methods=["POST"])
-    @app.route("/api/jobs/<int:job_id>/delete", methods=["POST"])
+    @app.route(prefix + "/api/jobs/<int:job_id>/delete", methods=["POST", "DELETE"])
+    @app.route("/api/jobs/<int:job_id>/delete", methods=["POST", "DELETE"])
+    @app.route(prefix + "/api/jobs/<int:job_id>", methods=["DELETE"])
+    @app.route("/api/jobs/<int:job_id>", methods=["DELETE"])
     @admin_required
     def delete_job(job_id):
         job = job_queue.get_job(job_id)
@@ -909,8 +911,10 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         folder_id = data.get("folder_id")  # None = root
         return jsonify(file_library.move_file(file_id, folder_id))
 
-    @app.route(prefix + "/api/library/files/<int:file_id>/delete", methods=["POST"])
-    @app.route("/api/library/files/<int:file_id>/delete", methods=["POST"])
+    @app.route(prefix + "/api/library/files/<int:file_id>/delete", methods=["POST", "DELETE"])
+    @app.route("/api/library/files/<int:file_id>/delete", methods=["POST", "DELETE"])
+    @app.route(prefix + "/api/library/files/<int:file_id>", methods=["DELETE"])
+    @app.route("/api/library/files/<int:file_id>", methods=["DELETE"])
     @admin_required
     def library_delete_file(file_id):
         if not file_library:
@@ -963,8 +967,10 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         name = data.get("name", "").strip()
         return jsonify(file_library.rename_folder(folder_id, name))
 
-    @app.route(prefix + "/api/library/folders/<int:folder_id>/delete", methods=["POST"])
-    @app.route("/api/library/folders/<int:folder_id>/delete", methods=["POST"])
+    @app.route(prefix + "/api/library/folders/<int:folder_id>/delete", methods=["POST", "DELETE"])
+    @app.route("/api/library/folders/<int:folder_id>/delete", methods=["POST", "DELETE"])
+    @app.route(prefix + "/api/library/folders/<int:folder_id>", methods=["DELETE"])
+    @app.route("/api/library/folders/<int:folder_id>", methods=["DELETE"])
     @admin_required
     def library_delete_folder(folder_id):
         if not file_library:

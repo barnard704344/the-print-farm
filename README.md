@@ -20,7 +20,7 @@ A web-based print farm manager for **BambuLab** and **Klipper** 3D printers. Mon
 
 A full RESTful API at `/api/v1/` for external integrations:
 
-- **19+ endpoints** with consistent JSON envelope (`{ok, data, error, meta}`)
+- **30+ endpoints** with consistent JSON envelope (`{ok, data, error, meta}`)
 - **API key authentication** via `X-Api-Key` header
 - Printers: list, status, commands (pause/resume/stop/temps/filament)
 - Jobs: create, list, status, assign, cancel, delete
@@ -68,7 +68,7 @@ The setup script will:
 6. Auto-assign OrcaSlicer ports to each printer and create Apache VirtualHosts
 7. Start the farm manager
 
-Access the dashboard at `http://<your-server-ip>:5000/`
+Access the dashboard at `http://<your-server-ip>/the-print-farm`
 
 ## Manual Setup
 
@@ -148,16 +148,6 @@ Jobs enter the queue unassigned and can be sent to any printer from the dashboar
 - The `setup.sh` script auto-configures ports for all printers in `config.yaml`
 - Adding/removing/renaming printers from the dashboard automatically manages Apache vhosts
 - Jobs uploaded via a per-printer port are assigned to that printer but **not auto-sent** — send them manually from the Job Queue tab when the printer is ready
-
-### Upload Script (Legacy)
-
-Copy the appropriate script from `static/client/` to your PC and configure it as a post-processing script in OrcaSlicer:
-
-- **Windows (bat):** `C:\Windows\System32\cmd.exe /c C:\path\to\upload_to_farm.bat`
-- **Windows (PowerShell):** `powershell -ExecutionPolicy Bypass -File "C:\path\to\upload_to_farm.ps1"`
-- **macOS/Linux:** `python3 /path/to/upload_to_farm.py`
-
-Edit the script to set your server URL and API key.
 
 ## Architecture
 

@@ -556,7 +556,7 @@
             display: flex; align-items: center; justify-content: center;
         }
         .hh-modal {
-            background: var(--bg-card); border-radius: 12px; width: 90vw; max-width: 820px;
+            background: var(--card); border-radius: 12px; width: 90vw; max-width: 820px;
             max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
         }
         .hh-modal-header {
@@ -589,7 +589,7 @@
             display: flex; align-items: center; justify-content: center;
         }
         .hh-params-dialog {
-            background: var(--bg-card); border-radius: 10px; padding: 20px; min-width: 320px; max-width: 420px;
+            background: var(--card); border-radius: 10px; padding: 20px; min-width: 320px; max-width: 420px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.4);
         }
         .hh-params-dialog h3 { margin: 0 0 4px 0; font-size: 16px; font-family: monospace; }
@@ -987,7 +987,7 @@
             cursor: pointer;
             padding: 2px 6px;
             font-size: 12px;
-            background: var(--card-bg);
+            background: var(--card);
             color: var(--text);
             border: 1px solid var(--border);
             border-radius: 4px;
@@ -1100,7 +1100,7 @@
             <div class="upload-area" id="uploadArea">
                 <h3>Upload G-code File</h3>
                 <p>Drag &amp; drop files here or click to browse</p>
-                <input type="file" id="fileInput" accept=".gcode" style="display:none" multiple>
+                <input type="file" id="fileInput" accept=".gcode,.3mf" style="display:none" multiple>
             </div>
 
             <h2 style="font-size:16px; margin:24px 0 12px;">
@@ -1198,7 +1198,7 @@
                         </div>
                     </div>
 
-                    <div style="background:var(--card-bg); border:1px solid var(--border); border-radius:8px; padding:12px 16px; margin-top:16px;">
+                    <div style="background:var(--card); border:1px solid var(--border); border-radius:8px; padding:12px 16px; margin-top:16px;">
                         <strong style="font-size:13px;">&#9888; BambuLab printers — extra steps</strong>
                         <p style="font-size:12px; color:var(--text-muted); margin:6px 0 0;">
                             BambuLab printer profiles hide the Host Type field by default. You need to enable it first:
@@ -1229,48 +1229,6 @@
                     <p style="font-size:11px; color:var(--text-muted);">
                         Each printer has its own port. Jobs sent to a specific printer appear in the queue pre-assigned — send them to the machine from the Job Queue tab when ready.
                     </p>
-                </div>
-
-                <div class="setup-section" style="border-top:1px solid var(--border); padding-top:16px; margin-top:8px;">
-                    <h3 style="color:var(--text-muted);">Upload Script (Legacy)</h3>
-                    <p style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">
-                        Alternative method: a post-processing script that uploads G-code after every slice. Jobs go to the general queue (not a specific printer).
-                    </p>
-                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                        <a class="btn" id="dlBat" download="upload_to_farm.bat" style="text-decoration:none;">
-                            &#11015; Download Script (.bat)
-                        </a>
-                    </div>
-                    <details style="margin-top:12px;">
-                        <summary style="font-size:13px; color:var(--text-muted); cursor:pointer;">Script setup instructions</summary>
-                        <div class="setup-steps" style="margin-top:12px;">
-                            <div class="step">
-                                <div class="step-num">1</div>
-                                <div class="step-text">
-                                    <strong>Save the script</strong> to a permanent location (e.g. your Downloads folder).
-                                </div>
-                            </div>
-                            <div class="step">
-                                <div class="step-num">2</div>
-                                <div class="step-text">
-                                    <strong>Open Post-Processing Scripts</strong> in OrcaSlicer:<br>
-                                    Switch to <strong>Advanced</strong> or <strong>Expert</strong> mode, click the edit icon next to your print profile,
-                                    go to <strong>Others</strong> tab, scroll to <strong>Post-processing Scripts</strong>.
-                                </div>
-                            </div>
-                            <div class="step">
-                                <div class="step-num">3</div>
-                                <div class="step-text">
-                                    <strong>Paste:</strong>
-                                    <div class="script-box">
-                                        <code id="cmdPs">C:\Windows\System32\cmd.exe /c C:\Users\USERNAME\Downloads\upload_to_farm.bat</code>
-                                        <button class="btn-copy" onclick="copyText(document.getElementById('cmdPs').textContent)" title="Copy">&#128203;</button>
-                                    </div>
-                                    <span style="font-size:11px; color:var(--text-muted);">Replace <strong>USERNAME</strong> with your Windows username.</span>
-                                </div>
-                            </div>
-                        </div>
-                    </details>
                 </div>
 
                 <div class="setup-section">
@@ -1435,7 +1393,7 @@
                         <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Spoolman URL</label>
                         <input type="text" id="spoolmanUrl" placeholder="e.g. http://localhost:7912" class="ad-input">
                     </div>
-                    <div id="spoolmanInfo" style="display:none; padding:12px; background:var(--bg-card); border:1px solid var(--border); border-radius:8px;">
+                    <div id="spoolmanInfo" style="display:none; padding:12px; background:var(--card); border:1px solid var(--border); border-radius:8px;">
                         <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
                             <span id="spoolmanStatusDot" style="width:10px; height:10px; border-radius:50%; background:var(--danger);"></span>
                             <strong style="font-size:13px;">Spoolman Status</strong>
@@ -1905,7 +1863,6 @@
             lastPrinterNames = [];  // Force full rebuild
             refreshPrinters();
             refreshJobs();
-            if (typeof updateOrcaSlicerCommand === 'function') updateOrcaSlicerCommand();
         }
 
         function showLoginModal() {
@@ -2267,9 +2224,6 @@
         // ── OrcaSlicer hostname ──────────────────────────────
         const farmHost = `http://${location.hostname}:5000`;
 
-        // Set download links for client scripts
-        document.getElementById('dlBat').href = `${BASE}/static/client/upload_to_farm.bat`;
-
         // Populate per-printer connection table
         async function populateOrcaPrinterTable() {
             try {
@@ -2301,20 +2255,6 @@
             } catch (e) {}
         }
         populateOrcaPrinterTable();
-
-
-        function updateOrcaSlicerCommand() {
-            const cmdEl = document.getElementById('cmdPs');
-            const hintEl = document.getElementById('cmdPsHint');
-            const uname = (userName || '').trim();
-            if (uname) {
-                cmdEl.textContent = `C:\\Windows\\System32\\cmd.exe /c C:\\Users\\${uname}\\Downloads\\upload_to_farm.bat`;
-                hintEl.innerHTML = `<span style="color:var(--accent);">&#10003;</span> Path set to your username <strong>${uname}</strong>. If your Windows username differs, edit the path after copying.`;
-            } else {
-                cmdEl.textContent = 'C:\\Windows\\System32\\cmd.exe /c C:\\Users\\USERNAME\\Downloads\\upload_to_farm.bat';
-                hintEl.innerHTML = 'Replace <strong>USERNAME</strong> with your Windows username (e.g. <code>C:\\Windows\\System32\\cmd.exe /c C:\\Users\\rob.barnard\\Downloads\\upload_to_farm.bat</code>).';
-            }
-        }
 
         function copyText(text) {
             navigator.clipboard.writeText(text).then(() => {
@@ -3268,7 +3208,8 @@
         }
 
         async function jobAction(id, action) {
-            await apiPost(`${BASE}/api/jobs/${id}/${action}`);
+            const method = action === 'delete' ? 'DELETE' : 'POST';
+            await fetch(`${BASE}/api/jobs/${id}/${action}`, { method });
             refreshJobs();
         }
 
@@ -3535,7 +3476,7 @@
                 });
             } else if (action.toLowerCase() === 'delete') {
                 if (!confirm('Delete folder "' + folderName + '" and all its contents?')) return;
-                fetch(BASE + `/api/library/folders/${folderId}/delete`, { method: 'POST' })
+                fetch(BASE + `/api/library/folders/${folderId}/delete`, { method: 'DELETE' })
                     .then(r => r.json()).then(d => {
                         if (d.error) alert(d.error);
                         else refreshLibrary();
@@ -3569,7 +3510,7 @@
 
         function deleteLibraryFile(fileId) {
             if (!confirm('Delete this file from the library?')) return;
-            fetch(BASE + `/api/library/files/${fileId}/delete`, { method: 'POST' })
+            fetch(BASE + `/api/library/files/${fileId}/delete`, { method: 'DELETE' })
                 .then(r => r.json()).then(d => {
                     if (d.error) alert(d.error);
                     else refreshLibrary();

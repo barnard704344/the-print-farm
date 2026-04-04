@@ -481,7 +481,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         ok = job_queue.delete_job(job_id)
         if not ok:
             return _error("Failed to delete job", 500)
-        return _ok(None, 204)
+        return "", 204
 
     @bp.route("/jobs/<int:job_id>/cancel", methods=["POST"])
     def cancel_job(job_id):
@@ -802,7 +802,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         ok = spoolman_client.delete_spool(spool_id)
         if not ok:
             return _error("Failed to delete spool", 404)
-        return _ok(None, 204)
+        return "", 204
 
     @bp.route("/spoolman/spools/<int:spool_id>/use", methods=["POST"])
     @_spoolman_required

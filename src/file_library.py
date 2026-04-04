@@ -685,8 +685,8 @@ class FileLibrary:
         return thumb_path
 
     def _read_gcode_lines(self, file_path: str, max_bytes: int = 4 * 1024 * 1024) -> list:
-        """Read gcode lines from a .gcode or .gcode.3mf file."""
-        if file_path.endswith(".gcode.3mf"):
+        """Read gcode lines from a .gcode, .3mf, or .gcode.3mf file."""
+        if file_path.endswith(".3mf"):
             try:
                 with zipfile.ZipFile(file_path) as z:
                     if "Metadata/plate_1.gcode" in z.namelist():
@@ -706,7 +706,7 @@ class FileLibrary:
 def parse_gcode_metadata(file_path: str) -> dict:
     """Extract print metadata from a gcode file (or gcode inside a .gcode.3mf)."""
     gcode_text = None
-    if file_path.endswith(".gcode.3mf"):
+    if file_path.endswith(".3mf"):
         try:
             with zipfile.ZipFile(file_path) as z:
                 if "Metadata/plate_1.gcode" in z.namelist():

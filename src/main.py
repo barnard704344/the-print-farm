@@ -212,7 +212,7 @@ def cmd_run(args, config: dict):
     print(f"Dashboard: http://{host}:{port}")
 
     # Auto-assign loop
-    auto_assign = queue_cfg.get("auto_assign", True)
+    auto_assign = queue_cfg.get("auto_assign", False)
     if auto_assign:
         print("Auto-assign enabled: queued jobs will be sent to idle printers\n")
 
@@ -249,9 +249,11 @@ def cmd_run(args, config: dict):
 
                         file_path = job["file_path"]
                         remote_name = job["filename"]
+                        printer_type = farm.get_printer_type(printer_name)
 
-                        # Wrap .gcode into .3mf for the printer
-                        if remote_name.lower().endswith(".gcode"):
+                        # BambuLab printers need .gcode wrapped in .3mf
+                        # Klipper printers take raw .gcode directly
+                        if printer_type == "bambulab" and remote_name.lower().endswith(".gcode"):
                             threemf_path = file_path + ".3mf"
                             try:
                                 wrap_gcode_as_3mf(file_path, threemf_path)
@@ -262,6 +264,10 @@ def cmd_run(args, config: dict):
                                 logger.error(f"Failed to wrap gcode as 3mf: {e}")
                                 queue.mark_failed(job["id"])
                                 continue
+                        elif printer_type == "klipper" and remote_name.lower().endswith(".3mf"):
+                            logger.error(f"Cannot send .3mf to Klipper printer '{printer_name}'")
+                            queue.mark_failed(job["id"])
+                            continue
 
                         # Upload the file to the printer
                         ok = printer.upload_file(file_path, remote_name)
