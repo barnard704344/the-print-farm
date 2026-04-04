@@ -11,7 +11,7 @@ param(
 
 # ─── Configuration ───────────────────────────────────────────
 $FARM_URL = "http://0941-webserver.seatonhs.internal:5000"
-$API_KEY  = "bambulab-farm-2026"
+$API_KEY  = "the-print-farm-2026"
 # ─────────────────────────────────────────────────────────────
 
 if (-not $GcodePath) {

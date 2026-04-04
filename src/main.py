@@ -26,7 +26,7 @@ from .camera import CameraManager
 from .spoolman_client import SpoolmanClient
 from .web import create_app, start_web_server
 
-logger = logging.getLogger("bambulab_farm")
+logger = logging.getLogger("the_print_farm")
 
 
 def setup_logging(config: dict):

@@ -120,8 +120,8 @@ The print farm exposes OctoPrint-compatible endpoints so OrcaSlicer can send pri
 
 | Mode | URL | Behaviour |
 |---|---|---|
-| Queue (any printer) | `http://<server-ip>:5000/bambulab-farm` | Job enters the shared queue and is auto-assigned to the next idle printer |
-| Specific printer | `http://<server-ip>:5000/bambulab-farm/api/files/local/<PrinterName>` | Job is sent directly to that printer |
+| Queue (any printer) | `http://<server-ip>:5000/the-print-farm` | Job enters the shared queue and is auto-assigned to the next idle printer |
+| Specific printer | `http://<server-ip>:5000/the-print-farm/api/files/local/<PrinterName>` | Job is sent directly to that printer |
 
 4. Paste your **API Key** (from `config.yaml` → `web.api_key`) into the API Key field
 5. Click **Test** — you should see "Connected to The Print Farm"
@@ -149,8 +149,8 @@ Edit the script to set your server URL and API key.
 - **Database:** SQLite (job queue and file library)
 - **Protocols:** MQTT + FTPS (BambuLab), HTTP/REST (Klipper/Moonraker)
 - **Integrations:** Spoolman (filament tracking), Happy Hare (MMU control), Obico (AI failure detection)
-- **Proxy:** Apache reverse proxy at `/bambulab-farm`
-- **Service:** systemd (`bambulab-farm.service`)
+- **Proxy:** Apache reverse proxy at `/the-print-farm`
+- **Service:** systemd (`the-print-farm.service`)
 
 ## Configuration
 
@@ -175,17 +175,17 @@ All endpoints require an API key (set in `config.yaml` under `web.api_key`):
 
 ```bash
 # List printers
-curl -H "X-Api-Key: YOUR_KEY" http://localhost:5000/bambulab-farm/api/v1/printers
+curl -H "X-Api-Key: YOUR_KEY" http://localhost:5000/the-print-farm/api/v1/printers
 
 # Get printer status
-curl -H "X-Api-Key: YOUR_KEY" http://localhost:5000/bambulab-farm/api/v1/printers/MyPrinter
+curl -H "X-Api-Key: YOUR_KEY" http://localhost:5000/the-print-farm/api/v1/printers/MyPrinter
 
 # Queue a job
 curl -X POST -H "X-Api-Key: YOUR_KEY" -F "file=@model.gcode" \
-  http://localhost:5000/bambulab-farm/api/v1/jobs
+  http://localhost:5000/the-print-farm/api/v1/jobs
 
 # View full API spec
-curl -H "X-Api-Key: YOUR_KEY" http://localhost:5000/bambulab-farm/api/v1/openapi.json
+curl -H "X-Api-Key: YOUR_KEY" http://localhost:5000/the-print-farm/api/v1/openapi.json
 ```
 
 ## Requirements

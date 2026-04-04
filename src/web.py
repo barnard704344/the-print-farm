@@ -49,8 +49,8 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         config = {}
     app_config = config
 
-    # Support running behind a reverse proxy at /bambulab-farm
-    prefix = os.environ.get("APP_PREFIX", "/bambulab-farm")
+    # Support running behind a reverse proxy at /the-print-farm
+    prefix = os.environ.get("APP_PREFIX", "/the-print-farm")
 
     def _get_ad_config():
         return app_config.get("active_directory", {})

@@ -16,8 +16,8 @@ import urllib.error
 import mimetypes
 
 # ─── Configuration ───────────────────────────────────────────
-FARM_URL = "http://0941-webserver.seatonhs.internal/bambulab-farm"
-API_KEY  = "bambulab-farm-2026"
+FARM_URL = "http://0941-webserver.seatonhs.internal/the-print-farm"
+API_KEY  = "the-print-farm-2026"
 # ─────────────────────────────────────────────────────────────
 
 

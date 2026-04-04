@@ -3,8 +3,8 @@ REM The Print Farm - Upload to farm after slicing
 REM Paste into OrcaSlicer Post-processing Scripts:
 REM   C:\Users\USERNAME\Downloads\upload_to_farm.bat
 
-set "FARM_URL=http://0941-webserver.seatonhs.internal/bambulab-farm"
-set "API_KEY=bambulab-farm-2026"
+set "FARM_URL=http://0941-webserver.seatonhs.internal/the-print-farm"
+set "API_KEY=the-print-farm-2026"
 set "LOGFILE=%USERPROFILE%\Downloads\farm_upload.log"
 set "GCODE=%~1"
 

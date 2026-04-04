@@ -202,7 +202,7 @@ fi
 # ── Systemd service ──────────────────────────────────────
 info "Installing systemd service..."
 
-cat > /etc/systemd/system/bambulab-farm.service <<SVCEOF
+cat > /etc/systemd/system/the-print-farm.service <<SVCEOF
 [Unit]
 Description=The Print Farm Manager
 After=network-online.target
@@ -224,8 +224,8 @@ WantedBy=multi-user.target
 SVCEOF
 
 systemctl daemon-reload
-systemctl enable bambulab-farm > /dev/null 2>&1
-ok "Service installed (bambulab-farm.service)"
+systemctl enable the-print-farm > /dev/null 2>&1
+ok "Service installed (the-print-farm.service)"
 
 # ── Apache reverse proxy ─────────────────────────────────
 info "Configuring Apache reverse proxy..."
@@ -257,13 +257,13 @@ if [ -z "$APACHE_CONF" ]; then
 VHEOF
 fi
 
-if ! grep -q "bambulab-farm proxy" "$APACHE_CONF" 2>/dev/null; then
+if ! grep -q "the-print-farm proxy" "$APACHE_CONF" 2>/dev/null; then
     sed -i '/<\/VirtualHost>/i \
-\t# bambulab-farm proxy\
+\t# the-print-farm proxy\
 \tProxyPreserveHost On\
-\tProxyPass /bambulab-farm http://127.0.0.1:'"${WEB_PORT}"'\
-\tProxyPassReverse /bambulab-farm http://127.0.0.1:'"${WEB_PORT}"'' "$APACHE_CONF"
-    ok "Apache proxy configured at /bambulab-farm"
+\tProxyPass /the-print-farm http://127.0.0.1:'"${WEB_PORT}"'\
+\tProxyPassReverse /the-print-farm http://127.0.0.1:'"${WEB_PORT}"'' "$APACHE_CONF"
+    ok "Apache proxy configured at /the-print-farm"
 else
     ok "Apache proxy already configured"
 fi
@@ -279,12 +279,12 @@ ok "Ownership set to ${SVC_USER}"
 echo ""
 read -rp "Start the farm manager now? (Y/n): " START_NOW
 if [[ ! "$START_NOW" =~ ^[Nn] ]]; then
-    systemctl start bambulab-farm
+    systemctl start the-print-farm
     sleep 2
-    if systemctl is-active --quiet bambulab-farm; then
+    if systemctl is-active --quiet the-print-farm; then
         ok "Service is running"
     else
-        warn "Service may have failed — check: journalctl -u bambulab-farm -n 30"
+        warn "Service may have failed — check: journalctl -u the-print-farm -n 30"
     fi
 fi
 
@@ -300,11 +300,11 @@ echo ""
 echo "  Dashboard:  http://${LOCAL_IP}:${WEB_PORT}/"
 echo ""
 echo "  Commands:"
-echo "    sudo systemctl start bambulab-farm"
-echo "    sudo systemctl stop bambulab-farm"
-echo "    sudo systemctl restart bambulab-farm"
-echo "    sudo systemctl status bambulab-farm"
-echo "    journalctl -u bambulab-farm -f"
+echo "    sudo systemctl start the-print-farm"
+echo "    sudo systemctl stop the-print-farm"
+echo "    sudo systemctl restart the-print-farm"
+echo "    sudo systemctl status the-print-farm"
+echo "    journalctl -u the-print-farm -f"
 echo ""
 echo "  Next steps:"
 echo "    1. Log in with your admin account"
