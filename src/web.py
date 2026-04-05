@@ -392,6 +392,55 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         ok = client.set_chamber_light(not current)
         return jsonify({"ok": ok, "light": not current})
 
+    @app.route(prefix + "/api/printer/<name>/led", methods=["POST"])
+    @app.route("/api/printer/<name>/led", methods=["POST"])
+    @admin_required
+    def printer_led(name):
+        """Toggle a specific LED or output pin on a Klipper printer."""
+        client = farm_manager.get_printer(name)
+        if not client:
+            return jsonify({"error": "Printer not found"}), 404
+        if farm_manager.get_printer_type(name) != "klipper":
+            return jsonify({"ok": False, "message": "LED control only available for Klipper printers"}), 400
+        data = request.get_json(silent=True) or {}
+        led_object = data.get("object", "")
+        on = data.get("on")
+        if not led_object:
+            return jsonify({"error": "Missing 'object' parameter"}), 400
+        # Validate the object is a known LED/pin on this printer
+        known = [l["object"] for l in client.state.klipper_leds]
+        if led_object not in known:
+            return jsonify({"error": "Unknown LED object"}), 400
+        if on is None:
+            # Toggle based on current state
+            current = next((l for l in client.state.klipper_leds if l["object"] == led_object), {})
+            on = not current.get("on", False)
+        ok = client.set_led(led_object, bool(on))
+        return jsonify({"ok": ok, "on": bool(on)})
+
+    @app.route(prefix + "/api/printer/<name>/fan_speed", methods=["POST"])
+    @app.route("/api/printer/<name>/fan_speed", methods=["POST"])
+    @admin_required
+    def printer_fan_speed(name):
+        """Set speed of a fan_generic on a Klipper printer."""
+        client = farm_manager.get_printer(name)
+        if not client:
+            return jsonify({"error": "Printer not found"}), 404
+        if farm_manager.get_printer_type(name) != "klipper":
+            return jsonify({"ok": False, "message": "Fan control only available for Klipper printers"}), 400
+        data = request.get_json(silent=True) or {}
+        fan_object = data.get("object", "")
+        speed = data.get("speed")
+        if not fan_object or speed is None:
+            return jsonify({"error": "Missing 'object' and/or 'speed' parameter"}), 400
+        # Validate the object is a known controllable fan
+        known = [f["object"] for f in client.state.klipper_fans if f.get("controllable")]
+        if fan_object not in known:
+            return jsonify({"error": "Unknown or non-controllable fan object"}), 400
+        speed = max(0.0, min(1.0, float(speed)))
+        ok = client.set_fan_speed(fan_object, speed)
+        return jsonify({"ok": ok, "speed": speed})
+
     @app.route(prefix + "/api/printer/<name>/emergency_stop", methods=["POST"])
     @app.route("/api/printer/<name>/emergency_stop", methods=["POST"])
     @admin_required

@@ -139,6 +139,8 @@ class FarmManager:
                 "vt_tray": s.vt_tray,
                 "has_mmu": s.has_mmu,
                 "mmu": s.mmu,
+                "klipper_fans": s.klipper_fans,
+                "klipper_leds": s.klipper_leds,
                 "obico": s.obico,
                 "adaptive_flow": s.adaptive_flow,
             }

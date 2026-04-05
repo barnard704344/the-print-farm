@@ -127,6 +127,9 @@ class PrintState:
     # Happy Hare MMU (Klipper)
     has_mmu: bool = False
     mmu: dict = field(default_factory=dict)
+    # Klipper fans and LEDs (auto-discovered)
+    klipper_fans: list = field(default_factory=list)
+    klipper_leds: list = field(default_factory=list)
     # Obico failure detection (Klipper)
     obico: dict = field(default_factory=dict)
     # Klipper Adaptive Flow

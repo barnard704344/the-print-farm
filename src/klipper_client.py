@@ -35,6 +35,11 @@ _MMU_OBJECTS = {
     "mmu_encoder mmu_encoder": None,
 }
 
+# Moonraker object prefixes for fans and LEDs
+_FAN_PREFIXES = ("fan_generic", "heater_fan", "controller_fan")
+_LED_PREFIXES = ("neopixel", "led", "dotstar")
+_OUTPUT_PIN_PREFIX = "output_pin"
+
 # Default polling interval for status updates (seconds)
 POLL_INTERVAL = 2.0
 
@@ -86,6 +91,9 @@ class KlipperClient:
 
         # Detected capabilities (set during connect)
         self._has_mmu = False
+        self._fan_objects = []   # e.g. ["fan_generic exhaust_fan", "heater_fan hotend_fan"]
+        self._led_objects = []   # e.g. ["neopixel chamber_light", "led sb_leds"]
+        self._output_pins = []   # e.g. ["output_pin caselight"]
 
         # Obico integration
         self._obico = None
@@ -135,6 +143,24 @@ class KlipperClient:
                     if "mmu" in objects:
                         self._has_mmu = True
                         logger.info(f"[{self.name}] Happy Hare MMU detected")
+
+                    # Auto-discover fan objects
+                    for obj_name in objects:
+                        for prefix in _FAN_PREFIXES:
+                            if obj_name == prefix or obj_name.startswith(prefix + " "):
+                                self._fan_objects.append(obj_name)
+                        for prefix in _LED_PREFIXES:
+                            if obj_name == prefix or obj_name.startswith(prefix + " "):
+                                self._led_objects.append(obj_name)
+                        if obj_name.startswith(_OUTPUT_PIN_PREFIX + " "):
+                            self._output_pins.append(obj_name)
+
+                    if self._fan_objects:
+                        logger.info(f"[{self.name}] Fans detected: {self._fan_objects}")
+                    if self._led_objects:
+                        logger.info(f"[{self.name}] LEDs detected: {self._led_objects}")
+                    if self._output_pins:
+                        logger.info(f"[{self.name}] Output pins detected: {self._output_pins}")
             except Exception:
                 pass
 
@@ -223,10 +249,42 @@ class KlipperClient:
         return self._gcode(f"M104 S{temp}")
 
     def set_chamber_light(self, on: bool) -> bool:
-        """Klipper doesn't have a standard chamber light command.
-        This sends a custom macro if configured, otherwise no-op."""
+        """Toggle chamber light. Tries discovered LEDs/pins first, falls back to macro."""
+        if self._led_objects:
+            # Toggle first neopixel/led/dotstar
+            obj = self._led_objects[0]
+            if on:
+                return self._gcode(f"SET_LED LED={obj.split(' ', 1)[1]} RED=1 GREEN=1 BLUE=1")
+            else:
+                return self._gcode(f"SET_LED LED={obj.split(' ', 1)[1]} RED=0 GREEN=0 BLUE=0")
+        if self._output_pins:
+            pin = self._output_pins[0].split(" ", 1)[1]
+            return self._gcode(f"SET_PIN PIN={pin} VALUE={'1' if on else '0'}")
         macro = "CHAMBER_LIGHT_ON" if on else "CHAMBER_LIGHT_OFF"
         return self._gcode(macro)
+
+    def set_led(self, led_object: str, on: bool) -> bool:
+        """Toggle a specific LED or output pin by its Klipper object name."""
+        parts = led_object.split(" ", 1)
+        obj_type = parts[0]
+        obj_name = parts[1] if len(parts) > 1 else parts[0]
+        if obj_type == "output_pin":
+            return self._gcode(f"SET_PIN PIN={obj_name} VALUE={'1' if on else '0'}")
+        # neopixel, led, dotstar all use SET_LED
+        if on:
+            return self._gcode(f"SET_LED LED={obj_name} RED=1 GREEN=1 BLUE=1")
+        else:
+            return self._gcode(f"SET_LED LED={obj_name} RED=0 GREEN=0 BLUE=0")
+
+    def set_fan_speed(self, fan_object: str, speed: float) -> bool:
+        """Set speed of a fan_generic object. speed is 0.0-1.0."""
+        parts = fan_object.split(" ", 1)
+        if parts[0] != "fan_generic" or len(parts) < 2:
+            logger.warning(f"[{self.name}] Cannot control fan: {fan_object}")
+            return False
+        fan_name = parts[1]
+        speed = max(0.0, min(1.0, speed))
+        return self._gcode(f"SET_FAN_SPEED FAN={fan_name} SPEED={speed:.2f}")
 
     def send_gcode(self, gcode: str) -> bool:
         """Send raw G-code to the printer."""
@@ -330,6 +388,18 @@ class KlipperClient:
             for obj in _MMU_OBJECTS:
                 params[obj] = ""
 
+        # Include discovered fan objects
+        for fan_obj in self._fan_objects:
+            params[fan_obj] = "speed"
+
+        # Include discovered LED objects
+        for led_obj in self._led_objects:
+            params[led_obj] = "color_data"
+
+        # Include discovered output pins (often used for lights)
+        for pin_obj in self._output_pins:
+            params[pin_obj] = "value"
+
         resp = self._session.get(
             f"{self._base_url}/printer/objects/query",
             params=params,
@@ -396,6 +466,62 @@ class KlipperClient:
             gm = result.get("gcode_move", {})
             spd_factor = gm.get("speed_factor", 1.0)
             self._state.spd_mag = int(spd_factor * 100)
+
+            # Discovered fans (fan_generic, heater_fan, controller_fan)
+            fans = []
+            for fan_obj in self._fan_objects:
+                fan_data = result.get(fan_obj, {})
+                speed = fan_data.get("speed", 0)
+                # Extract display name: "fan_generic exhaust_fan" → "exhaust_fan"
+                parts = fan_obj.split(" ", 1)
+                display_name = parts[1] if len(parts) > 1 else parts[0]
+                fan_type = parts[0]  # fan_generic, heater_fan, controller_fan
+                fans.append({
+                    "object": fan_obj,
+                    "name": display_name,
+                    "type": fan_type,
+                    "speed": round(speed, 4),  # 0.0–1.0
+                    "controllable": fan_type == "fan_generic",
+                })
+            self._state.klipper_fans = fans
+
+            # Discovered LEDs (neopixel, led, dotstar)
+            leds = []
+            for led_obj in self._led_objects:
+                led_data = result.get(led_obj, {})
+                color_data = led_data.get("color_data", [])
+                # Consider LED "on" if any channel in any pixel is > 0
+                is_on = any(
+                    any(v > 0 for v in pixel)
+                    for pixel in color_data
+                ) if color_data else False
+                parts = led_obj.split(" ", 1)
+                display_name = parts[1] if len(parts) > 1 else parts[0]
+                leds.append({
+                    "object": led_obj,
+                    "name": display_name,
+                    "type": parts[0],
+                    "on": is_on,
+                    "color_data": color_data[:1] if color_data else [],  # first pixel only for display
+                })
+            # Discovered output pins (often used for lights)
+            for pin_obj in self._output_pins:
+                pin_data = result.get(pin_obj, {})
+                value = pin_data.get("value", 0)
+                parts = pin_obj.split(" ", 1)
+                display_name = parts[1] if len(parts) > 1 else parts[0]
+                leds.append({
+                    "object": pin_obj,
+                    "name": display_name,
+                    "type": "output_pin",
+                    "on": value > 0,
+                    "value": round(value, 4),
+                })
+            self._state.klipper_leds = leds
+
+            # Set chamber_light based on any detected LED/pin being on
+            if leds:
+                self._state.chamber_light = any(l["on"] for l in leds)
 
             # Klipper doesn't have AMS
             self._state.has_ams = False
