@@ -86,8 +86,8 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
 
     @bp.before_request
     def require_api_key():
-        """All v1 endpoints require a valid API key."""
-        if not _check_api_key():
+        """All v1 endpoints require a valid API key or an authenticated session."""
+        if not _check_api_key() and not _is_authenticated():
             return _error("Invalid or missing API key", 401, "AUTH_REQUIRED")
 
     def _admin_only(f):

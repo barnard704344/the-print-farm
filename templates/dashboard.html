@@ -3823,8 +3823,7 @@
         let _hhApiKey = null;
         function hhApiKey() {
             if (!_hhApiKey) {
-                const el = document.getElementById('orcaApiKey');
-                _hhApiKey = el ? el.textContent.trim() : '';
+                _hhApiKey = '{{ api_key }}';
             }
             return _hhApiKey;
         }
