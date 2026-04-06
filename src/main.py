@@ -24,6 +24,7 @@ from .job_queue import JobQueue
 from .file_library import FileLibrary
 from .camera import CameraManager
 from .spoolman_client import SpoolmanClient
+from .notifications import NotificationManager
 from .web import create_app, start_web_server
 
 logger = logging.getLogger("the_print_farm")
@@ -227,6 +228,11 @@ def cmd_run(args, config: dict):
     start_web_server(app, host=host, port=port)
     print(f"Dashboard: http://{host}:{port}")
 
+    # Notifications
+    notifier = NotificationManager(config)
+    if config.get("notifications", {}).get("enabled"):
+        print("Notifications enabled")
+
     pool_cfg = config.get("pool", {})
     if pool_cfg.get("enabled"):
         print(f"Printer pool enabled: {pool_cfg.get('printers', [])}\n")
@@ -329,12 +335,21 @@ def cmd_run(args, config: dict):
                         if state.status == PrintStatus.FINISH:
                             queue.mark_completed(job["id"])
                             logger.info(f"Job #{job['id']} completed on {job['printer_name']}")
-                            # Deduct filament usage in Spoolman
                             if spoolman:
                                 _deduct_filament_usage(spoolman, job, farm)
+                            notifier.notify(
+                                "print_completed",
+                                f"Print Completed — {job.get('original_name', job['filename'])}",
+                                f"Job #{job['id']} finished on {job['printer_name']}.\nFile: {job.get('original_name', job['filename'])}",
+                            )
                         elif state.status == PrintStatus.FAILED:
                             queue.mark_failed(job["id"])
                             logger.warning(f"Job #{job['id']} failed on {job['printer_name']}")
+                            notifier.notify(
+                                "print_failed",
+                                f"Print Failed — {job.get('original_name', job['filename'])}",
+                                f"Job #{job['id']} failed on {job['printer_name']}.\nFile: {job.get('original_name', job['filename'])}",
+                            )
 
             time.sleep(5)
     except KeyboardInterrupt:

@@ -1904,6 +1904,105 @@
                     <div id="poolSaveResult" style="font-size:13px; margin-top:4px;"></div>
                 </div>
             </div>
+
+            <!-- Notifications -->
+            <div class="setup-section" style="max-width:700px; margin-top:32px;">
+                <h3 style="margin-bottom:16px;">Notifications</h3>
+                <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
+                    Get notified when prints complete or fail via email and/or Discord.
+                </p>
+                <div style="display:flex; flex-direction:column; gap:14px;">
+                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                        <input type="checkbox" id="notifEnabled" style="width:18px; height:18px;">
+                        <span>Enable Notifications</span>
+                    </label>
+
+                    <div id="notifFields" style="display:flex; flex-direction:column; gap:18px;">
+                        <!-- Events -->
+                        <div>
+                            <h4 style="font-size:14px; margin-bottom:8px;">Events</h4>
+                            <div style="display:flex; gap:16px; flex-wrap:wrap;">
+                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                    <input type="checkbox" id="notifEvtCompleted" style="width:16px; height:16px;">
+                                    <span style="font-size:13px;">Print Completed</span>
+                                </label>
+                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                    <input type="checkbox" id="notifEvtFailed" style="width:16px; height:16px;">
+                                    <span style="font-size:13px;">Print Failed</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <hr style="border:none; border-top:1px solid var(--border); margin:0;">
+
+                        <!-- Email -->
+                        <div>
+                            <h4 style="font-size:14px; margin-bottom:10px;">Email (SMTP)</h4>
+                            <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:12px;">
+                                <input type="checkbox" id="notifEmailEnabled" style="width:16px; height:16px;">
+                                <span style="font-size:13px;">Enable Email</span>
+                            </label>
+                            <div style="display:grid; grid-template-columns:2fr 1fr auto; gap:12px; margin-bottom:12px;">
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">SMTP Host</label>
+                                    <input type="text" id="notifSmtpHost" placeholder="e.g. smtp.gmail.com" class="ad-input">
+                                </div>
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Port</label>
+                                    <input type="number" id="notifSmtpPort" placeholder="587" value="587" class="ad-input">
+                                </div>
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">TLS</label>
+                                    <label style="display:flex; align-items:center; gap:6px; height:38px; cursor:pointer;">
+                                        <input type="checkbox" id="notifSmtpTls" checked style="width:16px; height:16px;">
+                                        <span style="font-size:13px;">STARTTLS</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Username</label>
+                                    <input type="text" id="notifSmtpUser" placeholder="email@example.com" class="ad-input">
+                                </div>
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Password</label>
+                                    <input type="password" id="notifSmtpPass" placeholder="Leave blank to keep existing" class="ad-input">
+                                </div>
+                            </div>
+                            <div style="margin-bottom:12px;">
+                                <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">From Address</label>
+                                <input type="text" id="notifFromAddr" placeholder="noreply@example.com" class="ad-input">
+                            </div>
+                            <div>
+                                <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">To Addresses (comma-separated)</label>
+                                <input type="text" id="notifToAddrs" placeholder="user1@example.com, user2@example.com" class="ad-input">
+                            </div>
+                        </div>
+
+                        <hr style="border:none; border-top:1px solid var(--border); margin:0;">
+
+                        <!-- Discord -->
+                        <div>
+                            <h4 style="font-size:14px; margin-bottom:10px;">Discord</h4>
+                            <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:12px;">
+                                <input type="checkbox" id="notifDiscordEnabled" style="width:16px; height:16px;">
+                                <span style="font-size:13px;">Enable Discord</span>
+                            </label>
+                            <div>
+                                <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Webhook URL</label>
+                                <input type="text" id="notifDiscordWebhook" placeholder="https://discord.com/api/webhooks/..." class="ad-input">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; gap:8px; margin-top:8px;">
+                        <button class="btn btn-primary" onclick="testEmailNotification()">Test Email</button>
+                        <button class="btn btn-primary" onclick="testDiscordNotification()">Test Discord</button>
+                        <button class="btn btn-success" onclick="saveNotificationConfig()">Save Configuration</button>
+                    </div>
+                    <div id="notifSaveResult" style="font-size:13px; margin-top:4px;"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -2774,6 +2873,105 @@
             }
         }
 
+        // ── Notification Settings ────────────────────────────
+        async function loadNotificationConfig() {
+            try {
+                const res = await fetch(BASE + '/api/notifications/config');
+                if (!res.ok) return;
+                const data = await res.json();
+                document.getElementById('notifEnabled').checked = data.enabled;
+                document.getElementById('notifEvtCompleted').checked = (data.events || {}).print_completed !== false;
+                document.getElementById('notifEvtFailed').checked = (data.events || {}).print_failed !== false;
+                const email = data.email || {};
+                document.getElementById('notifEmailEnabled').checked = email.enabled || false;
+                document.getElementById('notifSmtpHost').value = email.smtp_host || '';
+                document.getElementById('notifSmtpPort').value = email.smtp_port || 587;
+                document.getElementById('notifSmtpTls').checked = email.use_tls !== false;
+                document.getElementById('notifSmtpUser').value = email.username || '';
+                document.getElementById('notifFromAddr').value = email.from_address || '';
+                document.getElementById('notifToAddrs').value = (email.to_addresses || []).join(', ');
+                const discord = data.discord || {};
+                document.getElementById('notifDiscordEnabled').checked = discord.enabled || false;
+                document.getElementById('notifDiscordWebhook').value = discord.webhook_url || '';
+            } catch (e) {}
+        }
+
+        async function saveNotificationConfig() {
+            const resultEl = document.getElementById('notifSaveResult');
+            const toAddrsRaw = document.getElementById('notifToAddrs').value;
+            const toAddrs = toAddrsRaw.split(',').map(s => s.trim()).filter(Boolean);
+            const payload = {
+                enabled: document.getElementById('notifEnabled').checked,
+                events: {
+                    print_completed: document.getElementById('notifEvtCompleted').checked,
+                    print_failed: document.getElementById('notifEvtFailed').checked,
+                },
+                email: {
+                    enabled: document.getElementById('notifEmailEnabled').checked,
+                    smtp_host: document.getElementById('notifSmtpHost').value.trim(),
+                    smtp_port: parseInt(document.getElementById('notifSmtpPort').value) || 587,
+                    use_tls: document.getElementById('notifSmtpTls').checked,
+                    username: document.getElementById('notifSmtpUser').value.trim(),
+                    password: document.getElementById('notifSmtpPass').value,
+                    from_address: document.getElementById('notifFromAddr').value.trim(),
+                    to_addresses: toAddrs,
+                },
+                discord: {
+                    enabled: document.getElementById('notifDiscordEnabled').checked,
+                    webhook_url: document.getElementById('notifDiscordWebhook').value.trim(),
+                },
+            };
+            try {
+                const res = await fetch(BASE + '/api/notifications/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; ' + data.message + '</span>';
+                } else {
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                }
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+            }
+        }
+
+        async function testEmailNotification() {
+            const resultEl = document.getElementById('notifSaveResult');
+            resultEl.innerHTML = '<span style="color:var(--text-muted);">Sending test email...</span>';
+            try {
+                await saveNotificationConfig();
+                const res = await fetch(BASE + '/api/notifications/test/email', { method: 'POST' });
+                const data = await res.json();
+                if (data.ok) {
+                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; ' + data.message + '</span>';
+                } else {
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                }
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+            }
+        }
+
+        async function testDiscordNotification() {
+            const resultEl = document.getElementById('notifSaveResult');
+            resultEl.innerHTML = '<span style="color:var(--text-muted);">Sending test Discord message...</span>';
+            try {
+                await saveNotificationConfig();
+                const res = await fetch(BASE + '/api/notifications/test/discord', { method: 'POST' });
+                const data = await res.json();
+                if (data.ok) {
+                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; ' + data.message + '</span>';
+                } else {
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                }
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+            }
+        }
+
         checkAuth().then(() => {
             // If not authenticated and AD is enabled, attempt silent SSO via Kerberos
             if (!isAuthenticated && adEnabled) {
@@ -2860,7 +3058,7 @@
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 tab.classList.add('active');
                 document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
-                if (tab.dataset.tab === 'settings') { loadApiKey(); loadADConfig(); populateObicoPrinterDropdown(); loadSpoolmanConfig(); loadPoolConfig(); }
+                if (tab.dataset.tab === 'settings') { loadApiKey(); loadADConfig(); populateObicoPrinterDropdown(); loadSpoolmanConfig(); loadPoolConfig(); loadNotificationConfig(); }
                 if (tab.dataset.tab === 'library') refreshLibrary();
             });
         });

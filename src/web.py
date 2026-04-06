@@ -1936,6 +1936,81 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             logger.error(f"Failed to save pool config: {e}")
             return jsonify({"ok": False, "message": str(e)}), 500
 
+    # ── Notification Config ───────────────────────────────
+    @app.route(prefix + "/api/notifications/config", methods=["GET"])
+    @app.route("/api/notifications/config", methods=["GET"])
+    @admin_required
+    def notifications_get_config():
+        n = app_config.get("notifications", {})
+        return jsonify({
+            "enabled": n.get("enabled", False),
+            "events": n.get("events", {}),
+            "email": {k: v for k, v in n.get("email", {}).items() if k != "password"},
+            "discord": n.get("discord", {}),
+        })
+
+    @app.route(prefix + "/api/notifications/config", methods=["POST"])
+    @app.route("/api/notifications/config", methods=["POST"])
+    @admin_required
+    def notifications_save_config():
+        data = request.get_json(silent=True) or {}
+        config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
+        try:
+            with open(config_path) as f:
+                file_config = yaml.safe_load(f) or {}
+
+            n = file_config.get("notifications", {})
+            n["enabled"] = bool(data.get("enabled", False))
+            n["events"] = data.get("events", n.get("events", {}))
+
+            # Email settings
+            email_data = data.get("email", {})
+            email = n.get("email", {})
+            email["enabled"] = bool(email_data.get("enabled", False))
+            email["smtp_host"] = email_data.get("smtp_host", email.get("smtp_host", ""))
+            email["smtp_port"] = int(email_data.get("smtp_port", email.get("smtp_port", 587)))
+            email["use_tls"] = bool(email_data.get("use_tls", email.get("use_tls", True)))
+            email["username"] = email_data.get("username", email.get("username", ""))
+            # Only update password if provided (non-empty)
+            if email_data.get("password"):
+                email["password"] = email_data["password"]
+            email["from_address"] = email_data.get("from_address", email.get("from_address", ""))
+            email["to_addresses"] = email_data.get("to_addresses", email.get("to_addresses", []))
+            n["email"] = email
+
+            # Discord settings
+            discord_data = data.get("discord", {})
+            discord = n.get("discord", {})
+            discord["enabled"] = bool(discord_data.get("enabled", False))
+            discord["webhook_url"] = discord_data.get("webhook_url", discord.get("webhook_url", ""))
+            n["discord"] = discord
+
+            file_config["notifications"] = n
+            with open(config_path, "w") as f:
+                yaml.dump(file_config, f, default_flow_style=False, sort_keys=False)
+
+            app_config["notifications"] = n
+            return jsonify({"ok": True, "message": "Notification settings saved."})
+        except Exception as e:
+            logger.error(f"Failed to save notification config: {e}")
+            return jsonify({"ok": False, "message": str(e)}), 500
+
+    @app.route(prefix + "/api/notifications/test/email", methods=["POST"])
+    @app.route("/api/notifications/test/email", methods=["POST"])
+    @admin_required
+    def notifications_test_email():
+        from .notifications import NotificationManager
+        nm = NotificationManager(app_config)
+        return jsonify(nm.test_email())
+
+    @app.route(prefix + "/api/notifications/test/discord", methods=["POST"])
+    @app.route("/api/notifications/test/discord", methods=["POST"])
+    @admin_required
+    def notifications_test_discord():
+        from .notifications import NotificationManager
+        nm = NotificationManager(app_config)
+        return jsonify(nm.test_discord())
+
     # ── REST API v1 ───────────────────────────────────────
     api_v1 = create_api_v1(
         farm_manager=farm_manager,
