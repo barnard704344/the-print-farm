@@ -49,8 +49,8 @@ esac
 # ── System packages ──────────────────────────────────────
 info "Installing system dependencies..."
 apt-get update -qq
-apt-get install -y -qq python3 python3-venv python3-pip apache2 libapache2-mod-proxy-html > /dev/null 2>&1 || \
-    apt-get install -y -qq python3 python3-venv python3-pip apache2 > /dev/null 2>&1
+apt-get install -y -qq python3 python3-venv python3-pip apache2 sudo libapache2-mod-proxy-html > /dev/null 2>&1 || \
+    apt-get install -y -qq python3 python3-venv python3-pip apache2 sudo > /dev/null 2>&1
 ok "System packages installed"
 
 # ── Project directories ──────────────────────────────────
@@ -326,6 +326,24 @@ else:
     subprocess.run(['systemctl', 'reload', 'apache2'], capture_output=True)
 " 2>/dev/null
 ok "Per-printer OrcaSlicer ports configured"
+
+# ── Sudoers for Apache vhost management ──────────────────
+if [[ "$SVC_USER" != "root" ]]; then
+    info "Configuring sudo access for Apache vhost management..."
+    cat > /etc/sudoers.d/the-print-farm <<SUDOEOF
+# Allow ${SVC_USER} to manage Apache vhosts for the-print-farm OrcaSlicer ports
+${SVC_USER} ALL=(root) NOPASSWD: /usr/sbin/a2ensite printer-*
+${SVC_USER} ALL=(root) NOPASSWD: /usr/sbin/a2dissite printer-*
+${SVC_USER} ALL=(root) NOPASSWD: /bin/systemctl reload apache2
+${SVC_USER} ALL=(root) NOPASSWD: /usr/bin/tee /etc/apache2/sites-available/printer-*
+${SVC_USER} ALL=(root) NOPASSWD: /usr/bin/tee -a /etc/apache2/ports.conf
+${SVC_USER} ALL=(root) NOPASSWD: /usr/bin/tee /etc/apache2/ports.conf
+${SVC_USER} ALL=(root) NOPASSWD: /bin/cat /etc/apache2/ports.conf
+${SVC_USER} ALL=(root) NOPASSWD: /bin/rm /etc/apache2/sites-available/printer-*
+SUDOEOF
+    chmod 440 /etc/sudoers.d/the-print-farm
+    ok "Sudo access configured for ${SVC_USER}"
+fi
 
 # ── Permissions ──────────────────────────────────────────
 info "Setting permissions..."

@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import threading
 import time
@@ -80,6 +81,66 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             port += 1
         return port
 
+    def _sudo_cmd(args):
+        """Run a command with sudo if available, otherwise directly."""
+        sudo = shutil.which("sudo")
+        if sudo:
+            return subprocess.run([sudo] + args, capture_output=True)
+        return subprocess.run(args, capture_output=True)
+
+    def _write_file_privileged(path, content):
+        """Write a file using sudo tee if direct write fails."""
+        try:
+            with open(path, "w") as f:
+                f.write(content)
+        except PermissionError:
+            sudo = shutil.which("sudo")
+            if sudo:
+                subprocess.run(
+                    [sudo, "tee", path],
+                    input=content.encode(), capture_output=True,
+                )
+            else:
+                raise
+
+    def _read_file_privileged(path):
+        """Read a file using sudo cat if direct read fails."""
+        try:
+            with open(path) as f:
+                return f.read()
+        except PermissionError:
+            sudo = shutil.which("sudo")
+            if sudo:
+                r = subprocess.run([sudo, "cat", path], capture_output=True)
+                return r.stdout.decode()
+            raise
+
+    def _append_file_privileged(path, content):
+        """Append to a file using sudo tee -a if direct write fails."""
+        try:
+            with open(path, "a") as f:
+                f.write(content)
+        except PermissionError:
+            sudo = shutil.which("sudo")
+            if sudo:
+                subprocess.run(
+                    [sudo, "tee", "-a", path],
+                    input=content.encode(), capture_output=True,
+                )
+            else:
+                raise
+
+    def _remove_file_privileged(path):
+        """Remove a file using sudo rm if direct remove fails."""
+        try:
+            os.remove(path)
+        except PermissionError:
+            sudo = shutil.which("sudo")
+            if sudo:
+                subprocess.run([sudo, "rm", path], capture_output=True)
+            else:
+                raise
+
     def _create_orca_vhost(printer_name, port):
         """Create an Apache VirtualHost for a per-printer OrcaSlicer port."""
         safe_name = re.sub(r'[^a-zA-Z0-9_-]', '-', printer_name).lower()
@@ -93,17 +154,14 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             f"</VirtualHost>\n"
         )
         try:
-            with open(conf_path, "w") as f:
-                f.write(vhost)
+            _write_file_privileged(conf_path, vhost)
             # Add Listen directive if not already present
             ports_conf = "/etc/apache2/ports.conf"
-            with open(ports_conf) as f:
-                ports_content = f.read()
+            ports_content = _read_file_privileged(ports_conf)
             if f"Listen {port}" not in ports_content:
-                with open(ports_conf, "a") as f:
-                    f.write(f"\nListen {port}\n")
-            subprocess.run(["a2ensite", conf_name], capture_output=True)
-            subprocess.run(["systemctl", "reload", "apache2"], capture_output=True)
+                _append_file_privileged(ports_conf, f"\nListen {port}\n")
+            _sudo_cmd(["a2ensite", conf_name])
+            _sudo_cmd(["systemctl", "reload", "apache2"])
             logger.info(f"Created Apache vhost for {printer_name} on port {port}")
         except Exception as e:
             logger.error(f"Failed to create Apache vhost for {printer_name}: {e}")
@@ -113,20 +171,20 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         safe_name = re.sub(r'[^a-zA-Z0-9_-]', '-', printer_name).lower()
         conf_name = f"printer-{safe_name}"
         try:
-            subprocess.run(["a2dissite", conf_name], capture_output=True)
+            _sudo_cmd(["a2dissite", conf_name])
             conf_path = f"/etc/apache2/sites-available/{conf_name}.conf"
             if os.path.exists(conf_path):
-                os.remove(conf_path)
+                _remove_file_privileged(conf_path)
             # Remove Listen directive
             if port:
                 ports_conf = "/etc/apache2/ports.conf"
-                with open(ports_conf) as f:
-                    lines = f.readlines()
-                with open(ports_conf, "w") as f:
-                    for line in lines:
-                        if line.strip() != f"Listen {port}":
-                            f.write(line)
-            subprocess.run(["systemctl", "reload", "apache2"], capture_output=True)
+                ports_content = _read_file_privileged(ports_conf)
+                new_content = "\n".join(
+                    line for line in ports_content.splitlines()
+                    if line.strip() != f"Listen {port}"
+                ) + "\n"
+                _write_file_privileged(ports_conf, new_content)
+            _sudo_cmd(["systemctl", "reload", "apache2"])
             logger.info(f"Removed Apache vhost for {printer_name}")
         except Exception as e:
             logger.error(f"Failed to remove Apache vhost for {printer_name}: {e}")
