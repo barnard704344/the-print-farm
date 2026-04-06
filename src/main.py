@@ -97,12 +97,22 @@ def _deduct_filament_usage(spoolman, job, farm):
             logger.debug(f"No Spoolman spools at location '{printer_name}', skipping usage deduction")
             return
 
-        # Split total weight across used filament slots
+        # Use per-filament weights when available (MMU gcode has per-slot values)
+        per_weights = info.get("per_filament_weights_g", [])
         num_used = len(used_filaments)
 
         # For each used filament slot, try to match a spool and deduct weight
         for filament_info in used_filaments:
-            weight_g = total_weight_g / num_used
+            slot = filament_info.get("slot", -1)
+
+            # Prefer per-slot weight; fall back to splitting total evenly
+            if per_weights and 0 <= slot < len(per_weights):
+                weight_g = per_weights[slot]
+            else:
+                weight_g = total_weight_g / num_used
+
+            if weight_g <= 0:
+                continue
 
             material = (filament_info.get("type") or filament_info.get("material") or "").upper()
 

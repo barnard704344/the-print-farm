@@ -67,24 +67,51 @@ def _parse_gcode_metadata(gcode_text: str) -> dict:
         seconds = int(m.group(3) or 0)
         meta["prediction"] = hours * 3600 + minutes * 60 + seconds
 
-    # Filament used weight from footer: "; filament used [g] = 1.95"
-    m = re.search(r";\s*filament used \[g\]\s*=\s*([\d.]+)", gcode_text[-2048:])
+    # Filament used weight from footer.
+    # MMU gcode has comma-separated per-tool values:
+    #   "; filament used [g] = 0.00, 0.00, 0.00, 0.00, 0.00, 4.50, 0.00"
+    #   "; total filament used [g] = 4.50"
+    # Single-filament gcode has a single value:
+    #   "; filament used [g] = 1.95"
+    footer = gcode_text[-32768:]
+    per_filament_weights_g = []
+
+    # Prefer "total filament used [g]" when present (MMU gcode)
+    m = re.search(r";\s*total filament used \[g\]\s*=\s*([\d.]+)", footer)
     if m:
         meta["weight"] = m.group(1)
         meta["filament_used_g"] = m.group(1)
+    else:
+        # Fallback: parse "filament used [g]" — may be comma-separated
+        m = re.search(r";\s*filament used \[g\]\s*=\s*(.+)", footer)
+        if m:
+            vals = [float(v.strip()) for v in m.group(1).split(",") if v.strip().replace(".", "", 1).isdigit()]
+            total = sum(vals)
+            meta["weight"] = f"{total:.2f}"
+            meta["filament_used_g"] = f"{total:.2f}"
+
+    # Parse per-tool filament weights for precise Spoolman deduction
+    m = re.search(r";\s*filament used \[g\]\s*=\s*(.+)", footer)
+    if m:
+        per_filament_weights_g = [float(v.strip()) for v in m.group(1).split(",") if v.strip().replace(".", "", 1).isdigit()]
+    meta["per_filament_weights_g"] = per_filament_weights_g
 
     # Filament used length: "; filament used [mm] = 644.80"
-    m = re.search(r";\s*filament used \[mm\]\s*=\s*([\d.]+)", gcode_text[-2048:])
+    # Also handles comma-separated MMU values
+    m = re.search(r";\s*filament used \[mm\]\s*=\s*(.+)", footer)
     if m:
-        length_mm = float(m.group(1))
-        meta["filament_used_m"] = f"{length_mm / 1000:.2f}"
+        vals = [float(v.strip()) for v in m.group(1).split(",") if v.strip().replace(".", "", 1).isdigit()]
+        total_mm = sum(vals)
+        meta["filament_used_m"] = f"{total_mm / 1000:.2f}"
 
     # Multi-filament parsing: "; filament_type = PLA;PLA;PETG"
-    # Search up to 32KB - OrcaSlicer embeds long change_filament_gcode blocks
-    # that can push filament metadata well beyond 8KB
+    # OrcaSlicer MMU gcode with long change_filament_gcode blocks can push
+    # filament metadata well beyond the header — search the footer too.
     header = gcode_text[:32768]
     types = []
     m = re.search(r";\s*filament_type\s*=\s*(.+)", header)
+    if not m:
+        m = re.search(r";\s*filament_type\s*=\s*(.+)", footer)
     if m:
         types = [t.strip() for t in m.group(1).split(";")]
         meta["filament_type"] = types[0] if types else "PLA"
@@ -92,6 +119,8 @@ def _parse_gcode_metadata(gcode_text: str) -> dict:
     # Multi-filament colours: "; filament_colour = #FF9016;#00AE42;#FFFFFF"
     colors = []
     m = re.search(r";\s*filament_colour\s*=\s*(.+)", header)
+    if not m:
+        m = re.search(r";\s*filament_colour\s*=\s*(.+)", footer)
     if m:
         colors = [c.strip() for c in m.group(1).split(";")]
         if colors:
@@ -171,6 +200,7 @@ def parse_gcode_filaments(gcode_path: str) -> dict:
         "used_slots": meta["used_slots"],
         "used_filaments": used_filaments,
         "filament_used_g": meta.get("filament_used_g", "0"),
+        "per_filament_weights_g": meta.get("per_filament_weights_g", []),
     }
 
 
