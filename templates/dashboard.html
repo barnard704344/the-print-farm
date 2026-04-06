@@ -1931,6 +1931,10 @@
                                     <span style="font-size:13px;">Print Completed</span>
                                 </label>
                                 <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                    <input type="checkbox" id="notifEvtPaused" style="width:16px; height:16px;">
+                                    <span style="font-size:13px;">Print Paused</span>
+                                </label>
+                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
                                     <input type="checkbox" id="notifEvtFailed" style="width:16px; height:16px;">
                                     <span style="font-size:13px;">Print Failed</span>
                                 </label>
@@ -2886,6 +2890,7 @@
                 document.getElementById('notifEnabled').checked = data.enabled;
                 document.getElementById('notifEvtSubmitted').checked = (data.events || {}).job_submitted !== false;
                 document.getElementById('notifEvtCompleted').checked = (data.events || {}).print_completed !== false;
+                document.getElementById('notifEvtPaused').checked = (data.events || {}).print_paused !== false;
                 document.getElementById('notifEvtFailed').checked = (data.events || {}).print_failed !== false;
                 const email = data.email || {};
                 document.getElementById('notifEmailEnabled').checked = email.enabled || false;
@@ -2910,6 +2915,7 @@
                 events: {
                     job_submitted: document.getElementById('notifEvtSubmitted').checked,
                     print_completed: document.getElementById('notifEvtCompleted').checked,
+                    print_paused: document.getElementById('notifEvtPaused').checked,
                     print_failed: document.getElementById('notifEvtFailed').checked,
                 },
                 email: {

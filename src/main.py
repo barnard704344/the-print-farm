@@ -250,6 +250,38 @@ def cmd_run(args, config: dict):
 
     signal.signal(signal.SIGINT, signal_handler)
 
+    # Track previous printer status per job to detect transitions (e.g. RUNNING → PAUSED)
+    _job_prev_status = {}
+
+    def _get_error_reason(state):
+        """Extract a human-readable error reason from printer state."""
+        from .bambu_client import PrintState
+        parts = []
+        if state.print_error and state.print_error != 0:
+            parts.append(f"error code 0x{state.print_error:08X}")
+        if state.hms:
+            for h in state.hms[:3]:
+                if isinstance(h, dict):
+                    msg = h.get("msg", h.get("description", ""))
+                    if msg:
+                        parts.append(msg)
+        return "; ".join(parts) if parts else ""
+
+    def _get_pause_reason(state):
+        """Extract a human-readable pause reason from printer state."""
+        from .bambu_client import PrintStatus
+        if state.status == PrintStatus.PAUSE_FILAMENT:
+            return "Filament runout or tangle"
+        if state.print_error and state.print_error != 0:
+            return f"Error code 0x{state.print_error:08X}"
+        if state.hms:
+            for h in state.hms[:3]:
+                if isinstance(h, dict):
+                    msg = h.get("msg", h.get("description", ""))
+                    if msg:
+                        return msg
+        return ""
+
     # Main loop — handles pool auto-dispatch and print completion tracking
     try:
         while True:
@@ -332,24 +364,51 @@ def cmd_run(args, config: dict):
                             if age < 60:
                                 continue
 
+                        job_key = job["id"]
+                        fname = job.get("original_name", job["filename"])
+                        pname = job["printer_name"]
+
                         if state.status == PrintStatus.FINISH:
-                            queue.mark_completed(job["id"])
-                            logger.info(f"Job #{job['id']} completed on {job['printer_name']}")
+                            queue.mark_completed(job_key)
+                            logger.info(f"Job #{job_key} completed on {pname}")
                             if spoolman:
                                 _deduct_filament_usage(spoolman, job, farm)
                             notifier.notify(
                                 "print_completed",
-                                f"Print Completed — {job.get('original_name', job['filename'])}",
-                                f"Job #{job['id']} finished on {job['printer_name']}.\nFile: {job.get('original_name', job['filename'])}",
+                                f"Print Completed — {fname}",
+                                f"Job #{job_key} finished on {pname}.\nFile: {fname}",
                             )
                         elif state.status == PrintStatus.FAILED:
-                            queue.mark_failed(job["id"])
-                            logger.warning(f"Job #{job['id']} failed on {job['printer_name']}")
+                            queue.mark_failed(job_key)
+                            reason = _get_error_reason(state)
+                            subj = f"Print Failed — {fname}"
+                            if reason:
+                                subj += f" ({reason})"
+                            logger.warning(f"Job #{job_key} failed on {pname}")
                             notifier.notify(
-                                "print_failed",
-                                f"Print Failed — {job.get('original_name', job['filename'])}",
-                                f"Job #{job['id']} failed on {job['printer_name']}.\nFile: {job.get('original_name', job['filename'])}",
+                                "print_failed", subj,
+                                f"Job #{job_key} failed on {pname}.\nFile: {fname}\nReason: {reason or 'Unknown'}",
                             )
+                        elif state.status in (PrintStatus.PAUSED, PrintStatus.PAUSE_FILAMENT):
+                            prev = _job_prev_status.get(job_key)
+                            if prev not in (PrintStatus.PAUSED, PrintStatus.PAUSE_FILAMENT):
+                                reason = _get_pause_reason(state)
+                                subj = f"Print Paused — {fname}"
+                                if reason:
+                                    subj += f" ({reason})"
+                                logger.info(f"Job #{job_key} paused on {pname}")
+                                notifier.notify(
+                                    "print_paused", subj,
+                                    f"Job #{job_key} paused on {pname}.\nFile: {fname}\nReason: {reason or 'User paused'}",
+                                )
+
+                        _job_prev_status[job_key] = state.status
+
+            # Clean up tracked status for jobs no longer active
+            active_ids = {j["id"] for j in active}
+            for jid in list(_job_prev_status):
+                if jid not in active_ids:
+                    del _job_prev_status[jid]
 
             time.sleep(5)
     except KeyboardInterrupt:
