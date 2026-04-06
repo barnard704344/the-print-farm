@@ -311,6 +311,7 @@ class JobQueue:
                 conn.close()
                 return False
 
+            conn.execute("DELETE FROM job_history WHERE job_id = ?", (job_id,))
             conn.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
             conn.commit()
 

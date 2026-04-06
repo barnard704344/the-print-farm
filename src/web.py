@@ -140,10 +140,10 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         return session.get("role") in ("staff", "student") or session.get("admin") is True
 
     def admin_required(f):
-        """Require staff / legacy admin role."""
+        """Require staff / legacy admin role, or a valid API key."""
         @wraps(f)
         def decorated(*args, **kwargs):
-            if not is_admin():
+            if not is_admin() and not _check_api_key():
                 return jsonify({"error": "Admin login required"}), 403
             return f(*args, **kwargs)
         return decorated

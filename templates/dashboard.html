@@ -3827,16 +3827,36 @@
 
         async function jobAction(id, action) {
             if (action === 'delete') {
+                if (!confirm('Delete this job?')) return;
                 const deleteLib = confirm('Also delete this file from the library?');
-                const method = 'DELETE';
                 const qs = deleteLib ? '?delete_library=true' : '';
-                await fetch(`${BASE}/api/jobs/${id}/${action}${qs}`, { method });
+                try {
+                    const res = await fetch(`${BASE}/api/jobs/${id}/delete${qs}`, { method: 'DELETE' });
+                    if (!res.ok) {
+                        const err = await res.json().catch(() => ({}));
+                        alert(err.error || 'Failed to delete job');
+                        return;
+                    }
+                } catch (e) {
+                    alert('Network error deleting job');
+                    return;
+                }
                 refreshJobs();
                 if (deleteLib) refreshLibrary();
                 return;
             }
-            const method = 'POST';
-            await fetch(`${BASE}/api/jobs/${id}/${action}`, { method });
+            if (action === 'cancel' && !confirm('Cancel this job?')) return;
+            try {
+                const res = await fetch(`${BASE}/api/jobs/${id}/${action}`, { method: 'POST' });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    alert(err.error || `Failed to ${action} job`);
+                    return;
+                }
+            } catch (e) {
+                alert(`Network error: ${action}`);
+                return;
+            }
             refreshJobs();
         }
 
