@@ -608,6 +608,14 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             submitted_by=session.get("username", ""),
         )
 
+        # Notify
+        from .notifications import NotificationManager
+        NotificationManager(app_config).notify(
+            "job_submitted",
+            f"New Job — {original_name}",
+            f"Job #{job_id} submitted by {session.get('username', 'unknown')}.\nFile: {original_name}",
+        )
+
         # Add to file library for persistent storage
         # Save uploaded thumbnail if provided
         uploaded_thumb_path = None
@@ -1006,6 +1014,14 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             submitted_by=session.get("username", ""),
         )
         file_library.increment_print_count(file_id)
+
+        from .notifications import NotificationManager
+        NotificationManager(app_config).notify(
+            "job_submitted",
+            f"New Job — {lib_file['original_name']}",
+            f"Job #{new_job_id} submitted from library by {session.get('username', 'unknown')}.\nFile: {lib_file['original_name']}",
+        )
+
         return jsonify({"ok": True, "job_id": new_job_id})
 
     @app.route(prefix + "/api/library/folders", methods=["POST"])
@@ -1790,6 +1806,14 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             copies=1,
             priority=10 if print_flag else 0,
             notes="Uploaded from OrcaSlicer",
+        )
+
+        # Notify
+        from .notifications import NotificationManager
+        NotificationManager(app_config).notify(
+            "job_submitted",
+            f"New Job — {original_name}",
+            f"Job #{job_id} submitted via OrcaSlicer.\nFile: {original_name}",
         )
 
         # If a printer target is specified (per-printer virtual printer),

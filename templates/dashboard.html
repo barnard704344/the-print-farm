@@ -1923,6 +1923,10 @@
                             <h4 style="font-size:14px; margin-bottom:8px;">Events</h4>
                             <div style="display:flex; gap:16px; flex-wrap:wrap;">
                                 <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                    <input type="checkbox" id="notifEvtSubmitted" style="width:16px; height:16px;">
+                                    <span style="font-size:13px;">Job Submitted</span>
+                                </label>
+                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
                                     <input type="checkbox" id="notifEvtCompleted" style="width:16px; height:16px;">
                                     <span style="font-size:13px;">Print Completed</span>
                                 </label>
@@ -2880,6 +2884,7 @@
                 if (!res.ok) return;
                 const data = await res.json();
                 document.getElementById('notifEnabled').checked = data.enabled;
+                document.getElementById('notifEvtSubmitted').checked = (data.events || {}).job_submitted !== false;
                 document.getElementById('notifEvtCompleted').checked = (data.events || {}).print_completed !== false;
                 document.getElementById('notifEvtFailed').checked = (data.events || {}).print_failed !== false;
                 const email = data.email || {};
@@ -2903,6 +2908,7 @@
             const payload = {
                 enabled: document.getElementById('notifEnabled').checked,
                 events: {
+                    job_submitted: document.getElementById('notifEvtSubmitted').checked,
                     print_completed: document.getElementById('notifEvtCompleted').checked,
                     print_failed: document.getElementById('notifEvtFailed').checked,
                 },
