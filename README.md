@@ -11,7 +11,10 @@ A web-based print farm manager for **BambuLab** and **Klipper** 3D printers. Mon
 - **Printer discovery** — Auto-detect BambuLab (UDP broadcast) and Klipper (Moonraker port scan)
 - **Authentication** — Local users, Active Directory/LDAP, student/staff roles
 - **OrcaSlicer integration** — Slice and print directly from OrcaSlicer via virtual printers (OctoPrint-compatible) — no batch files needed
-- **AMS support** — Full filament tray management for BambuLab printers with AMS
+- **AMS support** — Full filament tray management for BambuLab printers with AMS, including per-unit humidity/temperature monitoring
+- **Printer pool** — Auto-dispatch generic OrcaSlicer jobs to the next idle printer in a configurable pool
+- **Multi-printer dispatch** — Send a queued job to multiple printers at once; the job is cloned automatically
+- **Mobile responsive** — Dashboard adapts to phones and tablets with touch-friendly targets and stacked layouts
 - **Camera streaming** — Live camera feeds from BambuLab printers and Klipper webcams (MJPEG/snapshot auto-detected via Moonraker)
 - **Job history** — 7-day rolling history preserved independently of job deletion
 - **Obico integration** — If a local Obico server is running and the Obico plugin is installed on your Klipper printer, the dashboard will automatically pull failure detection data and remote monitoring info from it
@@ -38,6 +41,26 @@ Full control of Happy Hare (multi-material unit) on Klipper printers:
 - **Parameter support** — Macros with parameters show an input dialog with defaults
 - **Gate configuration** — Click any loaded gate to set material type and filament colour, sent directly to Happy Hare via `MMU_GATE_MAP`
 - **Spoolman integration** — If Spoolman is configured, the gate config modal shows a dropdown of your spool inventory; selecting a spool auto-fills colour, material, and links the spool ID to Happy Hare
+
+### BambuLab AMS Integration
+
+Full management of BambuLab AMS (Automatic Material System) units:
+
+- **Auto-detected** — AMS units, tray contents, filament colours, and active tray shown on printer cards
+- **Per-unit monitoring** — Humidity percentage and temperature for each AMS unit
+- **Tray management modal** — Click the AMS section to open a popup with Overview and Tray Management tabs
+- **Filament configuration** — Set filament type, colour, and nozzle temperature per tray
+- **Spoolman integration** — If Spoolman is configured, select spools from your inventory to auto-fill tray settings
+
+### Printer Pool
+
+Auto-dispatch jobs from the generic OrcaSlicer port to idle printers:
+
+- **Configurable pool** — Choose which printers participate in auto-dispatch from Settings → Printer Pool
+- **Toggle on/off** — Enable or disable pool dispatch without removing the printer list
+- **Generic port only** — Only affects jobs submitted without a printer target; per-printer port jobs are unaffected
+- **Hot-reloadable** — Pool config changes take effect immediately, no restart required
+- **Smart filtering** — Only dispatches to pool printers that are connected and idle
 
 ### Spoolman Integration
 
@@ -161,6 +184,20 @@ Jobs enter the queue unassigned and can be sent to any printer from the dashboar
 - **Service:** systemd (`the-print-farm.service`)
 
 ## Configuration
+
+### Printer Pool
+
+Add to `config/config.yaml` to enable auto-dispatch of generic queue jobs:
+
+```yaml
+pool:
+  enabled: true
+  printers:
+    - Voron-01
+    - P1S-1
+```
+
+Or configure from the dashboard Settings tab → Printer Pool. When enabled, jobs submitted through the generic OrcaSlicer port (no specific printer target) are automatically sent to the next idle printer in the pool. Jobs submitted via per-printer ports are never auto-dispatched.
 
 ### Spoolman
 
