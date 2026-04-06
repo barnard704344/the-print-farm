@@ -105,16 +105,17 @@ class JobQueue:
 
     def add_job(self, filename: str, original_name: str, file_path: str,
                 copies: int = 1, priority: int = 0, notes: str = "",
-                submitted_by: str = "") -> int:
+                submitted_by: str = "", printer_name: str = "") -> int:
         """Add a new job to the queue. Returns the job ID."""
         with self._lock:
             conn = self._get_conn()
             cursor = conn.execute(
                 """INSERT INTO jobs (filename, original_name, file_path, copies_total,
-                   priority, notes, created_at, submitted_by)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                   priority, notes, created_at, submitted_by, printer_name)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (filename, original_name, file_path, copies, priority, notes,
-                 datetime.now(timezone.utc).isoformat(), submitted_by),
+                 datetime.now(timezone.utc).isoformat(), submitted_by,
+                 printer_name or None),
             )
             job_id = cursor.lastrowid
             conn.commit()
@@ -285,6 +286,7 @@ class JobQueue:
             priority=job["priority"],
             notes=f"Reprint of job #{job_id}",
             submitted_by=job.get("submitted_by", ""),
+            printer_name=job.get("printer_name", ""),
         )
 
     def clone_job_for_printer(self, job_id: int) -> Optional[int]:
@@ -300,6 +302,7 @@ class JobQueue:
             priority=job["priority"],
             notes=job.get("notes", ""),
             submitted_by=job.get("submitted_by", ""),
+            printer_name=job.get("printer_name", ""),
         )
 
     def delete_job(self, job_id: int) -> bool:

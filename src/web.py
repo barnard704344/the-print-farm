@@ -172,7 +172,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         """Require admin OR ownership of the job (job_id must be a route param)."""
         @wraps(f)
         def decorated(*args, **kwargs):
-            if is_admin():
+            if is_admin() or _check_api_key():
                 return f(*args, **kwargs)
             if not is_authenticated():
                 return jsonify({"error": "Login required"}), 401
