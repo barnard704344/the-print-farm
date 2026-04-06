@@ -3416,7 +3416,7 @@
                     }
                 }).join('');
 
-                const humLabel = p.ams_humidity ? ` · Humidity: ${p.ams_humidity}` : '';
+                const humLabel = p.ams_humidity ? ` · ${_amsHumidityIcon(p.ams_humidity)} ${_amsHumidityLabel(p.ams_humidity)}` : '';
                 const externalActive = p.ams_tray_now === 254;
 
                 return `
@@ -5184,6 +5184,16 @@
             return '💧';
         }
 
+        function _amsHumidityLabel(level) {
+            const n = parseInt(level);
+            if (isNaN(n)) return level;
+            if (n <= 1) return 'Very Dry';
+            if (n <= 2) return 'Dry';
+            if (n <= 3) return 'Moderate';
+            if (n <= 4) return 'Humid';
+            return 'Wet';
+        }
+
         function _amsRenderOverview(printerName) {
             const p = _amsGetPrinter(printerName);
             const container = document.getElementById('amsTabOverview');
@@ -5264,7 +5274,7 @@
                     <div class="ams-unit-header">
                         <span class="ams-unit-title">AMS Unit ${parseInt(uid) + 1}</span>
                         <span class="ams-unit-meta">
-                            ${humidity ? `<span>${_amsHumidityIcon(humidity)} Humidity: ${humidity}</span>` : ''}
+                            ${humidity ? `<span>${_amsHumidityIcon(humidity)} ${_amsHumidityLabel(humidity)}</span>` : ''}
                             ${temp ? `<span>🌡️ ${temp}°C</span>` : ''}
                         </span>
                     </div>
