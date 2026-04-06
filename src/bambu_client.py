@@ -122,6 +122,7 @@ class PrintState:
     ams_trays: list = field(default_factory=list)  # flattened tray list
     ams_tray_now: int = 255  # currently active tray (255=none, 254=external)
     ams_humidity: str = ""  # AMS humidity level
+    ams_units: list = field(default_factory=list)  # per-unit info (id, humidity, temp)
     vt_tray: dict = field(default_factory=dict)  # external/virtual tray
     has_ams: bool = False
     # Happy Hare MMU (Klipper)
@@ -630,9 +631,17 @@ class BambuClient:
             tray_is_bbl = self._last_tray_is_bbl_bits
 
             trays = []
+            units_info = []
             for unit in ams_units:
                 unit_id = int(unit.get("id", 0))
-                self._state.ams_humidity = unit.get("humidity", "")
+                humidity = unit.get("humidity", "")
+                self._state.ams_humidity = humidity  # keep last for compat
+                temp = unit.get("temp", "")
+                units_info.append({
+                    "id": unit_id,
+                    "humidity": humidity,
+                    "temp": temp,
+                })
                 for tray in unit.get("tray", []):
                     tray_id = int(tray.get("id", 0))
                     global_id = unit_id * 4 + tray_id
@@ -661,6 +670,7 @@ class BambuClient:
                         "active": global_id == self._state.ams_tray_now,
                     })
             self._state.ams_trays = trays
+            self._state.ams_units = units_info
 
     def _parse_status(self, gcode_state: str, data: dict) -> PrintStatus:
         state_upper = gcode_state.upper()

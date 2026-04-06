@@ -136,6 +136,7 @@ class FarmManager:
                 "ams_trays": s.ams_trays,
                 "ams_tray_now": s.ams_tray_now,
                 "ams_humidity": s.ams_humidity,
+                "ams_units": s.ams_units,
                 "vt_tray": s.vt_tray,
                 "has_mmu": s.has_mmu,
                 "mmu": s.mmu,

@@ -802,6 +802,159 @@
         .hh-tool-btn:hover { border-color: var(--accent); }
         .hh-tool-btn.active { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); }
 
+        /* BambuLab AMS Enhanced Popup */
+        .ams-overlay {
+            display: none; position: fixed; inset: 0; z-index: 2000; background: rgba(0,0,0,0.65);
+            justify-content: center; align-items: center; backdrop-filter: blur(4px);
+        }
+        .ams-modal {
+            max-width: 860px; width: 94vw; max-height: 90vh; display: flex; flex-direction: column;
+            background: var(--card); border-radius: 16px; border: 1px solid var(--border);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+        .ams-modal-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 16px 20px; border-bottom: 1px solid var(--border);
+        }
+        .ams-modal-header h2 { font-size: 18px; margin: 0; display: flex; align-items: center; gap: 8px; }
+        .ams-modal-close { background: none; border: none; color: var(--text-muted); font-size: 24px; cursor: pointer; padding: 4px 8px; }
+        .ams-modal-close:hover { color: var(--text); }
+        .ams-modal-body { overflow-y: auto; padding: 16px 20px; flex: 1; }
+
+        .ams-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); padding: 0 20px; }
+        .ams-tab-btn {
+            padding: 10px 18px; font-size: 13px; font-weight: 600; cursor: pointer;
+            border-bottom: 2px solid transparent; color: var(--text-muted); transition: all 0.15s;
+            background: none; border-top: none; border-left: none; border-right: none;
+        }
+        .ams-tab-btn:hover { color: var(--text); }
+        .ams-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .ams-tab-pane { display: none; }
+        .ams-tab-pane.active { display: block; }
+
+        /* AMS popup status banner */
+        .ams-pop-banner {
+            display: flex; flex-wrap: wrap; gap: 12px; padding: 12px 16px;
+            background: var(--bg); border-radius: 8px; margin-bottom: 16px;
+        }
+        .ams-pop-stat { display: flex; flex-direction: column; gap: 2px; min-width: 80px; }
+        .ams-pop-stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
+        .ams-pop-stat-val { font-size: 14px; font-weight: 600; color: var(--text); }
+        .ams-pop-stat-val.green { color: var(--accent); }
+        .ams-pop-stat-val.yellow { color: #f59e0b; }
+
+        /* AMS popup unit cards */
+        .ams-units-grid { display: flex; flex-direction: column; gap: 16px; margin-bottom: 16px; }
+        .ams-unit-card {
+            background: var(--bg); border-radius: 10px; border: 1px solid var(--border); padding: 14px;
+        }
+        .ams-unit-header {
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
+        }
+        .ams-unit-title { font-size: 13px; font-weight: 700; }
+        .ams-unit-meta { font-size: 11px; color: var(--text-muted); display: flex; gap: 12px; }
+
+        /* AMS popup tray strip */
+        .ams-pop-trays { display: flex; gap: 8px; }
+        .ams-pop-tray {
+            flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+            padding: 10px 6px 8px; border-radius: 8px; border: 2px solid var(--border);
+            transition: all 0.2s; position: relative; cursor: pointer; min-width: 0;
+        }
+        .ams-pop-tray:hover { border-color: var(--text-muted); }
+        .ams-pop-tray.active { border-color: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
+        .ams-pop-tray.empty { opacity: 0.35; cursor: default; }
+        .ams-pop-swatch {
+            width: 32px; height: 32px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.15);
+            position: relative;
+        }
+        .ams-pop-swatch.bbl::after {
+            content: '✦'; position: absolute; bottom: -2px; right: -4px; font-size: 10px;
+            color: var(--accent); text-shadow: 0 0 4px var(--accent-glow);
+        }
+        .ams-pop-tray-info { text-align: center; min-width: 0; width: 100%; }
+        .ams-pop-tray-type { font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .ams-pop-tray-slot { font-size: 10px; color: var(--text-muted); }
+        .ams-pop-tray-remain-bar {
+            width: 100%; height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px;
+            overflow: hidden; margin-top: 4px;
+        }
+        .ams-pop-tray-remain-fill {
+            height: 100%; border-radius: 2px; transition: width 0.3s;
+        }
+        .ams-pop-tray-remain-text { font-size: 9px; color: var(--text-muted); margin-top: 2px; }
+        .ams-pop-tray-edit {
+            position: absolute; top: 2px; right: 2px; font-size: 10px; color: var(--text-muted);
+            cursor: pointer; opacity: 0; transition: opacity 0.15s; padding: 2px 4px; line-height: 1;
+        }
+        .ams-pop-tray:hover .ams-pop-tray-edit { opacity: 1; }
+        .ams-pop-tray-edit:hover { color: var(--accent); }
+        .ams-pop-tray-temps { font-size: 9px; color: var(--text-muted); white-space: nowrap; }
+
+        /* Filament path for AMS */
+        .ams-pop-filpath {
+            display: flex; align-items: center; gap: 0; padding: 12px 16px;
+            background: var(--bg); border-radius: 8px; margin-bottom: 16px;
+            overflow: hidden; position: relative; min-height: 56px;
+        }
+        .ams-pop-filpath-seg {
+            display: flex; align-items: center; justify-content: center; flex-direction: column;
+            padding: 8px 12px; font-size: 11px; font-weight: 600; position: relative;
+        }
+        .ams-pop-filpath-label { font-size: 9px; color: var(--text-muted); margin-bottom: 2px; }
+        .ams-pop-filpath-icon { font-size: 18px; }
+        .ams-pop-filpath-line {
+            flex: 1; height: 4px; background: var(--border); border-radius: 2px;
+            min-width: 30px; position: relative; overflow: hidden;
+        }
+        .ams-pop-filpath-line.active {
+            background: linear-gradient(90deg, var(--accent), rgba(34,197,94,0.3));
+        }
+        .ams-pop-filpath-line.active::after {
+            content: ''; position: absolute; top: 0; left: -30%; width: 30%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            animation: ams-flow 1.5s ease-in-out infinite;
+        }
+        @keyframes ams-flow { 0% { left: -30%; } 100% { left: 100%; } }
+
+        /* External spool section in popup */
+        .ams-pop-external {
+            display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+            background: var(--bg); border-radius: 8px; margin-bottom: 16px;
+            border: 1px solid var(--border);
+        }
+        .ams-pop-external.active { border-color: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
+        .ams-pop-ext-swatch {
+            width: 24px; height: 24px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.15);
+            flex-shrink: 0;
+        }
+        .ams-pop-ext-info { flex: 1; font-size: 12px; }
+        .ams-pop-ext-label { font-weight: 600; }
+        .ams-pop-ext-type { font-size: 11px; color: var(--text-muted); }
+
+        /* Quick actions for AMS popup */
+        .ams-pop-actions {
+            display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;
+        }
+        .ams-pop-action-btn {
+            display: flex; align-items: center; gap: 6px; padding: 8px 14px;
+            background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+            cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text);
+            transition: all 0.15s;
+        }
+        .ams-pop-action-btn:hover { border-color: var(--accent); background: rgba(34,197,94,0.05); }
+        .ams-pop-action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* Tray selection buttons in popup */
+        .ams-pop-tray-btns { display: flex; gap: 4px; flex-wrap: wrap; }
+        .ams-pop-tray-btn {
+            width: 40px; height: 32px; display: flex; align-items: center; justify-content: center;
+            background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+            cursor: pointer; font-size: 11px; font-weight: 700; color: var(--text); transition: all 0.15s;
+        }
+        .ams-pop-tray-btn:hover { border-color: var(--accent); }
+        .ams-pop-tray-btn.active { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); }
+
         /* Obico AI Detection Section */
         .obico-section {
             margin-bottom: 12px;
@@ -1635,6 +1788,24 @@
     <!-- Happy Hare Params Dialog -->
     <div class="hh-params-overlay" id="hhParamsOverlay" style="display:none" onclick="if(event.target===this)closeHhParams()">
         <div class="hh-params-dialog" id="hhParamsDialog" onclick="event.stopPropagation()">
+        </div>
+    </div>
+
+    <!-- BambuLab AMS Popup Modal -->
+    <div class="ams-overlay" id="amsOverlay" onclick="if(event.target===this)closeAmsModal()">
+        <div class="ams-modal" onclick="event.stopPropagation()">
+            <div class="ams-modal-header">
+                <h2>📦 AMS — <span id="amsPrinterName"></span></h2>
+                <button class="ams-modal-close" onclick="closeAmsModal()">&times;</button>
+            </div>
+            <div class="ams-tabs">
+                <button class="ams-tab-btn active" data-ams-tab="overview" onclick="switchAmsTab(this)">Overview</button>
+                <button class="ams-tab-btn" data-ams-tab="manage" onclick="switchAmsTab(this)">Tray Management</button>
+            </div>
+            <div class="ams-modal-body">
+                <div class="ams-tab-pane active" id="amsTabOverview"></div>
+                <div class="ams-tab-pane" id="amsTabManage"></div>
+            </div>
         </div>
     </div>
 
@@ -2822,9 +2993,9 @@
                     if (isAdmin) {
                         return `
                             <div class="ams-tray ${activeClass} ${emptyClass}"
-                                 onclick="${t.loaded ? `amsLoadTray('${name}', ${t.id})` : ''}"
+                                 onclick="event.stopPropagation();${t.loaded ? `amsLoadTray('${name}', ${t.id})` : ''}"
                                  title="${t.loaded ? `Click to load · Right-click to configure` : 'Empty slot'}"
-                                 oncontextmenu="${t.loaded ? `event.preventDefault();openTrayConfig('${name}', ${t.id}, ${t.slot}, '${(t.type||'').replace(/'/g,"\\'")}', '${t.color||'#333333'}', '${t.nozzle_temp_min}', '${t.nozzle_temp_max}')` : ''}">
+                                 oncontextmenu="event.stopPropagation();${t.loaded ? `event.preventDefault();openTrayConfig('${name}', ${t.id}, ${t.slot}, '${(t.type||'').replace(/'/g,"\\'")}', '${t.color||'#333333'}', '${t.nozzle_temp_min}', '${t.nozzle_temp_max}')` : ''}">
                                 <div class="ams-tray-swatch" style="background:${t.loaded ? swatchColor : '#333'}"></div>
                                 <div class="ams-tray-type">${t.type || '—'}</div>
                                 <div class="ams-tray-slot">#${t.slot + 1}</div>
@@ -2848,18 +3019,18 @@
                 const externalActive = p.ams_tray_now === 254;
 
                 return `
-                    <div class="ams-section" data-field="ams">
+                    <div class="ams-section" data-field="ams" onclick="openAmsModal('${name}')" title="Click to open AMS details" style="cursor:pointer">
                         <div class="ams-header">
                             <span>AMS${p.ams_serial ? ` <span style="font-size:10px;color:var(--text-muted)">(${p.ams_serial})</span>` : ''}${humLabel}</span>
                             <span>${p.ams_tray_now < 254 ? `Tray ${p.ams_tray_now + 1}` : p.ams_tray_now === 254 ? 'External' : 'None'}</span>
                         </div>
                         <div class="ams-trays">${trays}</div>
-                        ${isAdmin ? `<div class="ams-external ${externalActive ? 'active' : ''}">
+                        ${isAdmin ? `<div class="ams-external ${externalActive ? 'active' : ''}" onclick="event.stopPropagation()">
                             <span onclick="amsLoadTray('${name}', 254)" style="cursor:pointer">🔗 External Spool${externalActive ? ' (active)' : ''}</span>
                             <span style="margin-left:auto;">
                                 <button class="btn" onclick="amsLoadTray('${name}', 255)" style="font-size:10px;padding:2px 8px;">Unload</button>
                             </span>
-                        </div>` : `<div class="ams-external ${externalActive ? 'active' : ''}">
+                        </div>` : `<div class="ams-external ${externalActive ? 'active' : ''}" onclick="event.stopPropagation()">>
                             <span>🔗 External Spool${externalActive ? ' (active)' : ''}</span>
                         </div>`}
                     </div>
@@ -4517,6 +4688,256 @@
                 resDiv.className = 'hh-result error';
                 resDiv.textContent = `✗ ${err.message}`;
             }
+        }
+
+        // ══════════════════════════════════════════════════════
+        // BambuLab AMS Enhanced Popup
+        // ══════════════════════════════════════════════════════
+        let _amsRefreshInterval = null;
+
+        function openAmsModal(printerName) {
+            window._amsPrinterName = printerName;
+            document.getElementById('amsPrinterName').textContent = printerName;
+            document.getElementById('amsOverlay').style.display = 'flex';
+            // Reset to overview tab
+            document.querySelectorAll('.ams-tab-btn').forEach(t => t.classList.toggle('active', t.dataset.amsTab === 'overview'));
+            document.querySelectorAll('.ams-tab-pane').forEach(t => t.classList.toggle('active', t.id === 'amsTabOverview'));
+            document.getElementById('amsTabOverview').innerHTML = '<p style="color:var(--text-muted)">Loading…</p>';
+            document.getElementById('amsTabManage').innerHTML = '';
+            window._amsManageLoaded = false;
+            _amsRenderOverview(printerName);
+            _amsStartRefresh(printerName);
+        }
+
+        function closeAmsModal() {
+            document.getElementById('amsOverlay').style.display = 'none';
+            _amsStopRefresh();
+            window._amsPrinterName = null;
+        }
+
+        function switchAmsTab(tabEl) {
+            const tabId = tabEl.dataset.amsTab;
+            document.querySelectorAll('.ams-tab-btn').forEach(t => t.classList.toggle('active', t === tabEl));
+            document.querySelectorAll('.ams-tab-pane').forEach(t => {
+                t.classList.toggle('active', t.id === 'amsTab' + tabId.charAt(0).toUpperCase() + tabId.slice(1));
+            });
+            if (tabId === 'manage' && !window._amsManageLoaded) {
+                _amsRenderManage(window._amsPrinterName);
+            }
+        }
+
+        function _amsStartRefresh(printerName) {
+            _amsStopRefresh();
+            _amsRefreshInterval = setInterval(() => {
+                if (document.getElementById('amsOverlay').style.display === 'none') { _amsStopRefresh(); return; }
+                if (document.getElementById('amsTabOverview').classList.contains('active')) {
+                    _amsRenderOverview(printerName);
+                }
+            }, 2000);
+        }
+        function _amsStopRefresh() {
+            if (_amsRefreshInterval) { clearInterval(_amsRefreshInterval); _amsRefreshInterval = null; }
+        }
+
+        function _amsGetPrinter(printerName) {
+            const printers = window._farmPrinters || {};
+            return printers[printerName] || null;
+        }
+
+        function _amsRemainColor(pct) {
+            if (pct < 0) return 'var(--text-muted)';
+            if (pct > 50) return 'var(--accent)';
+            if (pct > 20) return '#f59e0b';
+            return 'var(--danger)';
+        }
+
+        function _amsHumidityIcon(level) {
+            // AMS reports humidity as 1-5 or descriptive
+            const n = parseInt(level);
+            if (!isNaN(n)) {
+                if (n <= 1) return '🟢';
+                if (n <= 2) return '🟡';
+                if (n <= 3) return '🟠';
+                return '🔴';
+            }
+            return '💧';
+        }
+
+        function _amsRenderOverview(printerName) {
+            const p = _amsGetPrinter(printerName);
+            const container = document.getElementById('amsTabOverview');
+            if (!p || !p.has_ams || !p.ams_trays || p.ams_trays.length === 0) {
+                container.innerHTML = '<p style="color:var(--text-muted)">No AMS detected or no tray data available.</p>';
+                return;
+            }
+
+            const trays = p.ams_trays;
+            const units = p.ams_units || [];
+            const trayNow = p.ams_tray_now;
+            const isExternal = trayNow === 254;
+            const vt = p.vt_tray || {};
+
+            // Find active tray info
+            const activeTray = trays.find(t => t.active);
+            const activeTrayLabel = activeTray ? `Slot ${activeTray.slot + 1} (Unit ${activeTray.unit + 1})` : isExternal ? 'External Spool' : 'None';
+            const activeMaterial = activeTray ? (activeTray.type || '—') : isExternal ? (vt.tray_type || '—') : '—';
+
+            // Count stats
+            const loadedCount = trays.filter(t => t.loaded).length;
+            const bblCount = trays.filter(t => t.is_bbl).length;
+
+            let html = '';
+
+            // --- Status Banner ---
+            html += `<div class="ams-pop-banner">
+                <div class="ams-pop-stat"><span class="ams-pop-stat-label">Active Tray</span><span class="ams-pop-stat-val ${activeTray || isExternal ? 'green' : ''}">${activeTrayLabel}</span></div>
+                <div class="ams-pop-stat"><span class="ams-pop-stat-label">Material</span><span class="ams-pop-stat-val">${activeMaterial}</span></div>
+                <div class="ams-pop-stat"><span class="ams-pop-stat-label">Loaded Slots</span><span class="ams-pop-stat-val">${loadedCount} / ${trays.length}</span></div>
+                <div class="ams-pop-stat"><span class="ams-pop-stat-label">BambuLab Spools</span><span class="ams-pop-stat-val">${bblCount}</span></div>
+                <div class="ams-pop-stat"><span class="ams-pop-stat-label">AMS Units</span><span class="ams-pop-stat-val">${units.length || Math.ceil(trays.length / 4)}</span></div>
+            </div>`;
+
+            // --- Filament Path ---
+            const feeding = activeTray || isExternal;
+            const activeColor = activeTray ? (activeTray.color || 'var(--accent)') : 'var(--accent)';
+            const lineClass = feeding ? 'active' : '';
+
+            html += `<div class="ams-pop-filpath">
+                <div class="ams-pop-filpath-seg">
+                    <div class="ams-pop-filpath-label">${isExternal ? 'External' : activeTray ? `AMS ${activeTray.unit + 1}` : 'AMS'}</div>
+                    <div class="ams-pop-filpath-icon">${isExternal ? '🔗' : '📦'}</div>
+                </div>
+                <div class="ams-pop-filpath-line ${lineClass}" ${feeding ? `style="background:linear-gradient(90deg, ${activeColor}, ${activeColor}44)"` : ''}></div>
+                <div class="ams-pop-filpath-seg">
+                    <div class="ams-pop-filpath-label">PTFE Tube</div>
+                    <div class="ams-pop-filpath-icon">〰️</div>
+                </div>
+                <div class="ams-pop-filpath-line ${lineClass}" ${feeding ? `style="background:linear-gradient(90deg, ${activeColor}88, ${activeColor}44)"` : ''}></div>
+                <div class="ams-pop-filpath-seg">
+                    <div class="ams-pop-filpath-label">Extruder</div>
+                    <div class="ams-pop-filpath-icon">⚙️</div>
+                </div>
+                <div class="ams-pop-filpath-line ${feeding ? 'active' : ''}" ${feeding ? `style="background:linear-gradient(90deg, ${activeColor}66, ${activeColor}22)"` : ''}></div>
+                <div class="ams-pop-filpath-seg">
+                    <div class="ams-pop-filpath-label">Nozzle</div>
+                    <div class="ams-pop-filpath-icon">${feeding ? '🔴' : '⚪'}</div>
+                </div>
+            </div>`;
+
+            // --- AMS Units with Trays ---
+            // Group trays by unit
+            const unitMap = {};
+            trays.forEach(t => {
+                if (!unitMap[t.unit]) unitMap[t.unit] = [];
+                unitMap[t.unit].push(t);
+            });
+
+            html += '<div class="ams-units-grid">';
+            const unitIds = Object.keys(unitMap).sort((a, b) => a - b);
+            unitIds.forEach(uid => {
+                const unitTrays = unitMap[uid];
+                const unitInfo = units.find(u => u.id == uid) || {};
+                const humidity = unitInfo.humidity || '';
+                const temp = unitInfo.temp || '';
+                html += `<div class="ams-unit-card">
+                    <div class="ams-unit-header">
+                        <span class="ams-unit-title">AMS Unit ${parseInt(uid) + 1}</span>
+                        <span class="ams-unit-meta">
+                            ${humidity ? `<span>${_amsHumidityIcon(humidity)} Humidity: ${humidity}</span>` : ''}
+                            ${temp ? `<span>🌡️ ${temp}°C</span>` : ''}
+                        </span>
+                    </div>
+                    <div class="ams-pop-trays">`;
+                unitTrays.forEach(t => {
+                    const sw = t.loaded ? (t.color || '#888') : '#333';
+                    const activeClass = t.active ? 'active' : '';
+                    const emptyClass = !t.loaded ? 'empty' : '';
+                    const bblClass = t.is_bbl ? 'bbl' : '';
+                    const remainPct = t.remain >= 0 ? t.remain : -1;
+                    const remainCol = _amsRemainColor(remainPct);
+                    const tempRange = (t.nozzle_temp_min && t.nozzle_temp_min !== '0') ? `${t.nozzle_temp_min}-${t.nozzle_temp_max}°C` : '';
+                    const editMarkup = isAdmin && t.loaded ? `<div class="ams-pop-tray-edit" onclick="event.stopPropagation();openTrayConfig('${printerName}', ${t.id}, ${t.slot}, '${(t.type||'').replace(/'/g,"\\'")}', '${t.color||'#333333'}', '${t.nozzle_temp_min}', '${t.nozzle_temp_max}')" title="Configure">&#9998;</div>` : '';
+                    html += `<div class="ams-pop-tray ${activeClass} ${emptyClass}" ${isAdmin && t.loaded ? `onclick="amsLoadTray('${printerName}', ${t.id})"` : ''} title="${t.loaded ? (t.type || 'Filament') + ' · ' + (tempRange || '') : 'Empty slot'}">
+                        ${editMarkup}
+                        <div class="ams-pop-swatch ${bblClass}" style="background:${sw}"></div>
+                        <div class="ams-pop-tray-info">
+                            <div class="ams-pop-tray-type">${t.type || '—'}</div>
+                            <div class="ams-pop-tray-slot">Slot ${t.slot + 1}</div>
+                            ${tempRange ? `<div class="ams-pop-tray-temps">${tempRange}</div>` : ''}
+                        </div>
+                        ${remainPct >= 0 ? `<div class="ams-pop-tray-remain-bar"><div class="ams-pop-tray-remain-fill" style="width:${remainPct}%;background:${remainCol}"></div></div><div class="ams-pop-tray-remain-text">${remainPct}%</div>` : ''}
+                    </div>`;
+                });
+                html += `</div></div>`;
+            });
+            html += '</div>';
+
+            // --- External Spool ---
+            const extColor = vt.tray_color ? `#${vt.tray_color.substring(0, 6)}` : '#666';
+            const extType = vt.tray_type || 'Unknown';
+            html += `<div class="ams-pop-external ${isExternal ? 'active' : ''}">
+                <div class="ams-pop-ext-swatch" style="background:${extColor}"></div>
+                <div class="ams-pop-ext-info">
+                    <div class="ams-pop-ext-label">🔗 External Spool ${isExternal ? '(Active)' : ''}</div>
+                    <div class="ams-pop-ext-type">${extType}${vt.nozzle_temp_min && vt.nozzle_temp_min !== '0' ? ` · ${vt.nozzle_temp_min}-${vt.nozzle_temp_max}°C` : ''}</div>
+                </div>
+                ${isAdmin ? `<button class="ams-pop-action-btn" onclick="amsLoadTray('${printerName}', 254)" style="font-size:11px;padding:6px 10px;">Load External</button>` : ''}
+            </div>`;
+
+            // --- Quick Actions (admin only) ---
+            if (isAdmin) {
+                html += '<div style="margin-bottom:8px;margin-top:16px;font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Quick Actions</div>';
+                html += '<div class="ams-pop-actions">';
+                html += `<button class="ams-pop-action-btn" onclick="amsLoadTray('${printerName}', 255)">⏏ Unload Filament</button>`;
+                html += '</div>';
+
+                // Tray selection buttons
+                html += '<div style="margin-bottom:8px;font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Load Tray</div>';
+                html += '<div class="ams-pop-tray-btns">';
+                trays.forEach(t => {
+                    if (!t.loaded) return;
+                    const isActive = t.active;
+                    const sw = t.color || '#888';
+                    html += `<button class="ams-pop-tray-btn ${isActive ? 'active' : ''}" onclick="amsLoadTray('${printerName}', ${t.id})" title="${t.type || 'Tray'} (Unit ${t.unit + 1}, Slot ${t.slot + 1})" style="border-bottom: 3px solid ${sw}">
+                        ${t.slot + 1}
+                    </button>`;
+                });
+                html += `<button class="ams-pop-tray-btn ${isExternal ? 'active' : ''}" onclick="amsLoadTray('${printerName}', 254)" title="External Spool" style="width:auto;padding:0 10px;">Ext</button>`;
+                html += '</div>';
+            }
+
+            container.innerHTML = html;
+        }
+
+        function _amsRenderManage(printerName) {
+            window._amsManageLoaded = true;
+            const p = _amsGetPrinter(printerName);
+            const container = document.getElementById('amsTabManage');
+            if (!p || !p.has_ams || !p.ams_trays) {
+                container.innerHTML = '<p style="color:var(--text-muted)">No AMS data available.</p>';
+                return;
+            }
+
+            const trays = p.ams_trays;
+            let html = '<p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Click a tray to configure its filament type, color, and temperature settings.</p>';
+
+            html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;">';
+            trays.forEach(t => {
+                const sw = t.loaded ? (t.color || '#888') : '#333';
+                const clickHandler = isAdmin ? `onclick="openTrayConfig('${printerName}', ${t.id}, ${t.slot}, '${(t.type||'').replace(/'/g,"\\'")}', '${t.color||'#333333'}', '${t.nozzle_temp_min}', '${t.nozzle_temp_max}')"` : '';
+                html += `<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;cursor:${isAdmin ? 'pointer' : 'default'};transition:border-color 0.15s;" ${clickHandler} onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                        <div style="width:20px;height:20px;border-radius:50%;background:${sw};border:1px solid rgba(255,255,255,0.15);flex-shrink:0;"></div>
+                        <span style="font-weight:600;font-size:13px;">${t.type || '—'}</span>
+                    </div>
+                    <div style="font-size:11px;color:var(--text-muted);">Unit ${t.unit + 1} · Slot ${t.slot + 1}</div>
+                    ${t.loaded ? `<div style="font-size:11px;color:var(--text-muted);">${t.nozzle_temp_min && t.nozzle_temp_min !== '0' ? t.nozzle_temp_min + '-' + t.nozzle_temp_max + '°C' : ''} ${t.is_bbl ? '· BambuLab' : '· 3rd Party'}</div>` : '<div style="font-size:11px;color:var(--text-muted);opacity:0.5;">Empty</div>'}
+                    ${t.remain >= 0 ? `<div style="margin-top:4px;height:3px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${t.remain}%;background:${_amsRemainColor(t.remain)};border-radius:2px;"></div></div><div style="font-size:10px;color:var(--text-muted);margin-top:2px;">${t.remain}% remaining</div>` : ''}
+                </div>`;
+            });
+            html += '</div>';
+
+            container.innerHTML = html;
         }
     </script>
 
