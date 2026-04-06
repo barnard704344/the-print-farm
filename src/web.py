@@ -1898,6 +1898,44 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             "temperature": {},
         })
 
+    # ── Printer Pool Config ───────────────────────────────
+    @app.route(prefix + "/api/pool/config", methods=["GET"])
+    @app.route("/api/pool/config", methods=["GET"])
+    @admin_required
+    def pool_get_config():
+        pool = app_config.get("pool", {})
+        all_printers = [p["name"] for p in app_config.get("printers", [])]
+        return jsonify({
+            "enabled": pool.get("enabled", False),
+            "printers": pool.get("printers", []),
+            "all_printers": all_printers,
+        })
+
+    @app.route(prefix + "/api/pool/config", methods=["POST"])
+    @app.route("/api/pool/config", methods=["POST"])
+    @admin_required
+    def pool_save_config():
+        data = request.get_json(silent=True) or {}
+        config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
+        try:
+            with open(config_path) as f:
+                file_config = yaml.safe_load(f) or {}
+
+            pool = file_config.get("pool", {})
+            pool["enabled"] = bool(data.get("enabled", False))
+            pool["printers"] = list(data.get("printers", []))
+            file_config["pool"] = pool
+
+            with open(config_path, "w") as f:
+                yaml.dump(file_config, f, default_flow_style=False, sort_keys=False)
+
+            app_config["pool"] = pool
+
+            return jsonify({"ok": True, "message": "Pool configuration saved."})
+        except Exception as e:
+            logger.error(f"Failed to save pool config: {e}")
+            return jsonify({"ok": False, "message": str(e)}), 500
+
     # ── REST API v1 ───────────────────────────────────────
     api_v1 = create_api_v1(
         farm_manager=farm_manager,

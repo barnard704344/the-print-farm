@@ -227,10 +227,9 @@ def cmd_run(args, config: dict):
     start_web_server(app, host=host, port=port)
     print(f"Dashboard: http://{host}:{port}")
 
-    # Auto-assign loop
-    auto_assign = queue_cfg.get("auto_assign", False)
-    if auto_assign:
-        print("Auto-assign enabled: queued jobs will be sent to idle printers\n")
+    pool_cfg = config.get("pool", {})
+    if pool_cfg.get("enabled"):
+        print(f"Printer pool enabled: {pool_cfg.get('printers', [])}\n")
 
     print("=== Farm Manager Running ===")
     print("Press Ctrl+C to stop\n")
@@ -245,35 +244,39 @@ def cmd_run(args, config: dict):
 
     signal.signal(signal.SIGINT, signal_handler)
 
-    # Main loop — handles auto-assignment
+    # Main loop — handles pool auto-dispatch and print completion tracking
     try:
         while True:
-            if auto_assign:
-                idle_printers = farm.get_idle_printers()
+            # Pool auto-dispatch: send unassigned jobs to idle pool printers
+            pool_cfg = config.get("pool", {})
+            if pool_cfg.get("enabled"):
+                pool_list = pool_cfg.get("printers", [])
+                idle_printers = [
+                    p for p in farm.get_idle_printers() if p in pool_list
+                ]
                 if idle_printers:
                     queued = queue.get_queued_jobs()
                     for job in queued:
                         if not idle_printers:
                             break
+                        # Only auto-dispatch unassigned jobs (from generic port)
+                        if job.get("printer_name"):
+                            continue
                         printer_name = idle_printers.pop(0)
                         printer = farm.get_printer(printer_name)
                         if not printer:
                             continue
 
-                        logger.info(f"Auto-assigning job #{job['id']} to {printer_name}")
+                        logger.info(f"Pool dispatch: job #{job['id']} → {printer_name}")
                         queue.assign_job(job["id"], printer_name)
 
                         file_path = job["file_path"]
                         remote_name = job["filename"]
                         printer_type = farm.get_printer_type(printer_name)
 
-                        # Use original name for Klipper so the printer shows
-                        # a clean filename instead of the UUID-prefixed one.
                         if printer_type == "klipper" and job.get("original_name"):
                             remote_name = job["original_name"]
 
-                        # BambuLab printers need .gcode wrapped in .3mf
-                        # Klipper printers take raw .gcode directly
                         if printer_type == "bambulab" and remote_name.lower().endswith(".gcode"):
                             threemf_path = file_path + ".3mf"
                             try:
@@ -290,14 +293,10 @@ def cmd_run(args, config: dict):
                             queue.mark_failed(job["id"])
                             continue
 
-                        # Upload the file to the printer
                         ok = printer.upload_file(file_path, remote_name)
                         if ok:
                             queue.mark_printing(job["id"])
-                            # Wait for SD card to flush the file before starting print
-                            # Without this delay, the P1S may get 0500-C010 (SD read/write error)
                             time.sleep(2)
-                            # Start the print
                             printer.start_print(remote_name)
                             logger.info(f"Started printing job #{job['id']} on {printer_name}")
                         else:

@@ -1883,6 +1883,27 @@
                     <div id="spoolmanTestResult" style="font-size:13px; margin-top:4px;"></div>
                 </div>
             </div>
+
+            <!-- Printer Pool Auto-Dispatch -->
+            <div class="setup-section" style="max-width:700px; margin-top:32px;">
+                <h3 style="margin-bottom:16px;">Printer Pool</h3>
+                <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
+                    When enabled, jobs submitted through the <strong>generic OrcaSlicer port</strong> (without a specific printer target)
+                    are automatically dispatched to the next idle printer in the pool.
+                    Jobs sent to a specific printer port are unaffected.
+                </p>
+                <div style="display:flex; flex-direction:column; gap:14px;">
+                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                        <input type="checkbox" id="poolEnabled" style="width:18px; height:18px;">
+                        <span>Enable Pool Auto-Dispatch</span>
+                    </label>
+                    <div id="poolPrinterList" style="display:flex; flex-direction:column; gap:8px;"></div>
+                    <div style="display:flex; gap:8px; margin-top:8px;">
+                        <button class="btn btn-success" onclick="savePoolConfig()">Save Configuration</button>
+                    </div>
+                    <div id="poolSaveResult" style="font-size:13px; margin-top:4px;"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -2711,6 +2732,48 @@
             }
         }
 
+        // ── Printer Pool Settings ────────────────────────────
+        async function loadPoolConfig() {
+            try {
+                const res = await fetch(BASE + '/api/pool/config');
+                if (!res.ok) return;
+                const data = await res.json();
+                document.getElementById('poolEnabled').checked = data.enabled;
+                const container = document.getElementById('poolPrinterList');
+                const poolSet = new Set(data.printers || []);
+                let html = '<p style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">Select which printers are in the pool:</p>';
+                (data.all_printers || []).forEach(name => {
+                    const checked = poolSet.has(name) ? 'checked' : '';
+                    html += `<label style="display:flex; align-items:center; gap:10px; cursor:pointer; padding:6px 0;">
+                        <input type="checkbox" class="pool-printer-cb" value="${name}" ${checked} style="width:16px; height:16px;">
+                        <span>${name}</span>
+                    </label>`;
+                });
+                container.innerHTML = html;
+            } catch (e) {}
+        }
+
+        async function savePoolConfig() {
+            const resultEl = document.getElementById('poolSaveResult');
+            const enabled = document.getElementById('poolEnabled').checked;
+            const printers = Array.from(document.querySelectorAll('.pool-printer-cb:checked')).map(cb => cb.value);
+            try {
+                const res = await fetch(BASE + '/api/pool/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled, printers }),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; ' + data.message + '</span>';
+                } else {
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                }
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+            }
+        }
+
         checkAuth().then(() => {
             // If not authenticated and AD is enabled, attempt silent SSO via Kerberos
             if (!isAuthenticated && adEnabled) {
@@ -2797,7 +2860,7 @@
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 tab.classList.add('active');
                 document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
-                if (tab.dataset.tab === 'settings') { loadApiKey(); loadADConfig(); populateObicoPrinterDropdown(); loadSpoolmanConfig(); }
+                if (tab.dataset.tab === 'settings') { loadApiKey(); loadADConfig(); populateObicoPrinterDropdown(); loadSpoolmanConfig(); loadPoolConfig(); }
                 if (tab.dataset.tab === 'library') refreshLibrary();
             });
         });
