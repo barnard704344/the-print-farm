@@ -675,6 +675,133 @@
         .hh-mmu-state .hh-stat-label { color: var(--text-muted); }
         .hh-mmu-state .hh-stat-value { font-weight: 600; color: var(--text); }
 
+        /* Happy Hare Enhanced Popup */
+        .hh-modal { max-width: 900px; width: 94vw; }
+        .hh-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); padding: 0 20px; }
+        .hh-tab {
+            padding: 10px 18px; font-size: 13px; font-weight: 600; cursor: pointer;
+            border-bottom: 2px solid transparent; color: var(--text-muted); transition: all 0.15s;
+            background: none; border-top: none; border-left: none; border-right: none;
+        }
+        .hh-tab:hover { color: var(--text); }
+        .hh-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .hh-tab-content { display: none; }
+        .hh-tab-content.active { display: block; }
+
+        /* Status banner */
+        .hh-status-banner {
+            display: flex; flex-wrap: wrap; gap: 12px; padding: 12px 16px;
+            background: var(--bg); border-radius: 8px; margin-bottom: 16px;
+        }
+        .hh-status-item { display: flex; flex-direction: column; gap: 2px; min-width: 80px; }
+        .hh-status-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
+        .hh-status-val { font-size: 14px; font-weight: 600; color: var(--text); }
+        .hh-status-val.green { color: var(--accent); }
+        .hh-status-val.red { color: var(--danger); }
+        .hh-status-val.yellow { color: #f59e0b; }
+
+        /* Gate strip */
+        .hh-gate-strip {
+            display: flex; gap: 6px; padding: 16px; background: var(--bg); border-radius: 10px;
+            margin-bottom: 16px; overflow-x: auto; align-items: flex-end;
+        }
+        .hh-gate-card {
+            flex: 1 1 0; min-width: 56px; display: flex; flex-direction: column;
+            align-items: center; gap: 4px; padding: 10px 6px 8px; border-radius: 8px;
+            border: 2px solid var(--border); transition: all 0.2s; position: relative;
+        }
+        .hh-gate-card.active { border-color: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
+        .hh-gate-card.empty { opacity: 0.35; }
+        .hh-gate-card.loaded { border-color: rgba(34,197,94,0.3); }
+        .hh-gate-swatch-lg {
+            width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.15);
+            position: relative; overflow: hidden;
+        }
+        .hh-gate-swatch-lg.loaded::after {
+            content: ''; position: absolute; inset: 0; border-radius: 50%;
+            background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.3), transparent 60%);
+        }
+        .hh-gate-tool { font-size: 13px; font-weight: 700; }
+        .hh-gate-mat { font-size: 10px; color: var(--text-muted); }
+        .hh-gate-status-dot {
+            width: 8px; height: 8px; border-radius: 50%; position: absolute; top: 4px; right: 4px;
+        }
+        .hh-gate-status-dot.loaded { background: var(--accent); }
+        .hh-gate-status-dot.empty { background: var(--danger); }
+        .hh-gate-status-dot.unknown { background: #f59e0b; }
+        .hh-gate-ttg { font-size: 9px; color: var(--text-muted); }
+
+        /* Filament path visualization */
+        .hh-filpath {
+            display: flex; align-items: center; gap: 0; padding: 12px 16px;
+            background: var(--bg); border-radius: 8px; margin-bottom: 16px;
+            overflow: hidden; position: relative; min-height: 56px;
+        }
+        .hh-filpath-segment {
+            display: flex; align-items: center; justify-content: center; flex-direction: column;
+            padding: 8px 12px; font-size: 11px; font-weight: 600; position: relative;
+        }
+        .hh-filpath-label { font-size: 9px; color: var(--text-muted); margin-bottom: 2px; }
+        .hh-filpath-icon { font-size: 18px; }
+        .hh-filpath-line {
+            flex: 1; height: 4px; background: var(--border); border-radius: 2px;
+            min-width: 30px; position: relative; overflow: hidden;
+        }
+        .hh-filpath-line.active {
+            background: linear-gradient(90deg, var(--accent), rgba(34,197,94,0.3));
+        }
+        .hh-filpath-line.active::after {
+            content: ''; position: absolute; top: 0; left: -30%; width: 30%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            animation: hh-flow 1.5s ease-in-out infinite;
+        }
+        @keyframes hh-flow {
+            0% { left: -30%; }
+            100% { left: 100%; }
+        }
+        .hh-filpath-line.reverse::after {
+            animation-direction: reverse;
+        }
+
+        /* Encoder / sensor panel */
+        .hh-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+        @media (max-width: 640px) { .hh-panels { grid-template-columns: 1fr; } }
+        .hh-panel {
+            padding: 14px; background: var(--bg); border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        .hh-panel-title {
+            font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+            color: var(--accent); margin-bottom: 10px;
+        }
+        .hh-panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .hh-panel-item { }
+        .hh-panel-item-label { font-size: 10px; color: var(--text-muted); }
+        .hh-panel-item-val { font-size: 13px; font-weight: 600; }
+
+        /* Quick action buttons */
+        .hh-actions {
+            display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;
+        }
+        .hh-action-btn {
+            display: flex; align-items: center; gap: 6px; padding: 8px 14px;
+            background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+            cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text);
+            transition: all 0.15s;
+        }
+        .hh-action-btn:hover { border-color: var(--accent); background: rgba(34,197,94,0.05); }
+        .hh-action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .hh-action-btn.danger { color: var(--danger); }
+        .hh-action-btn.danger:hover { border-color: var(--danger); background: rgba(255,70,70,0.05); }
+        .hh-tool-btns { display: flex; gap: 4px; flex-wrap: wrap; }
+        .hh-tool-btn {
+            width: 36px; height: 32px; display: flex; align-items: center; justify-content: center;
+            background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+            cursor: pointer; font-size: 11px; font-weight: 700; color: var(--text); transition: all 0.15s;
+        }
+        .hh-tool-btn:hover { border-color: var(--accent); }
+        .hh-tool-btn.active { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); }
+
         /* Obico AI Detection Section */
         .obico-section {
             margin-bottom: 12px;
@@ -1491,11 +1618,16 @@
     <div class="hh-overlay" id="hhOverlay" style="display:none" onclick="if(event.target===this)closeHappyHareModal()">
         <div class="hh-modal" onclick="event.stopPropagation()">
             <div class="hh-modal-header">
-                <h2>🔀 Happy Hare — <span id="hhPrinterName"></span></h2>
+                <h2>🔀 Happy Hare — <span id="hhPrinterName"></span> <span id="hhActionBadge" style="font-size:12px;font-weight:400;color:var(--text-muted);margin-left:8px;"></span></h2>
                 <button class="hh-modal-close" onclick="closeHappyHareModal()">&times;</button>
             </div>
+            <div class="hh-tabs">
+                <button class="hh-tab active" data-hh-tab="overview" onclick="switchHhTab(this)">Overview</button>
+                <button class="hh-tab" data-hh-tab="macros" onclick="switchHhTab(this)">Macros</button>
+            </div>
             <div class="hh-modal-body" id="hhModalBody">
-                <p style="color:var(--text-muted)">Loading macros…</p>
+                <div class="hh-tab-content active" id="hhTabOverview"></div>
+                <div class="hh-tab-content" id="hhTabMacros"></div>
             </div>
         </div>
     </div>
@@ -3424,6 +3556,7 @@
                 // Update printer grid
                 const grid = document.getElementById('printerGrid');
                 const allEntries = Object.entries(data.printers);
+                window._farmPrinters = data.printers;
                 // Students only see printers not marked staff_only
                 const entries = isAdmin ? allEntries : allEntries.filter(([_, p]) => !p.staff_only);
                 const currentNames = entries.map(([n]) => n).sort().join(',');
@@ -4027,37 +4160,267 @@
         }
 
         async function openHappyHareModal(printerName) {
+            window._hhPrinterName = printerName;
             document.getElementById('hhPrinterName').textContent = printerName;
-            document.getElementById('hhModalBody').innerHTML = '<p style="color:var(--text-muted)">Loading macros…</p>';
             document.getElementById('hhOverlay').style.display = 'flex';
+            // Reset to overview tab
+            document.querySelectorAll('.hh-tab').forEach(t => t.classList.toggle('active', t.dataset.hhTab === 'overview'));
+            document.querySelectorAll('.hh-tab-content').forEach(t => t.classList.toggle('active', t.id === 'hhTabOverview'));
+            document.getElementById('hhTabOverview').innerHTML = '<p style="color:var(--text-muted)">Loading…</p>';
+            document.getElementById('hhTabMacros').innerHTML = '';
+            window._hhMacrosLoaded = false;
 
-            try {
-                const data = await hhFetch(`/api/v1/printers/${encodeURIComponent(printerName)}/happyhare/macros`);
-                renderHhMacros(printerName, data.data);
-            } catch (err) {
-                document.getElementById('hhModalBody').innerHTML =
-                    `<div class="hh-result error">${err.message}</div>`;
-            }
+            // Render overview from live status data immediately
+            _hhRenderOverview(printerName);
+            // Start live refresh
+            _hhStartRefresh(printerName);
         }
 
         function closeHappyHareModal() {
             document.getElementById('hhOverlay').style.display = 'none';
+            _hhStopRefresh();
+            window._hhPrinterName = null;
+        }
+
+        function switchHhTab(tabEl) {
+            const tabId = tabEl.dataset.hhTab;
+            document.querySelectorAll('.hh-tab').forEach(t => t.classList.toggle('active', t === tabEl));
+            document.querySelectorAll('.hh-tab-content').forEach(t => t.classList.toggle('active', t.id === 'hhTab' + tabId.charAt(0).toUpperCase() + tabId.slice(1)));
+            // Lazy-load macros tab
+            if (tabId === 'macros' && !window._hhMacrosLoaded) {
+                _hhLoadMacros(window._hhPrinterName);
+            }
+        }
+
+        // --- Live refresh ---
+        let _hhRefreshInterval = null;
+        function _hhStartRefresh(printerName) {
+            _hhStopRefresh();
+            _hhRefreshInterval = setInterval(() => {
+                if (document.getElementById('hhOverlay').style.display === 'none') { _hhStopRefresh(); return; }
+                // Only refresh if overview tab is visible
+                if (document.getElementById('hhTabOverview').classList.contains('active')) {
+                    _hhRenderOverview(printerName);
+                }
+            }, 2000);
+        }
+        function _hhStopRefresh() {
+            if (_hhRefreshInterval) { clearInterval(_hhRefreshInterval); _hhRefreshInterval = null; }
+        }
+
+        function _hhGetMmuState(printerName) {
+            // Get live MMU state from the cached printer data
+            const printers = window._farmPrinters || {};
+            const p = printers[printerName];
+            if (!p || !p.mmu) return null;
+            return p.mmu;
+        }
+
+        function _hhRenderOverview(printerName) {
+            const mmu = _hhGetMmuState(printerName);
+            const container = document.getElementById('hhTabOverview');
+            if (!mmu || !mmu.enabled) {
+                container.innerHTML = '<p style="color:var(--text-muted)">MMU not detected or not enabled.</p>';
+                return;
+            }
+
+            // Action badge
+            const badge = document.getElementById('hhActionBadge');
+            const action = mmu.action || 'Idle';
+            badge.textContent = action !== 'Idle' ? `⚡ ${action}` : '';
+
+            let html = '';
+
+            // --- Status Banner ---
+            const filState = mmu.filament || 'Unknown';
+            const filClass = filState === 'Loaded' ? 'green' : filState === 'Unloaded' ? 'red' : 'yellow';
+            const toolLabel = mmu.tool >= 0 ? `T${mmu.tool}` : 'None';
+            const gateLabel = mmu.gate >= 0 ? `#${mmu.gate}` : 'None';
+            const homedIcon = mmu.is_homed ? '✓ Homed' : '✗ Not homed';
+            const homedClass = mmu.is_homed ? 'green' : 'red';
+            const servoLabel = mmu.servo || '—';
+            const printState = mmu.print_state || '—';
+
+            html += `<div class="hh-status-banner">
+                <div class="hh-status-item"><span class="hh-status-label">Filament</span><span class="hh-status-val ${filClass}">${filState}</span></div>
+                <div class="hh-status-item"><span class="hh-status-label">Tool</span><span class="hh-status-val">${toolLabel}</span></div>
+                <div class="hh-status-item"><span class="hh-status-label">Gate</span><span class="hh-status-val">${gateLabel}</span></div>
+                <div class="hh-status-item"><span class="hh-status-label">Status</span><span class="hh-status-val ${homedClass}">${homedIcon}</span></div>
+                <div class="hh-status-item"><span class="hh-status-label">Servo</span><span class="hh-status-val">${servoLabel}</span></div>
+                <div class="hh-status-item"><span class="hh-status-label">Print State</span><span class="hh-status-val">${printState}</span></div>
+                <div class="hh-status-item"><span class="hh-status-label">Tool Changes</span><span class="hh-status-val">${mmu.num_toolchanges || 0}</span></div>
+                ${mmu.runout ? '<div class="hh-status-item"><span class="hh-status-label">Runout</span><span class="hh-status-val red">⚠ RUNOUT</span></div>' : ''}
+                ${mmu.is_paused ? '<div class="hh-status-item"><span class="hh-status-label">State</span><span class="hh-status-val yellow">⏸ PAUSED</span></div>' : ''}
+            </div>`;
+
+            // --- Gate Strip ---
+            const gates = mmu.gates || [];
+            const ttgMap = mmu.ttg_map || [];
+            html += '<div class="hh-gate-strip">';
+            gates.forEach((g, i) => {
+                const isActive = g.gate === mmu.gate;
+                const isEmpty = g.status === 0;
+                const isLoaded = g.status === 2;
+                const swatchColor = g.color || (isLoaded ? '#888' : '#333');
+                const statusClass = isLoaded ? 'loaded' : isEmpty ? 'empty' : 'unknown';
+                const material = g.material || g.filament_name || '';
+                // Show TTG mapping if different from default
+                const mappedTool = ttgMap[i] !== undefined ? ttgMap[i] : i;
+                const ttgLabel = mappedTool !== i ? `→G${mappedTool}` : '';
+                html += `<div class="hh-gate-card ${isActive ? 'active' : ''} ${statusClass}">
+                    <div class="hh-gate-status-dot ${statusClass}"></div>
+                    <div class="hh-gate-swatch-lg ${statusClass}" style="background:${isEmpty ? '#333' : swatchColor}"></div>
+                    <div class="hh-gate-tool">T${g.gate}</div>
+                    ${material ? `<div class="hh-gate-mat">${material}</div>` : '<div class="hh-gate-mat" style="opacity:.3">—</div>'}
+                    ${ttgLabel ? `<div class="hh-gate-ttg">${ttgLabel}</div>` : ''}
+                    ${g.temperature ? `<div class="hh-gate-mat">${g.temperature}°</div>` : ''}
+                </div>`;
+            });
+            html += '</div>';
+
+            // --- Filament Path Visualization ---
+            const filLoaded = filState === 'Loaded';
+            const filDirection = mmu.filament_direction || 0; // 1=loading, -1=unloading
+            const bowdenProgress = mmu.bowden_progress || -1;
+            const activeMat = mmu.active_filament || {};
+            const activeColor = activeMat.color ? `#${activeMat.color}` : 'var(--accent)';
+            const lineActive = filLoaded || filDirection !== 0 || action !== 'Idle';
+            const lineReverse = filDirection < 0;
+            const lineClass = lineActive ? `active${lineReverse ? ' reverse' : ''}` : '';
+
+            // Sensor states
+            const sensors = mmu.sensors || {};
+            const toolheadSensor = sensors.toolhead;
+
+            html += `<div class="hh-filpath">
+                <div class="hh-filpath-segment">
+                    <div class="hh-filpath-label">Gate ${mmu.gate >= 0 ? mmu.gate : '—'}</div>
+                    <div class="hh-filpath-icon">${mmu.gate >= 0 ? '🎯' : '⬜'}</div>
+                </div>
+                <div class="hh-filpath-line ${lineClass}" style="${lineActive ? `background:linear-gradient(90deg, ${activeColor}, ${activeColor}44)` : ''}"></div>
+                <div class="hh-filpath-segment">
+                    <div class="hh-filpath-label">Encoder</div>
+                    <div class="hh-filpath-icon">${mmu.encoder && mmu.encoder.enabled ? '📊' : '⬜'}</div>
+                </div>
+                <div class="hh-filpath-line ${lineClass}" style="${lineActive ? `background:linear-gradient(90deg, ${activeColor}88, ${activeColor}44)` : ''}">
+                    ${bowdenProgress >= 0 ? `<div style="position:absolute;top:-16px;left:${bowdenProgress}%;font-size:10px;color:var(--accent);">${bowdenProgress}%</div>` : ''}
+                </div>
+                <div class="hh-filpath-segment">
+                    <div class="hh-filpath-label">Toolhead</div>
+                    <div class="hh-filpath-icon">${toolheadSensor ? '🟢' : '⚪'}</div>
+                </div>
+                <div class="hh-filpath-line ${filLoaded ? 'active' : ''}" style="${filLoaded ? `background:linear-gradient(90deg, ${activeColor}66, ${activeColor}22)` : ''}"></div>
+                <div class="hh-filpath-segment">
+                    <div class="hh-filpath-label">Nozzle</div>
+                    <div class="hh-filpath-icon">${filLoaded ? '🔴' : '⚪'}</div>
+                </div>
+            </div>`;
+
+            // --- Info Panels ---
+            html += '<div class="hh-panels">';
+
+            // Encoder panel
+            const enc = mmu.encoder || {};
+            html += `<div class="hh-panel">
+                <div class="hh-panel-title">Encoder</div>
+                <div class="hh-panel-grid">
+                    <div class="hh-panel-item"><div class="hh-panel-item-label">Status</div><div class="hh-panel-item-val" style="color:${enc.enabled ? 'var(--accent)' : 'var(--text-muted)'}">${enc.enabled ? 'Enabled' : 'Disabled'}</div></div>
+                    <div class="hh-panel-item"><div class="hh-panel-item-label">Flow Rate</div><div class="hh-panel-item-val">${enc.flow_rate != null ? enc.flow_rate + '%' : '—'}</div></div>
+                    <div class="hh-panel-item"><div class="hh-panel-item-label">Position</div><div class="hh-panel-item-val">${enc.encoder_pos != null ? enc.encoder_pos.toFixed(1) + 'mm' : '—'}</div></div>
+                    <div class="hh-panel-item"><div class="hh-panel-item-label">Headroom</div><div class="hh-panel-item-val">${enc.headroom != null ? enc.headroom.toFixed(1) + 'mm' : '—'}</div></div>
+                    <div class="hh-panel-item"><div class="hh-panel-item-label">Detection</div><div class="hh-panel-item-val">${enc.detection_length != null ? enc.detection_length + 'mm' : '—'}</div></div>
+                    <div class="hh-panel-item"><div class="hh-panel-item-label">Mode</div><div class="hh-panel-item-val">${enc.detection_mode === 2 ? 'Auto' : enc.detection_mode === 1 ? 'Manual' : enc.detection_mode === 0 ? 'Off' : '—'}</div></div>
+                </div>
+            </div>`;
+
+            // System panel
+            const fg = mmu.flowguard || {};
+            html += `<div class="hh-panel">
+                <div class="hh-panel-title">System</div>
+                <div class="hh-panel-grid">
+                    <div class="hh-panel-item"><div class="hh-panel-item-label">Action</div><div class="hh-panel-item-val">${action}</div></div>
+                    <div class="hh-panel-item"><div class="hh-panel-item-label">Sync Drive</div><div class="hh-panel-item-val">${mmu.sync_drive ? 'Yes' : 'No'}</div></div>
+                    <div class="hh-panel-item"><div class="hh-panel-item-label">Clog Detection</div><div class="hh-panel-item-val">${mmu.clog_detection === 2 ? 'Auto' : mmu.clog_detection === 1 ? 'On' : 'Off'}</div></div>
+                    <div class="hh-panel-item"><div class="hh-panel-item-label">Endless Spool</div><div class="hh-panel-item-val">${mmu.endless_spool ? 'On' : 'Off'}</div></div>
+                    <div class="hh-panel-item"><div class="hh-panel-item-label">Flowguard</div><div class="hh-panel-item-val" style="color:${fg.active ? 'var(--accent)' : 'var(--text-muted)'}">${fg.active ? 'Active' : fg.enabled ? 'Ready' : 'Off'}</div></div>
+                    <div class="hh-panel-item"><div class="hh-panel-item-label">Extruder Remaining</div><div class="hh-panel-item-val">${mmu.extruder_filament_remaining != null ? mmu.extruder_filament_remaining.toFixed(1) + 'mm' : '—'}</div></div>
+                </div>
+            </div>`;
+
+            html += '</div>'; // .hh-panels
+
+            // --- Quick Actions ---
+            html += '<div style="margin-bottom:8px;font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Quick Actions</div>';
+            html += '<div class="hh-actions">';
+            html += `<button class="hh-action-btn" onclick="hhQuickAction('${printerName}','MMU_HOME')" ${mmu.is_homed ? '' : 'style="border-color:var(--accent)"'}>🏠 Home</button>`;
+            html += `<button class="hh-action-btn" onclick="hhQuickAction('${printerName}','MMU_LOAD')">⬆ Load</button>`;
+            html += `<button class="hh-action-btn" onclick="hhQuickAction('${printerName}','MMU_UNLOAD')">⬇ Unload</button>`;
+            html += `<button class="hh-action-btn" onclick="hhQuickAction('${printerName}','MMU_EJECT')">⏏ Eject</button>`;
+            html += `<button class="hh-action-btn" onclick="hhQuickAction('${printerName}','MMU_SELECT_BYPASS')" ${mmu.has_bypass ? '' : 'disabled'}>↗ Bypass</button>`;
+            if (mmu.is_paused) {
+                html += `<button class="hh-action-btn" onclick="hhQuickAction('${printerName}','MMU_UNLOCK')" style="border-color:var(--accent)">🔓 Unlock</button>`;
+            }
+            html += '</div>';
+
+            // Tool selection buttons
+            html += '<div style="margin-bottom:8px;font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Select Tool</div>';
+            html += '<div class="hh-tool-btns">';
+            for (let i = 0; i < (mmu.num_gates || 0); i++) {
+                const isActive = i === mmu.tool;
+                html += `<button class="hh-tool-btn ${isActive ? 'active' : ''}" onclick="hhQuickAction('${printerName}','MMU_CHANGE_TOOL', {TOOL:${i}})">T${i}</button>`;
+            }
+            html += '</div>';
+
+            // Result area for quick actions
+            html += '<div id="hhQuickResult" style="margin-top:12px;"></div>';
+
+            container.innerHTML = html;
+        }
+
+        async function hhQuickAction(printerName, macro, params) {
+            const resDiv = document.getElementById('hhQuickResult');
+            if (resDiv) {
+                resDiv.className = 'hh-result';
+                resDiv.textContent = `Running ${macro}…`;
+            }
+            try {
+                const body = {macro: macro};
+                if (params) body.params = params;
+                const data = await hhFetch(`/api/v1/printers/${encodeURIComponent(printerName)}/happyhare/run`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body),
+                });
+                if (!data.ok) throw new Error(data.error || 'Command failed');
+                if (resDiv) {
+                    resDiv.className = 'hh-result';
+                    resDiv.textContent = `✓ ${macro} sent`;
+                    setTimeout(() => { resDiv.textContent = ''; }, 4000);
+                }
+            } catch (err) {
+                if (resDiv) {
+                    resDiv.className = 'hh-result error';
+                    resDiv.textContent = `✗ ${err.message}`;
+                }
+            }
+        }
+
+        // --- Macros tab (lazy loaded) ---
+        async function _hhLoadMacros(printerName) {
+            const container = document.getElementById('hhTabMacros');
+            container.innerHTML = '<p style="color:var(--text-muted)">Loading macros…</p>';
+            try {
+                const data = await hhFetch(`/api/v1/printers/${encodeURIComponent(printerName)}/happyhare/macros`);
+                renderHhMacros(printerName, data.data);
+                window._hhMacrosLoaded = true;
+            } catch (err) {
+                container.innerHTML = `<div class="hh-result error">${err.message}</div>`;
+            }
         }
 
         function renderHhMacros(printerName, macroData) {
-            const body = document.getElementById('hhModalBody');
+            const body = document.getElementById('hhTabMacros');
             let html = '';
-
-            // MMU state summary
-            if (macroData.mmu_state) {
-                const s = macroData.mmu_state;
-                html += '<div class="hh-mmu-state">';
-                if (s.tool != null) html += `<div class="hh-stat"><div class="hh-stat-label">Tool</div><div class="hh-stat-value">${s.tool >= 0 ? 'T' + s.tool : 'None'}</div></div>`;
-                if (s.filament) html += `<div class="hh-stat"><div class="hh-stat-label">Filament</div><div class="hh-stat-value">${s.filament}</div></div>`;
-                if (s.num_gates) html += `<div class="hh-stat"><div class="hh-stat-label">Gates</div><div class="hh-stat-value">${s.num_gates}</div></div>`;
-                if (s.enabled != null) html += `<div class="hh-stat"><div class="hh-stat-label">Enabled</div><div class="hh-stat-value">${s.enabled ? 'Yes' : 'No'}</div></div>`;
-                html += '</div>';
-            }
 
             // Macros by category
             const catList = macroData.categories || [];
@@ -4080,6 +4443,7 @@
             }
 
             if (!html) html = '<p style="color:var(--text-muted)">No Happy Hare macros found on this printer.</p>';
+            html += '<div id="hhMacroResult" style="margin-top:12px;"></div>';
             body.innerHTML = html;
         }
 
@@ -4131,19 +4495,11 @@
         }
 
         async function runHappyHareMacro(printerName, macroName, params, resultEl) {
-            const target = resultEl || document.getElementById('hhModalBody');
-            // Show existing result inline
             let resDiv = resultEl;
             if (!resDiv) {
-                // Append a result div at the top of the modal body
-                let existing = document.getElementById('hhRunResult');
-                if (!existing) {
-                    existing = document.createElement('div');
-                    existing.id = 'hhRunResult';
-                    target.prepend(existing);
-                }
-                resDiv = existing;
+                resDiv = document.getElementById('hhMacroResult');
             }
+            if (!resDiv) return;
             resDiv.className = 'hh-result';
             resDiv.textContent = `Running ${macroName}…`;
 
@@ -4156,7 +4512,7 @@
                 if (!data.ok) throw new Error(data.error || 'Command failed');
                 resDiv.className = 'hh-result';
                 resDiv.textContent = `✓ ${macroName} executed successfully`;
-                setTimeout(() => { if (resDiv.id === 'hhRunResult') resDiv.textContent = ''; }, 4000);
+                setTimeout(() => { resDiv.textContent = ''; resDiv.className = ''; }, 4000);
             } catch (err) {
                 resDiv.className = 'hh-result error';
                 resDiv.textContent = `✗ ${err.message}`;
