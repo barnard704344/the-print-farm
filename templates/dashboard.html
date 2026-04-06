@@ -1346,11 +1346,139 @@
         .conn-online { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
         .conn-offline { background: var(--danger); }
 
-        /* Responsive */
+        /* ─── Responsive ─── */
+
+        /* Tablet breakpoint */
+        @media (max-width: 1024px) {
+            .printer-grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+        }
+
+        /* Small tablet / large phone */
         @media (max-width: 768px) {
             .printer-grid { grid-template-columns: 1fr; }
             .farm-stats { display: none; }
             .main { padding: 12px; }
+            .header { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
+            .header h1 { font-size: 17px; }
+
+            /* Tabs: horizontal scroll */
+            .tabs {
+                overflow-x: auto; -webkit-overflow-scrolling: touch;
+                scrollbar-width: none; flex-wrap: nowrap; gap: 0;
+            }
+            .tabs::-webkit-scrollbar { display: none; }
+            .tab { padding: 10px 14px; font-size: 13px; white-space: nowrap; flex-shrink: 0; }
+
+            /* Tables: horizontal scroll wrapper */
+            .tab-content { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            .job-table { min-width: 600px; }
+
+            /* Settings 2-col grids → 1 col */
+            .setup-section [style*="grid-template-columns:1fr 1fr"],
+            .setup-section [style*="grid-template-columns: 1fr 1fr"] {
+                grid-template-columns: 1fr !important;
+            }
+
+            /* HH / AMS popup panels */
+            .hh-panels { grid-template-columns: 1fr; }
+            .hh-panel-grid { grid-template-columns: 1fr 1fr; }
+
+            /* AMS popup */
+            .ams-modal { width: 98vw; }
+            .ams-modal-body { padding: 12px 14px; }
+            .ams-pop-trays { flex-wrap: wrap; }
+            .ams-pop-tray { min-width: 60px; flex: 1 1 calc(50% - 4px); }
+
+            /* Filament path: compact */
+            .hh-filpath, .ams-pop-filpath { padding: 10px 8px; }
+            .hh-filpath-segment, .ams-pop-filpath-seg { padding: 6px 6px; }
+            .hh-filpath-label, .ams-pop-filpath-label { font-size: 8px; }
+            .hh-filpath-icon, .ams-pop-filpath-icon { font-size: 15px; }
+
+            /* Library grid */
+            .library-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)) !important; }
+        }
+
+        /* Phone breakpoint */
+        @media (max-width: 480px) {
+            .main { padding: 8px; }
+            .header { padding: 10px 12px; }
+            .header h1 { font-size: 15px; gap: 6px; }
+            .header h1 .logo { width: 24px; height: 24px; font-size: 12px; }
+            .header-subtitle { display: none; }
+
+            .tab { padding: 10px 12px; font-size: 12px; }
+
+            /* Printer card */
+            .printer-card { border-radius: 10px; }
+            .printer-header { padding: 10px 12px; }
+
+            /* Larger touch targets */
+            .btn { padding: 10px 16px; font-size: 13px; min-height: 44px; }
+            .temp-set-btn { padding: 6px 10px; font-size: 12px; min-height: 36px; }
+            .temp-off-btn { padding: 6px 8px; font-size: 12px; min-height: 36px; }
+            .theme-toggle { padding: 8px 10px; min-height: 44px; }
+
+            /* Font size bumps for legibility */
+            .ams-tray-type, .mmu-gate-label { font-size: 11px; }
+            .ams-tray-slot, .ams-tray-remain { font-size: 10px; }
+            .mmu-gate-material { font-size: 10px; }
+            .temp-label { font-size: 11px; }
+
+            /* AMS inline card: less padding */
+            .ams-section, .mmu-section { padding: 8px; }
+            .ams-tray { padding: 5px 3px; }
+            .ams-tray-swatch { width: 18px; height: 18px; }
+
+            /* AMS popup: tight */
+            .ams-modal-header { padding: 12px 14px; }
+            .ams-modal-header h2 { font-size: 16px; }
+            .ams-tabs { padding: 0 10px; }
+            .ams-tab-btn { padding: 8px 12px; font-size: 12px; }
+            .ams-pop-banner { padding: 10px 12px; gap: 8px; }
+            .ams-pop-stat-val { font-size: 13px; }
+            .ams-pop-tray { padding: 8px 4px; }
+            .ams-pop-swatch { width: 26px; height: 26px; }
+            .ams-pop-tray-type { font-size: 10px; }
+            .ams-pop-action-btn { padding: 10px 14px; min-height: 44px; }
+            .ams-pop-tray-btn { height: 40px; min-height: 40px; }
+
+            /* HH popup: tight */
+            .hh-modal { width: 98vw; }
+            .hh-modal-body { padding: 12px 14px; }
+            .hh-modal-header h2 { font-size: 16px; }
+            .hh-tabs { padding: 0 10px; }
+            .hh-tab { padding: 8px 12px; font-size: 12px; }
+            .hh-gate-strip { gap: 4px; padding: 10px; }
+            .hh-gate-card { padding: 8px 4px; min-width: 48px; }
+            .hh-gate-swatch-lg { width: 24px; height: 24px; }
+            .hh-gate-tool { font-size: 12px; }
+            .hh-gate-mat { font-size: 9px; }
+            .hh-action-btn { padding: 10px 12px; min-height: 44px; font-size: 12px; }
+            .hh-tool-btn { width: 40px; height: 40px; font-size: 12px; }
+            .hh-status-banner { padding: 10px 12px; gap: 8px; }
+            .hh-status-val { font-size: 13px; }
+            .hh-macro-grid { grid-template-columns: 1fr !important; }
+
+            /* Camera */
+            .camera-btn { padding: 6px 10px; font-size: 12px; }
+
+            /* Job queue table: tighter */
+            .job-table th { padding: 6px 8px; font-size: 10px; }
+            .job-table td { padding: 8px; font-size: 12px; }
+
+            /* Tray config modal */
+            .tray-config-form select, .tray-config-form input[type="text"],
+            .tray-config-form input[type="number"] { font-size: 16px; }
+            .ad-input { font-size: 16px; }
+        }
+
+        /* Very small phone */
+        @media (max-width: 360px) {
+            .tab { padding: 8px 10px; font-size: 11px; }
+            .ams-pop-tray { flex: 1 1 calc(50% - 4px); }
+            .hh-gate-card { min-width: 42px; }
+            .hh-params-dialog { min-width: 280px; }
         }
         /* 3D Viewer Modal */
         .viewer-overlay {
@@ -1399,7 +1527,7 @@
             <span class="logo">&#x25B2;</span>
             The Print Farm
         </h1>
-        <span style="font-size:11px;color:var(--text-muted);margin-left:-6px;">BambuLab &amp; Klipper</span>
+        <span class="header-subtitle" style="font-size:11px;color:var(--text-muted);margin-left:-6px;">BambuLab &amp; Klipper</span>
         <div style="display:flex; align-items:center; gap:20px;">
             <div class="farm-stats" id="farmStats">
                 <div class="farm-stat"><span class="dot dot-connected"></span> <span id="statConnected">0</span> Connected</div>
