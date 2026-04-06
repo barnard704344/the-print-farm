@@ -17,7 +17,7 @@ A web-based print farm manager for **BambuLab** and **Klipper** 3D printers. Mon
 - **Mobile responsive** — Dashboard adapts to phones and tablets with touch-friendly targets and stacked layouts
 - **Camera streaming** — Live camera feeds from BambuLab printers and Klipper webcams (MJPEG/snapshot auto-detected via Moonraker)
 - **Job history** — 7-day rolling history preserved independently of job deletion
-- **Notifications** — Email (SMTP) and Discord webhook alerts for print completion and failure
+- **Notifications** — Email (SMTP) and Discord webhook alerts for job submission, print completion, pause, and failure
 - **Obico integration** — If a local Obico server is running and the Obico plugin is installed on your Klipper printer, the dashboard will automatically pull failure detection data and remote monitoring info from it
 - **Klipper Adaptive Flow** — If [Klipper Adaptive Flow](https://github.com/barnard704344/Klipper-Adaptive-Flow) is installed on a Klipper printer, the dashboard auto-detects it and shows a direct link to the Adaptive Flow analysis dashboard on the printer card
 
@@ -69,7 +69,9 @@ Email and Discord alerts for print events:
 
 - **Email (SMTP)** — Configurable SMTP host, port, TLS, authentication, and recipient list
 - **Discord webhook** — Sends rich embed messages to any Discord channel
-- **Per-event control** — Toggle notifications independently for print completed and print failed
+- **Four events** — Job submitted, print completed, print paused, and print failed — each independently toggleable
+- **Error context** — Failed and paused notifications include the reason (error code, HMS messages, filament runout) in the subject line
+- **Smart deduplication** — Pause notifications only fire on state transition (RUNNING → PAUSED), not on every poll cycle
 - **Test buttons** — Send test email or Discord message from the Settings UI to verify your setup
 - **Hot-reloadable** — Config changes take effect immediately, no restart required
 
@@ -229,7 +231,9 @@ Add to `config/config.yaml` to enable email and/or Discord notifications:
 notifications:
   enabled: true
   events:
+    job_submitted: true
     print_completed: true
+    print_paused: true
     print_failed: true
   email:
     enabled: true
