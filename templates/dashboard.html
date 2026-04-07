@@ -1702,6 +1702,11 @@
                         </thead>
                         <tbody id="orca-printer-table"></tbody>
                     </table>
+                    <div id="orca-firewall-warning" style="display:none; margin-top:10px; padding:10px 14px; background:var(--warning-bg, #fff3cd); border:1px solid var(--warning-border, #ffc107); border-radius:6px; font-size:12px; color:var(--warning-text, #856404);">
+                        <strong>⚠ Firewall Notice:</strong> Some per-printer ports are unreachable from your network.
+                        Those rows have been hidden. Use the <strong>General Queue</strong> (port&nbsp;80) instead — it works on all networks.
+                        <span id="orca-blocked-ports"></span>
+                    </div>
                     <p style="font-size:11px; color:var(--text-muted);">
                         Each printer has its own port. Jobs sent to a specific printer appear in the queue pre-assigned — send them to the machine from the Job Queue tab when ready.
                     </p>
@@ -3041,9 +3046,20 @@
                     <td style="padding:8px;"><code style="user-select:all;font-size:11px;">${apiKey}</code></td>
                     <td style="padding:8px;"><button class="btn" style="font-size:11px;" onclick="copyText('${location.hostname}')">Copy</button></td>
                 </tr>`;
-                // Per-printer rows
-                for (const [name, p] of Object.entries(data.printers || {})) {
-                    if (!p.orca_port) continue;
+                // Per-printer rows — test port reachability first
+                const printerEntries = Object.entries(data.printers || {}).filter(([, p]) => p.orca_port);
+                const portChecks = await Promise.allSettled(
+                    printerEntries.map(([, p]) =>
+                        fetch(`http://${location.hostname}:${p.orca_port}/api/version`, {
+                            signal: AbortSignal.timeout(3000)
+                        }).then(() => true, () => false)
+                    )
+                );
+                const blocked = [];
+                for (let i = 0; i < printerEntries.length; i++) {
+                    const [name, p] = printerEntries[i];
+                    const reachable = portChecks[i].status === 'fulfilled' && portChecks[i].value === true;
+                    if (!reachable) { blocked.push(`${name} (port ${p.orca_port})`); continue; }
                     const hostname = `${location.hostname}:${p.orca_port}`;
                     rows += `<tr style="border-bottom:1px solid var(--border);">
                         <td style="padding:8px;"><strong>${name}</strong><br><span style="font-size:11px;color:var(--text-muted);">${p.type || ''}</span></td>
@@ -3053,6 +3069,13 @@
                     </tr>`;
                 }
                 tbody.innerHTML = rows;
+                // Show firewall warning if any ports blocked
+                const warnDiv = document.getElementById('orca-firewall-warning');
+                if (blocked.length && warnDiv) {
+                    const blockedSpan = document.getElementById('orca-blocked-ports');
+                    if (blockedSpan) blockedSpan.textContent = ` Blocked: ${blocked.join(', ')}.`;
+                    warnDiv.style.display = 'block';
+                }
             } catch (e) {}
         }
         populateOrcaPrinterTable();
