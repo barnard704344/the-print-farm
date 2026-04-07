@@ -1640,12 +1640,20 @@
                         <div class="step">
                             <div class="step-num">1</div>
                             <div class="step-text">
-                                <strong>Open Physical Printer Settings</strong><br>
-                                In the left sidebar, click the <strong>printer dropdown</strong>, then click the <strong>wifi icon</strong> (🛜) next to the physical printer name to open the connection dialog.
+                                <strong>Select Your Printer Profile</strong><br>
+                                In the left sidebar, click the <strong>slider icon</strong> (⊞) next to "Printer" to choose or add your printer type (e.g. Bambu Lab P1S, Voron, etc.)
                             </div>
                         </div>
                         <div class="step">
                             <div class="step-num">2</div>
+                            <div class="step-text">
+                                <strong>Open Connection Settings</strong><br>
+                                Click the <strong>wifi icon</strong> (🛜) next to the printer name to open the connection dialog.<br>
+                                <span style="font-size:11px; color:var(--text-muted);">If you don't see the wifi icon, see the BambuLab note below.</span>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-num">3</div>
                             <div class="step-text">
                                 <strong>Set Host Type to Octo/Klipper</strong><br>
                                 Change the <strong>Host Type</strong> dropdown to <code>Octo/Klipper</code><br>
@@ -1653,14 +1661,14 @@
                             </div>
                         </div>
                         <div class="step">
-                            <div class="step-num">3</div>
+                            <div class="step-num">4</div>
                             <div class="step-text">
                                 <strong>Enter Hostname &amp; API Key</strong><br>
                                 Copy the <strong>Hostname</strong> and <strong>API Key</strong> from the table below for the printer you want to target.
                             </div>
                         </div>
                         <div class="step">
-                            <div class="step-num">4</div>
+                            <div class="step-num">5</div>
                             <div class="step-text">
                                 <strong>Test &amp; Print</strong><br>
                                 Click <strong>Test</strong> to verify the connection. Then slice as normal and click the <strong>upload/print icon</strong> to send the G-code to the farm.
@@ -1669,16 +1677,14 @@
                     </div>
 
                     <div style="background:var(--card); border:1px solid var(--border); border-radius:8px; padding:12px 16px; margin-top:16px;">
-                        <strong style="font-size:13px;">&#9888; BambuLab printers — extra steps</strong>
+                        <strong style="font-size:13px;">&#9888; BambuLab printers — extra step</strong>
                         <p style="font-size:12px; color:var(--text-muted); margin:6px 0 0;">
-                            BambuLab printer profiles hide the Host Type field by default. You need to enable it first:
+                            BambuLab printer profiles hide the wifi icon by default. You need to enable it first:
                         </p>
                         <ol style="font-size:12px; color:var(--text-muted); margin:8px 0 0; padding-left:20px; line-height:1.8;">
-                            <li>Click the <strong>edit icon</strong> next to the printer <em>profile</em> name (e.g. "Bambu Lab P1S 0.4 nozzle") to open <strong>Printer Settings</strong></li>
-                            <li>Go to <strong>Basic Information → Advanced</strong> and tick <strong>"Use 3rd-party print host"</strong></li>
-                            <li>Close the Printer Settings dialog</li>
-                            <li>A small <strong>wifi icon</strong> (🛜) will now appear next to the printer name in the left sidebar — click it to open the connection dialog with Host Type, Hostname, and API Key fields</li>
-                            <li>Continue from step 2 above</li>
+                            <li>Click the <strong>three dots (⋯)</strong> next to the printer name and tick <strong>"Use 3rd-party print host"</strong></li>
+                            <li>The <strong>wifi icon</strong> (🛜) will now appear — click it to open the connection dialog</li>
+                            <li>Continue from step 3 above</li>
                         </ol>
                     </div>
                 </div>
