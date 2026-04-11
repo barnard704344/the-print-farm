@@ -202,9 +202,9 @@ class HttpCamera:
                 if "multipart" in content_type:
                     self._read_mjpeg_stream(resp)
                 else:
-                    # Snapshot URL — poll repeatedly
-                    self._poll_snapshots(_requests)
-                    return
+                    # Snapshot URL — read single frame with size limit
+                    self._fetch_snapshot(resp)
+                    self._stop_event.wait(timeout=1)
             except Exception as e:
                 logger.warning(f"HTTP camera {self.url} error: {e}")
                 self._connected = False
@@ -215,10 +215,15 @@ class HttpCamera:
         """Read frames from an MJPEG multipart stream."""
         self._connected = True
         buf = b""
+        max_buf = 10 * 1024 * 1024  # 10MB safety limit
         for chunk in resp.iter_content(chunk_size=4096):
             if self._stop_event.is_set():
                 break
             buf += chunk
+            if len(buf) > max_buf:
+                logger.warning(f"HTTP camera {self.url}: buffer exceeded {max_buf} bytes, resetting")
+                buf = b""
+                continue
             # Look for JPEG start/end markers
             while True:
                 start = buf.find(b'\xff\xd8')
@@ -233,21 +238,24 @@ class HttpCamera:
                     self._latest_frame = frame
                 buf = buf[end + 2:]
 
-    def _poll_snapshots(self, _requests):
-        """Poll a snapshot URL for JPEG frames."""
-        self._connected = True
-        while not self._stop_event.is_set():
-            try:
-                resp = _requests.get(self.url, timeout=5)
-                if resp.status_code == 200 and resp.content:
-                    with self._frame_lock:
-                        self._latest_frame = resp.content
-            except Exception as e:
-                logger.warning(f"HTTP camera snapshot error: {e}")
-                self._connected = False
-                self._stop_event.wait(timeout=5)
-                continue
-            self._stop_event.wait(timeout=1)
+    def _fetch_snapshot(self, resp):
+        """Read a single snapshot frame from a non-streaming response."""
+        try:
+            # Read up to 10MB to prevent unbounded memory from an unexpected stream
+            data = b""
+            for chunk in resp.iter_content(chunk_size=4096):
+                data += chunk
+                if len(data) > 10 * 1024 * 1024:
+                    logger.warning(f"HTTP camera {self.url}: snapshot too large, discarding")
+                    resp.close()
+                    return
+            if resp.status_code == 200 and data:
+                with self._frame_lock:
+                    self._latest_frame = data
+                self._connected = True
+        except Exception as e:
+            logger.warning(f"HTTP camera snapshot error: {e}")
+            self._connected = False
 
 
 class CameraManager:
