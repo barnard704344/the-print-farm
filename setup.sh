@@ -261,6 +261,8 @@ fi
 if ! grep -q "the-print-farm proxy" "$APACHE_CONF" 2>/dev/null; then
     sed -i '/<\/VirtualHost>/i \
 \t# the-print-farm proxy\
+\t# Allow large file uploads (10GB)\
+\tLimitRequestBody 10737418240\
 \tProxyPreserveHost On\
 \tProxyPass /the-print-farm http://127.0.0.1:'"${WEB_PORT}"'\
 \tProxyPassReverse /the-print-farm http://127.0.0.1:'"${WEB_PORT}"'\

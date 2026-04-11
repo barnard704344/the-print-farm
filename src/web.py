@@ -43,7 +43,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         template_folder=os.path.join(os.path.dirname(__file__), "..", "templates"),
         static_folder=os.path.join(os.path.dirname(__file__), "..", "static"),
     )
-    app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024  # 500MB max upload
+    app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024 * 1024  # 10GB max upload
     app.secret_key = secrets.token_hex(32)
 
     # Full config reference for AD settings management
