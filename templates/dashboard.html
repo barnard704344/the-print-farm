@@ -1001,11 +1001,36 @@
         /* Filament Controls */
         .filament-controls {
             display: flex;
+            flex-direction: column;
             gap: 6px;
             margin-top: 8px;
             padding-top: 8px;
             border-top: 1px solid var(--border);
         }
+        .filament-controls .filament-btns {
+            display: flex;
+            gap: 6px;
+        }
+        .spool-assign-row {
+            display: flex; align-items: center; gap: 8px;
+            padding: 6px 8px; background: var(--bg); border-radius: 6px;
+            border: 1px solid var(--border); font-size: 12px;
+        }
+        .spool-assign-row.has-spool { border-color: var(--accent); }
+        .spool-assign-swatch {
+            width: 16px; height: 16px; border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.15); flex-shrink: 0;
+        }
+        .spool-assign-info { flex: 1; min-width: 0; }
+        .spool-assign-info .spool-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .spool-assign-info .spool-meta { font-size: 10px; color: var(--text-muted); }
+        .spool-assign-btn {
+            padding: 2px 8px; font-size: 10px; border-radius: 4px;
+            cursor: pointer; border: 1px solid var(--border); background: var(--card);
+            color: var(--text); transition: all 0.15s; flex-shrink: 0;
+        }
+        .spool-assign-btn:hover { border-color: var(--accent); }
+        .spool-assign-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
 
         /* Camera Feed */
         .camera-section {
@@ -2284,6 +2309,25 @@
         </div>
     </div>
 
+    <!-- Spool Picker Modal (for non-AMS printers) -->
+    <div class="modal-overlay" id="spoolPickerOverlay" style="display:none">
+        <div class="modal" style="max-width:480px;">
+            <div class="modal-header">
+                <h2 style="font-size:18px;">Assign Spool to <span id="spoolPickerPrinter"></span></h2>
+                <button class="modal-close" onclick="closeSpoolPicker()">&times;</button>
+            </div>
+            <div style="padding:16px;">
+                <input type="text" id="spoolPickerSearch" placeholder="Search spools…"
+                    style="width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;margin-bottom:12px;box-sizing:border-box;"
+                    oninput="filterSpoolPicker()">
+                <div id="spoolPickerList" style="max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;">
+                    <p style="color:var(--text-muted)">Loading spools…</p>
+                </div>
+                <div id="spoolPickerResult" style="font-size:13px;margin-top:8px;"></div>
+            </div>
+        </div>
+    </div>
+
     <style>
         .modal-overlay {
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -3414,6 +3458,9 @@
             `;
         }
 
+        // ── Spoolman spool cache for non-AMS printers ────────
+        const _printerSpoolCache = {};   // { printerName: {id, filament, remaining_weight, ...} | null }
+
         function renderAmsSection(name, p) {
             if (p.has_ams && p.ams_trays && p.ams_trays.length > 0) {
                 const trays = p.ams_trays.map(t => {
@@ -3466,16 +3513,46 @@
                     </div>
                 `;
             } else {
-                // No AMS — show simple filament controls (admin only)
+                // No AMS — show simple filament controls + Spoolman spool assignment
+                const spoolData = _printerSpoolCache[name];
+                let spoolHtml = '';
+                if (spoolData && spoolData.id) {
+                    const fil = spoolData.filament || {};
+                    const vendor = fil.vendor ? fil.vendor.name : '';
+                    const mat = fil.material || '?';
+                    const fName = fil.name || mat;
+                    const colorHex = fil.color_hex ? '#' + fil.color_hex : '#888';
+                    const remaining = spoolData.remaining_weight != null ? Math.round(spoolData.remaining_weight) + 'g' : '';
+                    spoolHtml = `
+                        <div class="spool-assign-row has-spool">
+                            <div class="spool-assign-swatch" style="background:${colorHex}"></div>
+                            <div class="spool-assign-info">
+                                <div class="spool-name">${vendor ? vendor + ' ' : ''}${fName}</div>
+                                <div class="spool-meta">${mat}${remaining ? ' · ' + remaining + ' left' : ''} · Spool #${spoolData.id}</div>
+                            </div>
+                            <button class="spool-assign-btn" onclick="event.stopPropagation();openSpoolPicker('${name}')">Change</button>
+                            <button class="spool-assign-btn danger" onclick="event.stopPropagation();unassignSpoolFromPrinter('${name}',${spoolData.id})">✕</button>
+                        </div>`;
+                } else {
+                    spoolHtml = `
+                        <div class="spool-assign-row">
+                            <span style="color:var(--text-muted)">No spool assigned</span>
+                            <button class="spool-assign-btn" onclick="event.stopPropagation();openSpoolPicker('${name}')" style="margin-left:auto;">Assign Spool</button>
+                        </div>`;
+                }
+
                 if (isAdmin) {
                     return `
                         <div class="filament-controls" data-field="filament">
-                            <button class="btn btn-primary" onclick="filamentCmd('${name}','unload_filament')">Unload Filament</button>
-                            <button class="btn btn-success" onclick="filamentCmd('${name}','load_filament')">Load Filament</button>
+                            ${spoolHtml}
+                            <div class="filament-btns">
+                                <button class="btn btn-primary" onclick="filamentCmd('${name}','unload_filament')">Unload Filament</button>
+                                <button class="btn btn-success" onclick="filamentCmd('${name}','load_filament')">Load Filament</button>
+                            </div>
                         </div>
                     `;
                 }
-                return '';
+                return spoolHtml ? `<div class="filament-controls" data-field="filament">${spoolHtml}</div>` : '';
             }
         }
 
@@ -3628,6 +3705,127 @@
             const temp = parseInt(input?.value) || 0;
             if (temp > 120) { alert('Max bed temp is 120°C'); return; }
             setTemp(name, 'bed_temp', temp);
+        }
+
+        // ── Spoolman Spool Assignment (non-AMS printers) ─────
+        let _allSpoolsCache = [];
+        let _spoolPickerPrinter = '';
+
+        async function refreshPrinterSpool(printerName) {
+            try {
+                const data = await hhFetch(`/api/v1/spoolman/printers/${encodeURIComponent(printerName)}/spools`);
+                const spools = data.data || [];
+                _printerSpoolCache[printerName] = spools.length > 0 ? spools[0] : null;
+            } catch (e) {
+                // Spoolman not configured or unreachable
+            }
+        }
+
+        async function refreshAllPrinterSpools() {
+            const cards = document.querySelectorAll('.printer-card');
+            for (const card of cards) {
+                const nameEl = card.querySelector('.printer-name');
+                if (nameEl) await refreshPrinterSpool(nameEl.textContent.trim());
+            }
+        }
+
+        // Initial load + periodic refresh every 30s
+        setTimeout(refreshAllPrinterSpools, 2000);
+        setInterval(refreshAllPrinterSpools, 30000);
+
+        async function openSpoolPicker(printerName) {
+            _spoolPickerPrinter = printerName;
+            document.getElementById('spoolPickerPrinter').textContent = printerName;
+            document.getElementById('spoolPickerSearch').value = '';
+            document.getElementById('spoolPickerResult').innerHTML = '';
+            document.getElementById('spoolPickerList').innerHTML = '<p style="color:var(--text-muted)">Loading spools…</p>';
+            document.getElementById('spoolPickerOverlay').style.display = 'flex';
+
+            try {
+                const data = await hhFetch('/api/v1/spoolman/spools');
+                _allSpoolsCache = data.data || [];
+                renderSpoolPickerList(_allSpoolsCache);
+            } catch (e) {
+                document.getElementById('spoolPickerList').innerHTML = `<p style="color:var(--danger)">Failed to load spools: ${e.message}</p>`;
+            }
+        }
+
+        function closeSpoolPicker() {
+            document.getElementById('spoolPickerOverlay').style.display = 'none';
+        }
+
+        function filterSpoolPicker() {
+            const q = document.getElementById('spoolPickerSearch').value.toLowerCase();
+            const filtered = _allSpoolsCache.filter(s => {
+                const fil = s.filament || {};
+                const vendor = fil.vendor ? fil.vendor.name : '';
+                const haystack = `${vendor} ${fil.name || ''} ${fil.material || ''} #${s.id}`.toLowerCase();
+                return haystack.includes(q);
+            });
+            renderSpoolPickerList(filtered);
+        }
+
+        function renderSpoolPickerList(spools) {
+            const container = document.getElementById('spoolPickerList');
+            if (spools.length === 0) {
+                container.innerHTML = '<p style="color:var(--text-muted)">No spools found.</p>';
+                return;
+            }
+            const currentId = _printerSpoolCache[_spoolPickerPrinter]?.id;
+            container.innerHTML = spools.map(s => {
+                const fil = s.filament || {};
+                const vendor = fil.vendor ? fil.vendor.name + ' ' : '';
+                const mat = fil.material || '?';
+                const fName = fil.name || mat;
+                const colorHex = fil.color_hex ? '#' + fil.color_hex : '#888';
+                const remaining = s.remaining_weight != null ? Math.round(s.remaining_weight) + 'g left' : '';
+                const loc = s.location || '';
+                const isCurrent = s.id === currentId;
+                const locInfo = loc ? ` · 📍 ${loc}` : '';
+                return `
+                    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border-radius:6px;border:1px solid ${isCurrent ? 'var(--accent)' : 'var(--border)'};cursor:pointer;transition:all 0.15s;"
+                         onmouseover="this.style.borderColor='var(--accent)'"
+                         onmouseout="this.style.borderColor='${isCurrent ? 'var(--accent)' : 'var(--border)'}'"
+                         onclick="pickSpool(${s.id})">
+                        <div style="width:20px;height:20px;border-radius:50%;background:${colorHex};border:2px solid rgba(255,255,255,0.15);flex-shrink:0;"></div>
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${vendor}${fName}</div>
+                            <div style="font-size:11px;color:var(--text-muted);">${mat}${remaining ? ' · ' + remaining : ''}${locInfo} · #${s.id}</div>
+                        </div>
+                        ${isCurrent ? '<span style="color:var(--accent);font-size:11px;font-weight:600;flex-shrink:0;">Current</span>' : ''}
+                    </div>`;
+            }).join('');
+        }
+
+        async function pickSpool(spoolId) {
+            const resultEl = document.getElementById('spoolPickerResult');
+            resultEl.innerHTML = '<span class="spinner"></span> Assigning…';
+            try {
+                // Unassign existing spool first (if any)
+                const current = _printerSpoolCache[_spoolPickerPrinter];
+                if (current && current.id && current.id !== spoolId) {
+                    await hhFetch(`/api/v1/spoolman/printers/${encodeURIComponent(_spoolPickerPrinter)}/spools/${current.id}`, { method: 'DELETE' });
+                }
+                // Assign new spool
+                await hhFetch(`/api/v1/spoolman/printers/${encodeURIComponent(_spoolPickerPrinter)}/spools/${spoolId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                });
+                await refreshPrinterSpool(_spoolPickerPrinter);
+                closeSpoolPicker();
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:var(--danger)">Error: ${e.message}</span>`;
+            }
+        }
+
+        async function unassignSpoolFromPrinter(printerName, spoolId) {
+            if (!confirm(`Remove spool #${spoolId} from ${printerName}?`)) return;
+            try {
+                await hhFetch(`/api/v1/spoolman/printers/${encodeURIComponent(printerName)}/spools/${spoolId}`, { method: 'DELETE' });
+                _printerSpoolCache[printerName] = null;
+            } catch (e) {
+                alert(`Failed: ${e.message}`);
+            }
         }
 
         async function filamentCmd(name, cmd) {
