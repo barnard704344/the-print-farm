@@ -358,6 +358,20 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
 
         ok = printer.send_gcode(gcode)
         if ok:
+            # If this is an MMU_GATE_MAP call, persist the gate assignment so it
+            # survives Happy Hare clearing its state after a print completes.
+            if upper_macro == "MMU_GATE_MAP" and "GATE" in params:
+                try:
+                    gate_idx = int(params["GATE"])
+                    material = str(params.get("MATERIAL", ""))
+                    color = params.get("COLOR", "")
+                    if color and not color.startswith("#"):
+                        color = "#" + color
+                    spool_id = int(params["SPOOL_ID"]) if "SPOOL_ID" in params else -1
+                    farm_manager.save_gate_config(name, gate_idx, material, color, spool_id)
+                except (ValueError, TypeError):
+                    pass  # Malformed params — don't crash the response
+
             return _ok({"executed": gcode, "printer": name})
         else:
             return _error("Failed to send command to printer", 502, "GCODE_FAILED")

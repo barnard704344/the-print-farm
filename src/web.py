@@ -788,7 +788,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     @app.route(prefix + "/api/jobs/<int:job_id>/check_filament", methods=["POST"])
     @app.route("/api/jobs/<int:job_id>/check_filament", methods=["POST"])
     def check_filament(job_id):
-        """Check if a printer's AMS has the filaments a job needs.
+        """Check if a printer's AMS/MMU has the filaments a job needs.
 
         Returns match status and details for each required filament.
         """
@@ -818,7 +818,69 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         if not required:
             return jsonify({"ok": True, "match": True, "details": [], "message": "No filament requirements detected"})
 
-        # Get printer's AMS state
+        printer_type = farm_manager.get_printer_type(printer_name)
+
+        # ── Klipper printer ───────────────────────────────────
+        if printer_type == "klipper":
+            state = printer.state
+            if not getattr(state, "has_mmu", False):
+                # No AMS, no MMU — skip the filament check entirely
+                return jsonify({
+                    "ok": True, "match": True, "details": [],
+                    "message": "Klipper printer without MMU — filament check skipped",
+                })
+
+            # MMU printer: use the state overlay (which already merges persisted gate
+            # configs on top of whatever Happy Hare is currently reporting) so that
+            # gate assignments are visible even after HH clears them post-print.
+            all_states = farm_manager.get_all_states()
+            mmu = all_states.get(printer_name, {}).get("mmu") or {}
+            gates = mmu.get("gates", [])
+
+            # Build a set of materials available across all non-empty gates.
+            # A gate is considered available if its live status != 0 (empty) OR if
+            # we have a persisted material for it (filament is still physically loaded).
+            available_materials = set()
+            for g in gates:
+                gate_idx = g.get("gate", -1)
+                live_status = g.get("status", 0)  # 0=empty, 1=unknown, 2=loaded
+                material = (g.get("material") or "").upper().strip()
+                # Also check persisted config directly in case live gate list is stale
+                persisted = farm_manager.get_gate_config(printer_name, gate_idx)
+                persisted_material = (persisted.get("material") or "").upper().strip()
+                if live_status != 0 or persisted_material:
+                    if material:
+                        available_materials.add(material)
+                    if persisted_material:
+                        available_materials.add(persisted_material)
+
+            details = []
+            all_match = True
+            for fil in required:
+                slot = fil["slot"]
+                needed_type = (fil["type"] or "").upper()
+                needed_color = fil["color"][:7] if fil["color"] else ""
+
+                if not needed_type or needed_type in available_materials:
+                    details.append({
+                        "slot": slot, "needed_type": needed_type,
+                        "needed_color": needed_color,
+                        "match": True, "reason": "",
+                    })
+                else:
+                    all_match = False
+                    available_list = ", ".join(sorted(available_materials)) or "none"
+                    details.append({
+                        "slot": slot, "needed_type": needed_type,
+                        "needed_color": needed_color,
+                        "match": False,
+                        "reason": f"Slot {slot + 1}: need {needed_type}, gates have {available_list}",
+                    })
+
+            message = "All filaments match" if all_match else "Filament mismatch detected"
+            return jsonify({"ok": True, "match": all_match, "details": details, "message": message})
+
+        # ── BambuLab AMS printer ──────────────────────────────
         state = printer.state
         ams_trays = state.ams_trays or []
 

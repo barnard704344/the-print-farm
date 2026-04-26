@@ -110,6 +110,14 @@ def _deduct_filament_usage(spoolman, job, farm):
                     if spool_id > 0:
                         mmu_gate_map[gate.get("gate", -1)] = spool_id
 
+            # Fallback: use persisted gate configs for any gate HH has cleared.
+            # HH may reset gate_spool_id when a print finishes, so we fill gaps
+            # from the farm's persistent gate config store.
+            if mmu and isinstance(mmu, dict) and mmu.get("enabled"):
+                for gate_idx, cfg in (farm._gate_configs.get(printer_name) or {}).items():
+                    if gate_idx not in mmu_gate_map and cfg.get("spool_id", -1) > 0:
+                        mmu_gate_map[gate_idx] = cfg["spool_id"]
+
         if mmu_gate_map:
             # MMU printer: deduct from the specific spool assigned to each gate
             for filament_info in used_filaments:
@@ -200,6 +208,10 @@ def cmd_run(args, config: dict):
         storage_dir=queue_cfg.get("upload_dir", "./uploads"),
     )
     library.backfill_from_jobs()
+
+    # Load persisted MMU gate configs so spool/material/color assignments survive
+    # Happy Hare clearing its state after a print completes.
+    farm.load_gate_configs(queue)
 
     # Connect to all printers (if any defined)
     if printers:

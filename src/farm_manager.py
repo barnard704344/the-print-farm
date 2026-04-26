@@ -5,6 +5,7 @@ Maintains connections to all printers, tracks their states,
 and provides a unified interface for the web UI and job queue.
 """
 
+import copy
 import logging
 import threading
 import time
@@ -54,6 +55,9 @@ class FarmManager:
         self._printers: Dict[str, PrinterClient] = {}
         self._printer_types: Dict[str, str] = {}
         self._lock = threading.Lock()
+        # Persisted MMU gate configs: {printer_name: {gate_index: {material, color, spool_id}}}
+        self._gate_configs: Dict[str, Dict[int, dict]] = {}
+        self._gate_config_saver = None  # callable set by load_gate_configs()
 
         for cfg in (printer_configs or []):
             name = cfg["name"]
@@ -95,6 +99,39 @@ class FarmManager:
     def get_printer_type(self, name: str) -> str:
         """Return 'bambulab' or 'klipper' for a given printer name."""
         return self._printer_types.get(name, "bambulab")
+
+    def load_gate_configs(self, job_queue) -> None:
+        """Load persisted MMU gate configs from the database into memory."""
+        self._gate_config_saver = job_queue.save_gate_config
+        for name in self._printers:
+            configs = job_queue.get_gate_configs(name)
+            if configs:
+                self._gate_configs[name] = {
+                    c["gate"]: {
+                        "material": c["material"],
+                        "color": c["color"],
+                        "spool_id": c["spool_id"],
+                    }
+                    for c in configs
+                }
+
+    def save_gate_config(self, printer_name: str, gate: int,
+                         material: str = '', color: str = '',
+                         spool_id: int = -1) -> None:
+        """Persist an MMU gate assignment in memory and to the database."""
+        if printer_name not in self._gate_configs:
+            self._gate_configs[printer_name] = {}
+        self._gate_configs[printer_name][gate] = {
+            "material": material,
+            "color": color,
+            "spool_id": spool_id,
+        }
+        if self._gate_config_saver:
+            self._gate_config_saver(printer_name, gate, material, color, spool_id)
+
+    def get_gate_config(self, printer_name: str, gate: int) -> dict:
+        """Return persisted gate config for a specific gate, or empty dict."""
+        return self._gate_configs.get(printer_name, {}).get(gate, {})
 
     def get_all_states(self) -> Dict[str, dict]:
         """Get serializable state for all printers (both Bambu and Klipper)."""
@@ -139,12 +176,36 @@ class FarmManager:
                 "ams_units": s.ams_units,
                 "vt_tray": s.vt_tray,
                 "has_mmu": s.has_mmu,
-                "mmu": s.mmu,
+                "mmu": s.mmu,  # will be overlaid below if gate configs are persisted
                 "klipper_fans": s.klipper_fans,
                 "klipper_leds": s.klipper_leds,
                 "obico": s.obico,
                 "adaptive_flow": s.adaptive_flow,
             }
+
+            # Overlay persisted gate configs onto MMU gates when HH has cleared them.
+            # HH resets gate_spool_id (and sometimes material/color) after a print
+            # finishes, but the filament is still physically loaded. We keep our own
+            # persistent copy so the card always shows the correct assignment.
+            printer_gate_cfgs = self._gate_configs.get(name)
+            if printer_gate_cfgs and state["has_mmu"] and state["mmu"] and state["mmu"].get("gates"):
+                mmu_copy = copy.deepcopy(state["mmu"])
+                for gate in mmu_copy.get("gates", []):
+                    gate_idx = gate.get("gate", -1)
+                    # Only overlay for gates that are not empty (status != 0)
+                    if gate_idx < 0 or gate.get("status", 0) == 0:
+                        continue
+                    persisted = printer_gate_cfgs.get(gate_idx)
+                    if not persisted:
+                        continue
+                    if gate.get("spool_id", -1) <= 0 and persisted.get("spool_id", -1) > 0:
+                        gate["spool_id"] = persisted["spool_id"]
+                    if not gate.get("material") and persisted.get("material"):
+                        gate["material"] = persisted["material"]
+                    if not gate.get("color") and persisted.get("color"):
+                        gate["color"] = persisted["color"]
+                state["mmu"] = mmu_copy
+
             states[name] = state
         return states
 

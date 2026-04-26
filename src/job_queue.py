@@ -75,6 +75,17 @@ class JobQueue:
                 duration_seconds INTEGER,
                 FOREIGN KEY (job_id) REFERENCES jobs(id)
             );
+
+            CREATE TABLE IF NOT EXISTS printer_gate_configs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                printer_name TEXT NOT NULL,
+                gate INTEGER NOT NULL,
+                material TEXT NOT NULL DEFAULT '',
+                color TEXT NOT NULL DEFAULT '',
+                spool_id INTEGER NOT NULL DEFAULT -1,
+                updated_at TEXT NOT NULL,
+                UNIQUE(printer_name, gate)
+            );
         """)
         conn.commit()
         conn.close()
@@ -365,3 +376,37 @@ class JobQueue:
         """).fetchone()
         conn.close()
         return dict(row)
+
+    # ── Printer Gate Configs (MMU / Happy Hare) ───────────
+
+    def save_gate_config(self, printer_name: str, gate: int,
+                         material: str = '', color: str = '',
+                         spool_id: int = -1) -> None:
+        """Persist an MMU gate's filament assignment (material, color, spool_id)."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            conn = self._get_conn()
+            conn.execute(
+                """INSERT INTO printer_gate_configs
+                       (printer_name, gate, material, color, spool_id, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(printer_name, gate)
+                   DO UPDATE SET material=excluded.material,
+                                 color=excluded.color,
+                                 spool_id=excluded.spool_id,
+                                 updated_at=excluded.updated_at""",
+                (printer_name, gate, material or '', color or '', spool_id, now),
+            )
+            conn.commit()
+            conn.close()
+
+    def get_gate_configs(self, printer_name: str) -> list:
+        """Return all persisted gate configs for a printer as a list of dicts."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT gate, material, color, spool_id FROM printer_gate_configs "
+            "WHERE printer_name = ? ORDER BY gate",
+            (printer_name,),
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
