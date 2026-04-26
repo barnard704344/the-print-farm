@@ -3594,31 +3594,36 @@
                 `;
             } else {
                 // No AMS — show simple filament controls + Spoolman spool assignment
+                // MMU printers manage spools per-gate, so skip the single-spool picker
+                const hasMmu = p.has_mmu && p.mmu && p.mmu.enabled;
+
                 const spoolData = _printerSpoolCache[name];
                 let spoolHtml = '';
-                if (spoolData && spoolData.id) {
-                    const fil = spoolData.filament || {};
-                    const vendor = fil.vendor ? fil.vendor.name : '';
-                    const mat = fil.material || '?';
-                    const fName = fil.name || mat;
-                    const colorHex = fil.color_hex ? '#' + fil.color_hex : '#888';
-                    const remaining = spoolData.remaining_weight != null ? Math.round(spoolData.remaining_weight) + 'g' : '';
-                    spoolHtml = `
-                        <div class="spool-assign-row has-spool">
-                            <div class="spool-assign-swatch" style="background:${colorHex}"></div>
-                            <div class="spool-assign-info">
-                                <div class="spool-name">${vendor ? vendor + ' ' : ''}${fName}</div>
-                                <div class="spool-meta">${mat}${remaining ? ' · ' + remaining + ' left' : ''} · Spool #${spoolData.id}</div>
-                            </div>
-                            <button class="spool-assign-btn" onclick="event.stopPropagation();openSpoolPicker('${name}')">Change</button>
-                            <button class="spool-assign-btn danger" onclick="event.stopPropagation();unassignSpoolFromPrinter('${name}',${spoolData.id})">✕</button>
-                        </div>`;
-                } else {
-                    spoolHtml = `
-                        <div class="spool-assign-row">
-                            <span style="color:var(--text-muted)">No spool assigned</span>
-                            <button class="spool-assign-btn" onclick="event.stopPropagation();openSpoolPicker('${name}')" style="margin-left:auto;">Assign Spool</button>
-                        </div>`;
+                if (!hasMmu) {
+                    if (spoolData && spoolData.id) {
+                        const fil = spoolData.filament || {};
+                        const vendor = fil.vendor ? fil.vendor.name : '';
+                        const mat = fil.material || '?';
+                        const fName = fil.name || mat;
+                        const colorHex = fil.color_hex ? '#' + fil.color_hex : '#888';
+                        const remaining = spoolData.remaining_weight != null ? Math.round(spoolData.remaining_weight) + 'g' : '';
+                        spoolHtml = `
+                            <div class="spool-assign-row has-spool">
+                                <div class="spool-assign-swatch" style="background:${colorHex}"></div>
+                                <div class="spool-assign-info">
+                                    <div class="spool-name">${vendor ? vendor + ' ' : ''}${fName}</div>
+                                    <div class="spool-meta">${mat}${remaining ? ' · ' + remaining + ' left' : ''} · Spool #${spoolData.id}</div>
+                                </div>
+                                <button class="spool-assign-btn" onclick="event.stopPropagation();openSpoolPicker('${name}')">Change</button>
+                                <button class="spool-assign-btn danger" onclick="event.stopPropagation();unassignSpoolFromPrinter('${name}',${spoolData.id})">✕</button>
+                            </div>`;
+                    } else {
+                        spoolHtml = `
+                            <div class="spool-assign-row">
+                                <span style="color:var(--text-muted)">No spool assigned</span>
+                                <button class="spool-assign-btn" onclick="event.stopPropagation();openSpoolPicker('${name}')" style="margin-left:auto;">Assign Spool</button>
+                            </div>`;
+                    }
                 }
 
                 if (isAdmin) {
