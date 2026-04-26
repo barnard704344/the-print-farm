@@ -3809,8 +3809,15 @@
         async function refreshAllPrinterSpools() {
             const cards = document.querySelectorAll('.printer-card');
             for (const card of cards) {
-                const nameEl = card.querySelector('.printer-name');
-                if (nameEl) await refreshPrinterSpool(nameEl.textContent.trim());
+                // Use data-printer attribute — textContent picks up badge/button text
+                const name = card.dataset.printer;
+                if (!name) continue;
+                await refreshPrinterSpool(name);
+                // Re-render the filament section immediately so the spool appears
+                // without waiting for the next refreshPrinters() poll cycle.
+                const printers = window._farmPrinters || {};
+                const p = printers[name];
+                if (p) updatePrinterCard(card, name, p);
             }
         }
 
@@ -4485,7 +4492,8 @@
                         .map(([name, p]) => renderPrinterCard(name, p))
                         .join('');
                     lastPrinterNames = entries.map(([n]) => n);
-                    // Fetch spool assignments whenever the printer list changes (covers initial load)
+                    // Fetch spool assignments and immediately re-render filament sections
+                    // so spools appear on first load without waiting for the next poll.
                     refreshAllPrinterSpools();
                 } else {
                     // Same printers — update in place (no flicker)
