@@ -2047,6 +2047,24 @@
                     <div id="notifSaveResult" style="font-size:13px; margin-top:4px;"></div>
                 </div>
             </div>
+
+            <!-- Software Update -->
+            <div class="setup-section" style="max-width:700px; margin-top:32px;">
+                <h3 style="margin-bottom:16px;">Software Update</h3>
+                <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
+                    Check for updates from the Git repository and apply them.
+                    Applying an update will perform a <code>git pull</code> and restart the service.
+                </p>
+                <div style="display:flex; flex-direction:column; gap:14px;">
+                    <div id="updateVersionInfo" style="font-size:13px; color:var(--text-muted);"></div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button class="btn btn-primary" id="btnCheckUpdate" onclick="checkForUpdates()">Check for Updates</button>
+                        <button class="btn btn-success" id="btnApplyUpdate" style="display:none;" onclick="applyUpdate()">Apply Update &amp; Restart</button>
+                    </div>
+                    <div id="updateCheckResult" style="font-size:13px; margin-top:4px;"></div>
+                    <div id="updateCommitList" style="display:none; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:12px;"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -3036,6 +3054,68 @@
                 }
             } catch (e) {
                 resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+            }
+        }
+
+        // ── Software Update ──────────────────────────────────
+        async function checkForUpdates() {
+            const resultEl = document.getElementById('updateCheckResult');
+            const applyBtn = document.getElementById('btnApplyUpdate');
+            const checkBtn = document.getElementById('btnCheckUpdate');
+            const commitListEl = document.getElementById('updateCommitList');
+            const versionEl = document.getElementById('updateVersionInfo');
+            resultEl.innerHTML = '<span style="color:var(--text-muted);">Checking for updates…</span>';
+            applyBtn.style.display = 'none';
+            commitListEl.style.display = 'none';
+            checkBtn.disabled = true;
+            try {
+                const res = await fetch(BASE + '/api/update/check');
+                const data = await res.json();
+                if (!data.ok) {
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                    return;
+                }
+                if (data.current_commit) {
+                    versionEl.textContent = `Current version: ${data.current_commit}`;
+                }
+                if (data.updates_available === 0) {
+                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; Already up to date</span>';
+                } else {
+                    resultEl.innerHTML = `<span style="color:var(--warning);">${data.updates_available} update(s) available</span>`;
+                    applyBtn.style.display = '';
+                    const items = data.commits.map(c => `<li style="margin-bottom:4px; font-family:monospace; font-size:12px;">${c}</li>`).join('');
+                    commitListEl.innerHTML = `<ul style="margin:0; padding-left:20px; color:var(--text-muted);">${items}</ul>`;
+                    commitListEl.style.display = 'block';
+                }
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+            } finally {
+                checkBtn.disabled = false;
+            }
+        }
+
+        async function applyUpdate() {
+            const resultEl = document.getElementById('updateCheckResult');
+            const applyBtn = document.getElementById('btnApplyUpdate');
+            const commitListEl = document.getElementById('updateCommitList');
+            if (!confirm('Apply the update and restart the service? The page will reload after a few seconds.')) return;
+            applyBtn.disabled = true;
+            resultEl.innerHTML = '<span style="color:var(--text-muted);">Applying update…</span>';
+            try {
+                const res = await fetch(BASE + '/api/update/apply', { method: 'POST' });
+                const data = await res.json();
+                if (data.ok) {
+                    applyBtn.style.display = 'none';
+                    commitListEl.style.display = 'none';
+                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; Update applied — service is restarting. Page will reload shortly…</span>';
+                    setTimeout(() => location.reload(), 8000);
+                } else {
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                    applyBtn.disabled = false;
+                }
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+                applyBtn.disabled = false;
             }
         }
 

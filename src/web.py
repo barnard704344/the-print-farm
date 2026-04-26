@@ -2093,6 +2093,75 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         nm = NotificationManager(app_config)
         return jsonify(nm.test_discord())
 
+    # ── Software Update ───────────────────────────────────
+
+    def _repo_dir():
+        return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+    @app.route(prefix + "/api/update/check", methods=["GET"])
+    @app.route("/api/update/check", methods=["GET"])
+    @admin_required
+    def update_check():
+        """Check for available git updates without applying them."""
+        git = shutil.which("git")
+        if not git:
+            return jsonify({"ok": False, "message": "git not found on this system"})
+        repo = _repo_dir()
+        try:
+            # Fetch latest refs from origin (no checkout)
+            subprocess.run([git, "-C", repo, "fetch", "origin"],
+                           capture_output=True, timeout=30)
+            # Current short commit hash
+            cur = subprocess.run([git, "-C", repo, "rev-parse", "--short", "HEAD"],
+                                 capture_output=True, timeout=10, text=True)
+            current_commit = cur.stdout.strip()
+            # Commits on origin that are not in HEAD
+            log = subprocess.run(
+                [git, "-C", repo, "log", "HEAD..origin/HEAD", "--oneline"],
+                capture_output=True, timeout=10, text=True,
+            )
+            commits = [l.strip() for l in log.stdout.strip().splitlines() if l.strip()]
+            return jsonify({
+                "ok": True,
+                "current_commit": current_commit,
+                "updates_available": len(commits),
+                "commits": commits,
+            })
+        except subprocess.TimeoutExpired:
+            return jsonify({"ok": False, "message": "git fetch timed out"})
+        except Exception as e:
+            logger.error(f"Update check failed: {e}")
+            return jsonify({"ok": False, "message": str(e)})
+
+    @app.route(prefix + "/api/update/apply", methods=["POST"])
+    @app.route("/api/update/apply", methods=["POST"])
+    @admin_required
+    def update_apply():
+        """Run git pull and restart the service."""
+        git = shutil.which("git")
+        if not git:
+            return jsonify({"ok": False, "message": "git not found on this system"})
+        repo = _repo_dir()
+        try:
+            result = subprocess.run(
+                [git, "-C", repo, "pull"],
+                capture_output=True, timeout=60, text=True,
+            )
+            output = (result.stdout + result.stderr).strip()
+            if result.returncode != 0:
+                return jsonify({"ok": False, "message": output or "git pull failed"})
+            # Restart service after the response is delivered
+            def _delayed_restart():
+                time.sleep(2)
+                _sudo_cmd(["systemctl", "restart", "the-print-farm"])
+            threading.Thread(target=_delayed_restart, daemon=True).start()
+            return jsonify({"ok": True, "message": output, "restarting": True})
+        except subprocess.TimeoutExpired:
+            return jsonify({"ok": False, "message": "git pull timed out"})
+        except Exception as e:
+            logger.error(f"Update apply failed: {e}")
+            return jsonify({"ok": False, "message": str(e)})
+
     # ── REST API v1 ───────────────────────────────────────
     api_v1 = create_api_v1(
         farm_manager=farm_manager,
