@@ -71,6 +71,8 @@ def _deduct_filament_usage(spoolman, job, farm):
 
     Looks up spools assigned to the printer (by location) and deducts
     the estimated filament weight parsed from the G-code metadata.
+    For Klipper/MMU printers, spool IDs stored in Happy Hare gate map
+    are used directly for per-gate deduction.
     """
     try:
         from .gcode_to_3mf import parse_gcode_filaments
@@ -92,53 +94,93 @@ def _deduct_filament_usage(spoolman, job, farm):
             logger.debug(f"No filament weight in gcode for job #{job.get('id')}, skipping Spoolman deduction")
             return
 
-        # Get spools assigned to this printer (location = printer name)
-        printer_spools = spoolman.get_spools_by_location(printer_name)
-        if not printer_spools:
-            logger.debug(f"No Spoolman spools at location '{printer_name}', skipping usage deduction")
-            return
-
         # Use per-filament weights when available (MMU gcode has per-slot values)
         per_weights = info.get("per_filament_weights_g", [])
         num_used = len(used_filaments)
 
-        # For each used filament slot, try to match a spool and deduct weight
-        for filament_info in used_filaments:
-            slot = filament_info.get("slot", -1)
+        # Check if this is a Klipper/MMU printer with per-gate Spoolman spool IDs
+        mmu_gate_map = {}  # gate_index -> spool_id
+        printer = farm.get_printer(printer_name)
+        if printer:
+            state = printer.state
+            mmu = getattr(state, "mmu", None)
+            if mmu and isinstance(mmu, dict) and mmu.get("enabled") and mmu.get("gates"):
+                for gate in mmu["gates"]:
+                    spool_id = gate.get("spool_id", -1)
+                    if spool_id > 0:
+                        mmu_gate_map[gate.get("gate", -1)] = spool_id
 
-            # Prefer per-slot weight; fall back to splitting total evenly
-            if per_weights and 0 <= slot < len(per_weights):
-                weight_g = per_weights[slot]
-            else:
-                weight_g = total_weight_g / num_used
+        if mmu_gate_map:
+            # MMU printer: deduct from the specific spool assigned to each gate
+            for filament_info in used_filaments:
+                slot = filament_info.get("slot", -1)
 
-            if weight_g <= 0:
-                continue
-
-            material = (filament_info.get("type") or filament_info.get("material") or "").upper()
-
-            # Find the best matching spool at this printer
-            matched = None
-            for spool in printer_spools:
-                spool_material = (spool.get("filament", {}).get("material") or "").upper()
-                if material and spool_material == material:
-                    matched = spool
-                    break
-            # Fallback: use first available spool
-            if not matched and printer_spools:
-                matched = printer_spools[0]
-
-            if matched:
-                result = spoolman.use_spool(matched["id"], use_weight=weight_g)
-                if result:
-                    remaining = result.get("remaining_weight", "?")
-                    logger.info(
-                        f"Spoolman: deducted {weight_g:.1f}g from spool #{matched['id']} "
-                        f"({matched.get('filament', {}).get('name', '?')}), "
-                        f"{remaining}g remaining"
-                    )
+                if per_weights and 0 <= slot < len(per_weights):
+                    weight_g = per_weights[slot]
                 else:
-                    logger.warning(f"Spoolman: failed to deduct usage from spool #{matched['id']}")
+                    weight_g = total_weight_g / num_used
+
+                if weight_g <= 0:
+                    continue
+
+                spool_id = mmu_gate_map.get(slot, -1)
+                if spool_id > 0:
+                    result = spoolman.use_spool(spool_id, use_weight=weight_g)
+                    if result:
+                        remaining = result.get("remaining_weight", "?")
+                        logger.info(
+                            f"Spoolman: deducted {weight_g:.1f}g from spool #{spool_id} "
+                            f"(MMU gate {slot}), {remaining}g remaining"
+                        )
+                    else:
+                        logger.warning(f"Spoolman: failed to deduct usage from spool #{spool_id} (MMU gate {slot})")
+                else:
+                    logger.debug(f"MMU gate {slot} has no Spoolman spool ID, skipping deduction")
+        else:
+            # Non-MMU: use location-based spool matching
+            # Get spools assigned to this printer (location = printer name)
+            printer_spools = spoolman.get_spools_by_location(printer_name)
+            if not printer_spools:
+                logger.debug(f"No Spoolman spools at location '{printer_name}', skipping usage deduction")
+                return
+
+            # For each used filament slot, try to match a spool and deduct weight
+            for filament_info in used_filaments:
+                slot = filament_info.get("slot", -1)
+
+                # Prefer per-slot weight; fall back to splitting total evenly
+                if per_weights and 0 <= slot < len(per_weights):
+                    weight_g = per_weights[slot]
+                else:
+                    weight_g = total_weight_g / num_used
+
+                if weight_g <= 0:
+                    continue
+
+                material = (filament_info.get("type") or filament_info.get("material") or "").upper()
+
+                # Find the best matching spool at this printer
+                matched = None
+                for spool in printer_spools:
+                    spool_material = (spool.get("filament", {}).get("material") or "").upper()
+                    if material and spool_material == material:
+                        matched = spool
+                        break
+                # Fallback: use first available spool
+                if not matched and printer_spools:
+                    matched = printer_spools[0]
+
+                if matched:
+                    result = spoolman.use_spool(matched["id"], use_weight=weight_g)
+                    if result:
+                        remaining = result.get("remaining_weight", "?")
+                        logger.info(
+                            f"Spoolman: deducted {weight_g:.1f}g from spool #{matched['id']} "
+                            f"({matched.get('filament', {}).get('name', '?')}), "
+                            f"{remaining}g remaining"
+                        )
+                    else:
+                        logger.warning(f"Spoolman: failed to deduct usage from spool #{matched['id']}")
     except Exception as e:
         logger.warning(f"Spoolman filament deduction failed for job #{job.get('id')}: {e}")
 

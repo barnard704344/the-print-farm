@@ -3729,8 +3729,7 @@
             }
         }
 
-        // Initial load + periodic refresh every 30s
-        setTimeout(refreshAllPrinterSpools, 2000);
+        // Periodic refresh every 30s (initial load is triggered from refreshPrinters)
         setInterval(refreshAllPrinterSpools, 30000);
 
         async function openSpoolPicker(printerName) {
@@ -3813,6 +3812,7 @@
                 });
                 await refreshPrinterSpool(_spoolPickerPrinter);
                 closeSpoolPicker();
+                refreshPrinters();
             } catch (e) {
                 resultEl.innerHTML = `<span style="color:var(--danger)">Error: ${e.message}</span>`;
             }
@@ -3823,6 +3823,7 @@
             try {
                 await hhFetch(`/api/v1/spoolman/printers/${encodeURIComponent(printerName)}/spools/${spoolId}`, { method: 'DELETE' });
                 _printerSpoolCache[printerName] = null;
+                refreshPrinters();
             } catch (e) {
                 alert(`Failed: ${e.message}`);
             }
@@ -4399,6 +4400,8 @@
                         .map(([name, p]) => renderPrinterCard(name, p))
                         .join('');
                     lastPrinterNames = entries.map(([n]) => n);
+                    // Fetch spool assignments whenever the printer list changes (covers initial load)
+                    refreshAllPrinterSpools();
                 } else {
                     // Same printers — update in place (no flicker)
                     for (const [name, p] of entries) {
