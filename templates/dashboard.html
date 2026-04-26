@@ -2555,7 +2555,10 @@
             }
             // Re-render printers and jobs to show/hide controls
             lastPrinterNames = [];  // Force full rebuild
-            refreshPrinters();
+            await refreshPrinters();
+            // Fetch spool assignments after the card rebuild so the cache
+            // is populated for the freshly rendered DOM nodes.
+            refreshAllPrinterSpools();
             refreshJobs();
         }
 
@@ -3813,11 +3816,13 @@
                 const name = card.dataset.printer;
                 if (!name) continue;
                 await refreshPrinterSpool(name);
-                // Re-render the filament section immediately so the spool appears
-                // without waiting for the next refreshPrinters() poll cycle.
+                // Re-query the card by name in case refreshPrinters() rebuilt the DOM
+                // while we were awaiting the spool fetch (stale reference would be a no-op).
+                const liveCard = document.querySelector(`.printer-card[data-printer="${CSS.escape(name)}"]`);
+                if (!liveCard) continue;
                 const printers = window._farmPrinters || {};
                 const p = printers[name];
-                if (p) updatePrinterCard(card, name, p);
+                if (p) updatePrinterCard(liveCard, name, p);
             }
         }
 
