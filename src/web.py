@@ -2131,7 +2131,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             return jsonify({"ok": False, "message": "git fetch timed out"})
         except Exception as e:
             logger.error(f"Update check failed: {e}")
-            return jsonify({"ok": False, "message": str(e)})
+            return jsonify({"ok": False, "message": "Update check failed — see server logs"})
 
     @app.route(prefix + "/api/update/apply", methods=["POST"])
     @app.route("/api/update/apply", methods=["POST"])
@@ -2160,7 +2160,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             return jsonify({"ok": False, "message": "git pull timed out"})
         except Exception as e:
             logger.error(f"Update apply failed: {e}")
-            return jsonify({"ok": False, "message": str(e)})
+            return jsonify({"ok": False, "message": "Update apply failed — see server logs"})
 
     # ── REST API v1 ───────────────────────────────────────
     api_v1 = create_api_v1(
