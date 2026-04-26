@@ -420,7 +420,7 @@ class FileLibrary:
         if not row:
             return None
 
-        gcode_lines = self._read_gcode_lines(row["file_path"], max_bytes=4 * 1024 * 1024)
+        gcode_lines = self._read_gcode_lines(row["file_path"])
         if not gcode_lines:
             return None
 
@@ -525,7 +525,7 @@ class FileLibrary:
 
         import math
 
-        gcode_lines = self._read_gcode_lines(file_path, max_bytes=4 * 1024 * 1024)
+        gcode_lines = self._read_gcode_lines(file_path)
         if not gcode_lines:
             return None
 
@@ -575,6 +575,17 @@ class FileLibrary:
 
         if not moves:
             return None
+
+        # Downsample if too many moves to keep thumbnail generation fast
+        MAX_THUMB_MOVES = 50000
+        if len(moves) > MAX_THUMB_MOVES:
+            step = len(moves) / MAX_THUMB_MOVES
+            sampled = []
+            i = 0.0
+            while int(i) < len(moves):
+                sampled.append(moves[int(i)])
+                i += step
+            moves = sampled
 
         # Centre the model at the origin for rotation
         all_x = [m[0] for m in moves] + [m[3] for m in moves]
@@ -690,20 +701,29 @@ class FileLibrary:
         logger.info(f"Generated 3D toolpath thumbnail for {stored_name}")
         return thumb_path
 
-    def _read_gcode_lines(self, file_path: str, max_bytes: int = 4 * 1024 * 1024) -> list:
-        """Read gcode lines from a .gcode, .3mf, or .gcode.3mf file."""
+    def _read_gcode_lines(self, file_path: str, max_bytes: Optional[int] = None) -> list:
+        """Read gcode lines from a .gcode, .3mf, or .gcode.3mf file.
+
+        When *max_bytes* is None (the default) the entire file is read so that
+        every layer of the print is available for thumbnail generation and the
+        interactive 3-D viewer.  Pass an explicit value only when a hard upper
+        bound on memory consumption is required.
+        """
         if file_path.endswith(".3mf"):
             try:
                 with zipfile.ZipFile(file_path) as z:
                     if "Metadata/plate_1.gcode" in z.namelist():
                         with z.open("Metadata/plate_1.gcode") as gf:
-                            return gf.read(max_bytes).decode("utf-8", errors="replace").split("\n")
+                            raw = gf.read(max_bytes) if max_bytes is not None else gf.read()
+                            return raw.decode("utf-8", errors="replace").split("\n")
             except Exception:
                 return []
         elif file_path.endswith(".gcode"):
             try:
                 with open(file_path, "r", errors="replace") as f:
-                    return f.read(max_bytes).split("\n")
+                    if max_bytes is not None:
+                        return f.read(max_bytes).split("\n")
+                    return f.read().split("\n")
             except Exception:
                 return []
         return []

@@ -5698,8 +5698,8 @@
             const sz = bounds.max[2] - bounds.min[2];
             const maxDim = Math.max(sx, sy, sz) || 100;
 
-            camera = new THREE.PerspectiveCamera(45, w / h, 0.1, maxDim * 10);
-            camera.position.set(cx + maxDim * 0.9, cy + maxDim * 0.6, cz + maxDim * 0.9);
+            camera = new THREE.PerspectiveCamera(45, w / h, maxDim * 0.01, maxDim * 20);
+            camera.position.set(cx + maxDim * 1.2, cy + maxDim * 0.8, cz + maxDim * 1.2);
             camera.lookAt(cx, cy, cz);
 
             // Renderer
