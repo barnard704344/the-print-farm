@@ -95,6 +95,11 @@ class KlipperClient:
         self._led_objects = []   # e.g. ["neopixel chamber_light", "led sb_leds"]
         self._output_pins = []   # e.g. ["output_pin caselight"]
 
+        # Layer count cache: {printer_filename: int}
+        # Stores total layer count from Moonraker file metadata as a fallback
+        # when the slicer does not emit SET_PRINT_STATS_INFO commands.
+        self._layer_cache: dict = {}
+
         # Obico integration
         self._obico = None
         if obico_config and obico_config.get("server"):
@@ -412,6 +417,20 @@ class KlipperClient:
         result = resp.json().get("result", {}).get("status", {})
         prev_status = self._state.status
 
+        # Determine layer info before acquiring the lock so the metadata
+        # HTTP request (fallback) does not hold the lock.
+        ps_pre = result.get("print_stats", {})
+        ps_info_pre = ps_pre.get("info") or {}
+        _info_layer_num = ps_info_pre.get("current_layer") or 0
+        _info_total_layers = ps_info_pre.get("total_layer") or 0
+
+        # Fallback: if the slicer did not emit SET_PRINT_STATS_INFO, retrieve
+        # the layer count from Moonraker's file-metadata analysis instead.
+        _ps_filename = ps_pre.get("filename", "")
+        _meta_total_layers = 0
+        if _info_total_layers == 0 and _ps_filename:
+            _meta_total_layers = self._get_cached_layer_count(_ps_filename)
+
         with self._state_lock:
             # Print stats
             ps = result.get("print_stats", {})
@@ -425,16 +444,24 @@ class KlipperClient:
             self._state.subtask_name = raw_filename
             self._state.gcode_file = raw_filename
 
-            # Layer count from print_stats.info (SET_PRINT_STATS_INFO)
-            ps_info = ps.get("info", {}) or {}
-            self._state.layer_num = ps_info.get("current_layer") or 0
-            self._state.total_layers = ps_info.get("total_layer") or 0
+            # Layer count: prefer SET_PRINT_STATS_INFO values; fall back to
+            # file-metadata layer_count when the slicer doesn't emit that command.
+            total_layers = _info_total_layers or _meta_total_layers
+            layer_num = _info_layer_num
 
             # Progress
             ds = result.get("display_status", {})
             vs = result.get("virtual_sdcard", {})
             progress = ds.get("progress", vs.get("progress", 0))
             self._state.mc_percent = int(progress * 100)
+
+            # Estimate current layer from progress when the slicer does not
+            # report it via SET_PRINT_STATS_INFO but we know the total layers.
+            if layer_num == 0 and total_layers > 0 and progress > 0:
+                layer_num = int(progress * total_layers)
+
+            self._state.layer_num = layer_num
+            self._state.total_layers = total_layers
 
             # Estimate remaining time from total_duration and progress
             total_dur = ps.get("total_duration", 0)
@@ -622,6 +649,41 @@ class KlipperClient:
             logger.info(f"[{self.name}] Status: {prev_status.value} -> {new_status.value}")
             if self._on_state_change:
                 self._on_state_change(self.name, self._state)
+
+    def _get_cached_layer_count(self, filename: str) -> int:
+        """Return total layer count for *filename* from Moonraker file metadata.
+
+        Positive results are cached so the metadata endpoint is only queried
+        once per file.  Zero / failure results are *not* cached so that we
+        retry on the next poll cycle (e.g. while Moonraker is still analysing
+        the file right after upload).
+        """
+        if filename in self._layer_cache:
+            return self._layer_cache[filename]
+        try:
+            meta_resp = self._session.get(
+                f"{self._base_url}/server/files/metadata",
+                params={"filename": filename},
+                timeout=5,
+            )
+            if meta_resp.status_code == 200:
+                meta = meta_resp.json().get("result", {})
+                count = meta.get("layer_count") or 0
+                if count > 0:
+                    self._layer_cache[filename] = count
+                    logger.debug(
+                        f"[{self.name}] File metadata layer count for "
+                        f"'{filename}': {count}"
+                    )
+                return count
+            else:
+                logger.debug(
+                    f"[{self.name}] File metadata request for '{filename}' "
+                    f"returned HTTP {meta_resp.status_code}"
+                )
+        except Exception as e:
+            logger.debug(f"[{self.name}] Could not fetch file metadata for '{filename}': {e}")
+        return 0
 
     @staticmethod
     def _map_status(klipper_state: str) -> PrintStatus:
