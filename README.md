@@ -23,6 +23,9 @@ A web-based print farm manager for **BambuLab** and **Klipper** 3D printers. Mon
 
 <img width="1890" height="875" alt="image" src="https://github.com/user-attachments/assets/1d42796c-3535-4304-b573-d93d24c8d310" />
 
+<img width="1900" height="662" alt="image" src="https://github.com/user-attachments/assets/dac962dd-214e-48d3-9c94-05028af6562c" />
+
+
 
 
 ### REST API v1
