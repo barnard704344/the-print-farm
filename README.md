@@ -4,7 +4,7 @@ A web-based print farm manager for **BambuLab** and **Klipper** 3D printers. Mon
 
 ## Features
 
-- **Multi-printer support** — BambuLab (P1S, X1C, A1) via MQTT/FTPS and Klipper via Moonraker HTTP API
+- **Multi-printer support** — BambuLab (P1S, X1C, A1) via MQTT/FTPS (LAN mode) and Klipper via Moonraker HTTP API
 - **Real-time dashboard** — Live status, temperatures, progress, and camera feeds
 - **Job queue** — Upload G-code, queue jobs, auto-assign to idle printers
 - **File library** — Persistent storage with folder organisation, search, and 3D interactive toolpath viewer (supports OrcaSlicer, PrusaSlicer, and Cura gcode)
