@@ -21,6 +21,10 @@ A web-based print farm manager for **BambuLab** and **Klipper** 3D printers. Mon
 - **Obico integration** — If a local Obico server is running and the Obico plugin is installed on your Klipper printer, the dashboard will automatically pull failure detection data and remote monitoring info from it
 - **Klipper Adaptive Flow** — If [Klipper Adaptive Flow](https://github.com/barnard704344/Klipper-Adaptive-Flow) is installed on a Klipper printer, the dashboard auto-detects it and shows a direct link to the Adaptive Flow analysis dashboard on the printer card
 
+<img width="1890" height="875" alt="image" src="https://github.com/user-attachments/assets/1d42796c-3535-4304-b573-d93d24c8d310" />
+
+
+
 ### REST API v1
 
 A full RESTful API at `/api/v1/` for external integrations:
