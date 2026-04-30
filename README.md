@@ -22,9 +22,20 @@ A web-based print farm manager for **BambuLab** and **Klipper** 3D printers. Mon
 - **Klipper Adaptive Flow** — If [Klipper Adaptive Flow](https://github.com/barnard704344/Klipper-Adaptive-Flow) is installed on a Klipper printer, the dashboard auto-detects it and shows a direct link to the Adaptive Flow analysis dashboard on the printer card
 
 <img width="1890" height="875" alt="image" src="https://github.com/user-attachments/assets/1d42796c-3535-4304-b573-d93d24c8d310" />
-
+<br>
+<br>
+<img width="1875" height="765" alt="image" src="https://github.com/user-attachments/assets/7db34b79-c0a4-433f-a5e2-18f206de9a5a" />
+<br>
+<br>
 <img width="1900" height="662" alt="image" src="https://github.com/user-attachments/assets/dac962dd-214e-48d3-9c94-05028af6562c" />
-
+<br>
+<br>
+<img width="1918" height="722" alt="image" src="https://github.com/user-attachments/assets/b8e62e2f-adb0-40cf-a9f6-e3c8eab723e4" />
+<br>
+<br>
+<img width="1902" height="932" alt="image" src="https://github.com/user-attachments/assets/affc0baa-4061-4eae-9a77-56e4c277ae28" />
+<br>
+<br>
 
 
 
