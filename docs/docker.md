@@ -14,7 +14,7 @@ docker compose up -d --build
 
 Dashboard URL:
 
-- http://<host-ip>:5000/the-print-farm
+- http://host-ip:5000/the-print-farm
 
 Stop:
 
