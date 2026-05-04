@@ -22,6 +22,31 @@ Prerequisites on each BambuLab printer:
 
 Cloud-only mode is not used for core printer communication.
 
+## Klipper Support
+
+Any printer running Klipper with the Moonraker API server is supported.
+
+Connection method:
+
+- Moonraker HTTP REST API (default port 7125)
+- Optional Moonraker API key for installations with authentication enabled
+
+Webcam:
+
+- Camera URL is auto-detected from the Moonraker `/server/webcams/list` endpoint
+- A specific URL can also be set manually in the printer config
+
+Multi-material:
+
+- Happy Hare MMU is auto-detected from Klipper printer objects when present
+
+Peripheral discovery:
+
+- `fan_generic` objects are enumerated for auxiliary fan control
+- `led` and `neopixel` objects are discovered for lighting control
+
+No Klipper plugin or extra component is required beyond a standard Moonraker installation.
+
 ## Core Features
 
 - Multi-printer support (BambuLab and Klipper)
