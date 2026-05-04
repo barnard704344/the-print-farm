@@ -15,6 +15,10 @@ www-data ALL=(root) NOPASSWD: /usr/bin/systemctl restart the-print-farm.service
 
 Add as sudoers drop-in with mode 440.
 
+New installs run this automatically via setup.sh.
+
+Use the manual sudoers rule above only for legacy installs that were set up before this automation was added.
+
 ## Printer Pool
 
 ```yaml

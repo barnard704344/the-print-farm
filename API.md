@@ -573,8 +573,8 @@ Admin only. Used by the Settings tab update controls.
 **Notes:**
 
 - Requires git on the host
-- Requires service-user permission to restart systemd service non-interactively
-- If restart permissions are missing, the endpoint can still pull code but restart will fail
+- New installs configure service-user restart permission automatically via setup.sh
+- Legacy installs may require a manual sudoers rule; if missing, the endpoint can still pull code but restart will fail
 
 ---
 
