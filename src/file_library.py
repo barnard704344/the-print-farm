@@ -393,7 +393,8 @@ class FileLibrary:
         sweep = end_angle - start_angle
         # Adaptive segment count based on arc length
         arc_len = abs(sweep) * r
-        n = max(3, min(segments, int(arc_len / 0.5)))
+        # Use very tight arc segmentation for smoother curved features in the 3D toolpath view.
+        n = max(3, min(segments, int(arc_len / 0.12)))
 
         result = []
         pz = cz
@@ -415,7 +416,10 @@ class FileLibrary:
     def get_toolpath_data(self, file_id: int) -> Optional[dict]:
         """Return parsed gcode toolpath moves as JSON-friendly data for the 3D viewer."""
         conn = self._get_conn()
-        row = conn.execute("SELECT file_path, stored_name FROM files WHERE id = ?", (file_id,)).fetchone()
+        row = conn.execute(
+            "SELECT file_path, stored_name, original_name FROM files WHERE id = ?",
+            (file_id,),
+        ).fetchone()
         conn.close()
         if not row:
             return None
@@ -424,10 +428,11 @@ class FileLibrary:
         if not gcode_lines:
             return None
 
-        SKIP_FEATURES = {"Sparse infill", "Internal solid infill", "Gap infill", "Custom"}
-
         moves = []
         cx, cy, cz = 0.0, 0.0, 0.0
+        last_e = 0.0
+        absolute_xyz = True
+        absolute_e = True
         current_feature = ""
         for line in gcode_lines:
             stripped = line.strip()
@@ -439,8 +444,25 @@ class FileLibrary:
                     current_feature = m.group(1).strip()
                 continue
             parts = stripped.split(";")[0].split()
-            if not parts or parts[0] not in ("G0", "G1", "G2", "G3"):
+            if not parts:
                 continue
+
+            cmd = parts[0]
+
+            # Track G-code coordinate and extrusion modes.
+            if cmd == "G90":
+                absolute_xyz = True
+                continue
+            if cmd == "G91":
+                absolute_xyz = False
+                continue
+            if cmd == "M82":
+                absolute_e = True
+                continue
+            if cmd == "M83":
+                absolute_e = False
+                continue
+
             params = {}
             for p in parts[1:]:
                 if p and p[0] in "XYZEFIJxyzefij":
@@ -448,18 +470,44 @@ class FileLibrary:
                         params[p[0].upper()] = float(p[1:])
                     except ValueError:
                         pass
-            nx = params.get("X", cx)
-            ny = params.get("Y", cy)
-            nz = params.get("Z", cz)
-            has_extrusion = "E" in params and params["E"] > 0
-            is_move = parts[0] in ("G1", "G2", "G3")
-            if is_move and has_extrusion and (nx != cx or ny != cy):
-                if current_feature and current_feature not in SKIP_FEATURES:
-                    if parts[0] in ("G2", "G3") and ("I" in params or "J" in params):
+
+            # Reset extruder position in absolute-E mode.
+            if cmd == "G92" and "E" in params:
+                last_e = params["E"]
+                continue
+
+            if cmd not in ("G0", "G1", "G2", "G3"):
+                continue
+
+            if absolute_xyz:
+                nx = params.get("X", cx)
+                ny = params.get("Y", cy)
+                nz = params.get("Z", cz)
+            else:
+                nx = cx + params.get("X", 0.0)
+                ny = cy + params.get("Y", 0.0)
+                nz = cz + params.get("Z", 0.0)
+
+            extruding = False
+            if "E" in params:
+                if absolute_e:
+                    delta_e = params["E"] - last_e
+                    last_e = params["E"]
+                else:
+                    delta_e = params["E"]
+                    last_e += params["E"]
+                extruding = delta_e > 0.00001
+
+            is_move = cmd in ("G1", "G2", "G3")
+            if is_move and extruding and (nx != cx or ny != cy or nz != cz):
+                if current_feature:
+                    if cmd in ("G2", "G3") and ("I" in params or "J" in params):
                         arc_segs = self._tessellate_arc(
                             cx, cy, cz, nx, ny, nz,
                             params.get("I", 0), params.get("J", 0),
-                            clockwise=(parts[0] == "G2"))
+                            clockwise=(cmd == "G2"),
+                            segments=180,
+                        )
                         for seg in arc_segs:
                             moves.append((*seg, current_feature))
                     else:
@@ -469,10 +517,10 @@ class FileLibrary:
         if not moves:
             return None
 
-        # Downsample if too many moves (keep it under ~20k for browser perf)
-        MAX_MOVES = 20000
-        if len(moves) > MAX_MOVES:
-            step = len(moves) / MAX_MOVES
+        # Downsample only when needed; keep an ultra-high global detail ceiling for all files.
+        max_moves = 350000
+        if len(moves) > max_moves:
+            step = len(moves) / max_moves
             sampled = []
             i = 0.0
             while int(i) < len(moves):
@@ -491,8 +539,8 @@ class FileLibrary:
         feat_map = {}
         feat_idx = 0
         for x1, y1, z1, x2, y2, z2, feat in moves:
-            positions.extend([round(x1, 2), round(y1, 2), round(z1, 2),
-                              round(x2, 2), round(y2, 2), round(z2, 2)])
+            positions.extend([round(x1, 4), round(y1, 4), round(z1, 4),
+                              round(x2, 4), round(y2, 4), round(z2, 4)])
             if feat not in feat_map:
                 feat_map[feat] = feat_idx
                 feat_idx += 1
