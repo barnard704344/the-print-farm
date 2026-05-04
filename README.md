@@ -137,6 +137,72 @@ cp config/config.example.yaml config/config.yaml
 python -m src.main
 ```
 
+## Docker
+
+Run The Print Farm with Docker on Linux or macOS.
+
+### Local Run (Docker Compose)
+
+```bash
+git clone https://github.com/barnard704344/the-print-farm.git
+cd the-print-farm
+
+# Create runtime folders and editable config
+mkdir -p config data uploads logs
+cp -n config/config.example.yaml config/config.yaml
+
+# Build and start
+docker compose up -d --build
+```
+
+Dashboard URL:
+
+- `http://<host-ip>:5000/the-print-farm`
+
+Stop:
+
+```bash
+docker compose down
+```
+
+### Image Contents and Persistence
+
+- App listens on container port `5000`
+- `FARM_CONFIG` defaults to `/app/config/config.yaml`
+- Persist these paths with volumes:
+  - `/app/config`
+  - `/app/data`
+  - `/app/uploads`
+  - `/app/logs`
+
+### Notes for Discovery
+
+Printer discovery behavior depends on Docker networking:
+
+- Linux: host networking can improve broadcast/scan discovery behavior
+- macOS (Docker Desktop): some LAN broadcast discovery paths may be limited; direct printer IP configuration is recommended
+
+### GitHub Container Registry (GHCR)
+
+This repo includes a publish workflow at `.github/workflows/docker-publish.yml`.
+
+- Push to `main` or a `v*` tag to build and publish
+- Images are pushed to:
+  - `ghcr.io/<owner>/the-print-farm`
+
+Pull and run example:
+
+```bash
+docker pull ghcr.io/<owner>/the-print-farm:latest
+docker run -d --name the-print-farm \
+  -p 5000:5000 \
+  -v $(pwd)/config:/app/config \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/uploads:/app/uploads \
+  -v $(pwd)/logs:/app/logs \
+  ghcr.io/<owner>/the-print-farm:latest
+```
+
 ## Adding Printers
 
 ### From the Dashboard

@@ -1,0 +1,13 @@
+.git
+.gitignore
+.github
+venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.db
+data
+uploads
+logs
+config/config.yaml

@@ -1,0 +1,17 @@
+services:
+  print-farm:
+    build:
+      context: .
+    image: ghcr.io/barnard704344/the-print-farm:dev
+    container_name: the-print-farm
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      FARM_CONFIG: /app/config/config.yaml
+      APP_PREFIX: /the-print-farm
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
