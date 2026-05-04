@@ -1526,15 +1526,7 @@
         .viewer-close:hover { background: var(--danger); }
         .viewer-loading {
             position: absolute; inset: 0; display: flex; align-items: center;
-            justify-content: center;
-            background: rgba(0, 0, 0, 0.58);
-            color: #ffffff;
-            font-size: 15px;
-            font-weight: 600;
-            letter-spacing: 0.2px;
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
-            z-index: 12;
-            backdrop-filter: blur(1px);
+            justify-content: center; color: var(--text-muted); font-size: 14px;
         }
         .viewer-hint {
             position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
@@ -3124,11 +3116,6 @@
 
         async function attemptSSO() {
             try {
-                // Kerberos/SPNEGO generally requires an SPN/FQDN host.
-                // Accessing via raw IP causes 401 challenges and browser credential prompts.
-                const isIpv4Host = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(location.hostname);
-                if (isIpv4Host) return;
-
                 // Step 1: Fetch the GSSAPI-protected PHP file (Apache handles Kerberos)
                 const checkRes = await fetch('/bambulab-sso-check.php', { credentials: 'include' });
                 if (!checkRes.ok) return;
@@ -4313,12 +4300,12 @@
                 assignBtn = `<button class="btn" disabled title="No available printers">Send to…</button>`;
             }
 
-            let reprintBtn = '';
+            let reprintBtn = canReprint ? `<button class="btn" onclick="reprintJob(${job.id})" title="Create a new queued copy of this job">Reprint</button>` : '';
             if (canReprint && availablePrinters.length > 0) {
                 const reprintCheckboxes = availablePrinters.map(p =>
                     `<label><input type="checkbox" value="${p.name}"> ${p.name} <span class="send-dropdown-status">(${p.status.toLowerCase()})</span></label>`
                 ).join('');
-                reprintBtn = `
+                reprintBtn = `${reprintBtn}
                     <div class="send-dropdown" id="reprint-dd-${job.id}">
                         <button class="btn send-dropdown-btn" onclick="toggleReprintDropdown(${job.id})" title="Create reprint(s) and send immediately">Reprint to…</button>
                         <div class="send-dropdown-menu">
@@ -4329,8 +4316,6 @@
                             </div>
                         </div>
                     </div>`;
-            } else if (canReprint) {
-                reprintBtn = `<button class="btn" disabled title="No available printers">Reprint to…</button>`;
             }
 
             return `
@@ -4380,9 +4365,12 @@
             document.getElementById(`reprint-dd-${jobId}`)?.classList.remove('open');
         }
 
-        function hasOpenActionDropdown() {
-            return document.querySelector('.send-dropdown.open') !== null;
-        }
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', e => {
+            if (!e.target.closest('.send-dropdown')) {
+                document.querySelectorAll('.send-dropdown.open').forEach(el => el.classList.remove('open'));
+            }
+        });
 
         async function sendToSelected(jobId) {
             const dd = document.getElementById(`send-dd-${jobId}`);
@@ -4418,7 +4406,7 @@
 
             dd.classList.remove('open');
             await apiPost(`${BASE}/api/jobs/${jobId}/assign`, { printers: checked });
-            refreshJobs(true);
+            refreshJobs();
         }
 
         async function sendToAssigned(jobId, printerName) {
@@ -4439,7 +4427,16 @@
                 }
             } catch (e) {}
             await apiPost(`${BASE}/api/jobs/${jobId}/assign`, { printers: [printerName] });
-            refreshJobs(true);
+            refreshJobs();
+        }
+
+        async function reprintJob(jobId) {
+            const res = await apiPost(`${BASE}/api/jobs/${jobId}/reprint`);
+            if (res.ok) {
+                refreshJobs();
+            } else {
+                alert('Reprint failed: ' + (res.error || 'Unknown error'));
+            }
         }
 
         async function reprintToSelected(jobId) {
@@ -4453,7 +4450,7 @@
             dd.classList.remove('open');
             const res = await apiPost(`${BASE}/api/jobs/${jobId}/reprint`, { printers: checked });
             if (res.ok) {
-                refreshJobs(true);
+                refreshJobs();
             } else {
                 alert('Reprint failed: ' + (res.error || 'Unknown error'));
             }
@@ -4475,7 +4472,7 @@
                     alert('Network error deleting job');
                     return;
                 }
-                refreshJobs(true);
+                refreshJobs();
                 if (deleteLib) refreshLibrary();
                 return;
             }
@@ -4491,7 +4488,7 @@
                 alert(`Network error: ${action}`);
                 return;
             }
-            refreshJobs(true);
+            refreshJobs();
         }
 
         // ── Refresh Loop ─────────────────────────────────────
@@ -4556,10 +4553,7 @@
             }
         }
 
-        async function refreshJobs(force = false) {
-            if (!force && hasOpenActionDropdown()) {
-                return;
-            }
+        async function refreshJobs() {
             try {
                 const res = await fetch(BASE + '/api/jobs');
                 const data = await res.json();
@@ -5721,9 +5715,7 @@
     <div class="viewer-overlay" id="viewerOverlay" onclick="if(event.target===this)close3DViewer()">
         <div class="viewer-container">
             <button class="viewer-close" onclick="close3DViewer()" title="Close">&times;</button>
-            <button id="viewerModeBtn" class="btn" style="position:absolute; top:18px; left:18px; z-index:20; font-size:12px; padding:6px 10px;" onclick="openViewer3DRotate()">3D Rotate</button>
             <div class="viewer-loading" id="viewerLoading">Loading 3D model…</div>
-            <img id="viewerPreviewImage" alt="Model preview" style="display:none; width:100%; height:100%; object-fit:contain; background:#0f1117;" />
             <canvas id="viewerCanvas"></canvas>
             <div class="viewer-hint">Drag to rotate · Scroll to zoom · Right-drag to pan</div>
         </div>
@@ -5731,14 +5723,10 @@
     <script>
     // --- Interactive 3D Toolpath Viewer (Three.js) ---
     (function() {
-        let scene, camera, renderer, controls, animId, currentViewerFileId = null;
-        let loadingAnim = null;
+        let scene, camera, renderer, controls, animId;
         const overlay = document.getElementById('viewerOverlay');
         const canvas = document.getElementById('viewerCanvas');
-        const previewImage = document.getElementById('viewerPreviewImage');
         const loading = document.getElementById('viewerLoading');
-        const hint = document.querySelector('.viewer-hint');
-        const modeBtn = document.getElementById('viewerModeBtn');
 
         const FEATURE_COLORS = {
             'Outer wall':      0x40d0ff,
@@ -5749,59 +5737,21 @@
             'Bridge':          0xff8040,
             'Internal Bridge': 0xd08040,
             'Ironing':         0xc0c0c0,
-            'Support':         0xff4d6d,
-            'Support interface': 0xff8fa3,
-            'Support transition': 0xff758f,
-            'Tree support':     0xff4d6d,
-            'Skirt/Brim':      0x7dd3fc,
             '_default':        0x50a0d0
         };
 
         function getFeatureColor(name) {
-            if (!name) return FEATURE_COLORS['_default'];
-            if (FEATURE_COLORS[name] !== undefined) return FEATURE_COLORS[name];
-            const lowerName = name.toLowerCase();
-            for (const [k, v] of Object.entries(FEATURE_COLORS)) {
-                if (k !== '_default' && k.toLowerCase() === lowerName) return v;
-            }
-            return FEATURE_COLORS['_default'];
+            return FEATURE_COLORS[name] !== undefined ? FEATURE_COLORS[name] : FEATURE_COLORS['_default'];
         }
 
-        function setViewerLoading(message) {
-            if (loadingAnim) {
-                clearInterval(loadingAnim);
-                loadingAnim = null;
-            }
+        window.open3DViewer = function(fileId) {
+            // Clean up any prior viewer
+            if (renderer) close3DViewer();
+            overlay.classList.add('active');
             loading.style.display = 'flex';
-            let dots = 0;
-            loading.textContent = message;
-            loadingAnim = setInterval(() => {
-                dots = (dots + 1) % 4;
-                loading.textContent = message + '.'.repeat(dots);
-            }, 350);
-        }
-
-        function clearViewerLoading() {
-            if (loadingAnim) {
-                clearInterval(loadingAnim);
-                loadingAnim = null;
-            }
-            loading.style.display = 'none';
-        }
-
-        function startToolpathViewer(fileId) {
-            canvas.style.display = 'block';
-            previewImage.style.display = 'none';
-            setViewerLoading('Generating high-detail 3D toolpath (may take a few seconds)');
-            if (hint) hint.textContent = 'Drag to rotate · Scroll to zoom · Right-drag to pan';
-            if (modeBtn) {
-                modeBtn.disabled = true;
-                modeBtn.textContent = '3D Active';
-            }
+            loading.textContent = 'Loading 3D model\u2026';
 
             if (typeof THREE === 'undefined') {
-                clearViewerLoading();
-                loading.style.display = 'flex';
                 loading.textContent = 'Three.js failed to load';
                 console.error('THREE is undefined');
                 return;
@@ -5809,58 +5759,15 @@
 
             fetch(BASE + '/api/library/files/' + fileId + '/toolpath')
                 .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-                .then(data => { clearViewerLoading(); initViewer(data); })
-                .catch(err => {
-                    clearViewerLoading();
-                    loading.style.display = 'flex';
-                    loading.textContent = 'Failed to load: ' + err.message;
-                    console.error(err);
-                });
-        }
-
-        window.openViewer3DRotate = function() {
-            if (!currentViewerFileId) return;
-            if (renderer) return;
-            startToolpathViewer(currentViewerFileId);
-        };
-
-        window.open3DViewer = function(fileId) {
-            // Clean up any prior viewer
-            if (renderer) close3DViewer();
-            currentViewerFileId = fileId;
-            overlay.classList.add('active');
-            canvas.style.display = 'none';
-            previewImage.style.display = 'none';
-            setViewerLoading('Loading preview');
-            if (hint) hint.textContent = 'Preview image from slicer';
-            if (modeBtn) {
-                modeBtn.disabled = false;
-                modeBtn.textContent = '3D Rotate';
-            }
-
-            const thumbUrl = `${BASE}/api/library/files/${fileId}/thumbnail?t=${Date.now()}`;
-            previewImage.onload = () => {
-                clearViewerLoading();
-                previewImage.style.display = 'block';
-            };
-            previewImage.onerror = () => {
-                startToolpathViewer(fileId);
-            };
-            previewImage.src = thumbUrl;
+                .then(data => { loading.style.display = 'none'; initViewer(data); })
+                .catch(err => { loading.textContent = 'Failed to load: ' + err.message; console.error(err); });
         };
 
         window.close3DViewer = function() {
             overlay.classList.remove('active');
-            currentViewerFileId = null;
-            clearViewerLoading();
             if (animId) { cancelAnimationFrame(animId); animId = null; }
             if (renderer) { renderer.dispose(); renderer = null; }
             if (controls) { controls.dispose(); controls = null; }
-            canvas.style.display = 'block';
-            previewImage.style.display = 'none';
-            previewImage.onload = null;
-            previewImage.onerror = null;
-            previewImage.src = '';
             if (scene) {
                 scene.traverse(function(obj) {
                     if (obj.geometry) obj.geometry.dispose();
@@ -5868,10 +5775,6 @@
                 });
             }
             scene = null; camera = null;
-            if (modeBtn) {
-                modeBtn.disabled = false;
-                modeBtn.textContent = '3D Rotate';
-            }
         };
 
         // Close on Escape key

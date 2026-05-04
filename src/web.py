@@ -212,15 +212,6 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             return False
         return request.headers.get("X-Api-Key", "") == api_key
 
-    def _request_submitter(default: str = ""):
-        """Return session username, or API for API-key-authenticated requests."""
-        uname = (session.get("username", "") or "").strip()
-        if uname:
-            return uname
-        if _check_api_key():
-            return "API"
-        return default
-
     def login_required(f):
         """Require any authenticated user (student or staff), or a valid API key."""
         @wraps(f)
@@ -659,7 +650,6 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         priority = int(request.form.get("priority", 0))
         notes = request.form.get("notes", "")
         printer = request.form.get("printer", "")
-        submitted_by = _request_submitter()
 
         job_id = job_queue.add_job(
             filename=unique_name,
@@ -668,7 +658,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             copies=copies,
             priority=priority,
             notes=notes,
-            submitted_by=submitted_by,
+            submitted_by=session.get("username", ""),
         )
 
         # Notify
@@ -676,7 +666,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         NotificationManager(app_config).notify(
             "job_submitted",
             f"New Job — {original_name}",
-            f"Job #{job_id} submitted by {submitted_by or 'unknown'}.\nFile: {original_name}",
+            f"Job #{job_id} submitted by {session.get('username', 'unknown')}.\nFile: {original_name}",
         )
 
         # Add to file library for persistent storage
@@ -698,7 +688,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                     stored_name=unique_name,
                     file_path=file_path,
                     file_size=os.path.getsize(file_path),
-                    uploaded_by=submitted_by,
+                    uploaded_by=session.get("username", ""),
                     metadata=meta,
                     thumbnail_override=uploaded_thumb_path,
                 )
@@ -1176,8 +1166,6 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         if not os.path.exists(lib_file["file_path"]):
             return jsonify({"error": "File missing from disk"}), 404
 
-        submitted_by = _request_submitter()
-
         new_job_id = job_queue.add_job(
             filename=lib_file["stored_name"],
             original_name=lib_file["original_name"],
@@ -1185,7 +1173,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             copies=1,
             priority=0,
             notes=f"Reprinted from library (file #{file_id})",
-            submitted_by=submitted_by,
+            submitted_by=session.get("username", ""),
         )
         file_library.increment_print_count(file_id)
 
@@ -1193,7 +1181,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         NotificationManager(app_config).notify(
             "job_submitted",
             f"New Job — {lib_file['original_name']}",
-            f"Job #{new_job_id} submitted from library by {submitted_by or 'unknown'}.\nFile: {lib_file['original_name']}",
+            f"Job #{new_job_id} submitted from library by {session.get('username', 'unknown')}.\nFile: {lib_file['original_name']}",
         )
 
         return jsonify({"ok": True, "job_id": new_job_id})
@@ -1972,7 +1960,6 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
         # Check if OrcaSlicer wants to print immediately
         print_flag = request.form.get("print", "false").lower() == "true"
-        submitted_by = _request_submitter("API")
 
         job_id = job_queue.add_job(
             filename=unique_name,
@@ -1981,7 +1968,6 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             copies=1,
             priority=10 if print_flag else 0,
             notes="Uploaded from OrcaSlicer",
-            submitted_by=submitted_by,
         )
 
         # Notify
