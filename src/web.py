@@ -614,11 +614,6 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     def active_jobs():
         return jsonify(job_queue.get_active_jobs())
 
-    @app.route(prefix + "/api/jobs/history")
-    @app.route("/api/jobs/history")
-    def job_history():
-        return jsonify(job_queue.get_history())
-
     @app.route(prefix + "/api/jobs/<int:job_id>")
     @app.route("/api/jobs/<int:job_id>")
     def get_job(job_id):

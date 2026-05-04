@@ -394,8 +394,6 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
             jobs = job_queue.get_queued_jobs()
         elif status_filter in ("printing", "active"):
             jobs = job_queue.get_active_jobs()
-        elif status_filter == "history":
-            jobs = job_queue.get_history(limit=limit)
         else:
             jobs = job_queue.get_all_jobs(limit=limit)
 

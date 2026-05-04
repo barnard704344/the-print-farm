@@ -1574,7 +1574,6 @@
         <div class="tabs">
             <button class="tab active" data-tab="printers">Printers</button>
             <button class="tab" data-tab="queue">Job Queue</button>
-            <button class="tab" data-tab="history">History</button>
             <button class="tab" data-tab="library">File Library</button>
             <button class="tab" data-tab="orca">OrcaSlicer Setup</button>
             <a class="tab" id="spoolmanTab" href="#" target="_blank" rel="noopener" style="text-decoration:none;display:none;">Spoolman ↗</a>
@@ -1619,22 +1618,6 @@
             </table>
         </div>
 
-        <!-- History Tab -->
-        <div class="tab-content" id="tab-history">
-            <h2 style="font-size:16px; margin-bottom:16px;">Print History</h2>
-            <table class="job-table">
-                <thead>
-                    <tr>
-                        <th>File</th>
-                        <th>Printer</th>
-                        <th>Status</th>
-                        <th>Duration</th>
-                        <th>Completed</th>
-                    </tr>
-                </thead>
-                <tbody id="historyTableBody"></tbody>
-            </table>
-        </div>
         <!-- File Library Tab -->
         <div class="tab-content" id="tab-library">
             <div class="library-breadcrumb" id="libraryBreadcrumb">
@@ -4603,30 +4586,9 @@
             }
         }
 
-        async function refreshHistory() {
-            try {
-                const res = await fetch(BASE + '/api/jobs/history');
-                const data = await res.json();
-
-                document.getElementById('historyTableBody').innerHTML =
-                    data.map(h => `
-                        <tr>
-                            <td>${h.original_name || 'Job #' + h.job_id}</td>
-                            <td>${h.printer_name}</td>
-                            <td><span class="job-status job-${h.status}">${h.status}</span></td>
-                            <td>${formatDuration(h.duration_seconds)}</td>
-                            <td>${formatDate(h.completed_at)}</td>
-                        </tr>
-                    `).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);">No history</td></tr>';
-            } catch (err) {
-                console.error('Failed to refresh history:', err);
-            }
-        }
-
         // Initial load + polling
         refreshPrinters();
         refreshJobs();
-        refreshHistory();
         refreshCameraStatus();
 
         // ── File Library ─────────────────────────────────────
@@ -4848,7 +4810,6 @@
 
         setInterval(refreshPrinters, 2000);
         setInterval(refreshJobs, 5000);
-        setInterval(refreshHistory, 10000);
         setInterval(refreshCameraStatus, 10000);
 
         // ── Discovery Wizard ─────────────────────────────────
