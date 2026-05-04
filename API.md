@@ -17,6 +17,7 @@ Complete reference for all REST API endpoints.
 - [Happy Hare / MMU](#happy-hare--mmu)
 - [Active Directory Config](#active-directory-config)
 - [Obico Config](#obico-config)
+- [Software Update](#software-update)
 - [OctoPrint-Compatible API](#octoprint-compatible-api)
 - [API v1 Reference](#api-v1-reference)
 
@@ -299,7 +300,7 @@ Requires login. Multipart form upload.
 | `POST /api/jobs/<id>/assign` | owner/admin | Assign to printer. Body: `{"printer": "voron"}` or `{"printers": ["voron", "P1S-1"]}` |
 | `POST /api/jobs/<id>/cancel` | owner/admin | Cancel job (stops print if active) |
 | `POST /api/jobs/<id>/requeue` | admin | Requeue failed/cancelled job |
-| `POST /api/jobs/<id>/reprint` | owner/admin | Create new copy of job. Optional body: `{"printer": "voron"}` or `{"printers": ["voron", "P1S-1"]}` to immediately dispatch copies |
+| `POST /api/jobs/<id>/reprint` | owner/admin | Create queued reprint. Optional body: `{"printer": "voron"}` or `{"printers": ["voron", "P1S-1"]}` to immediately dispatch copies |
 | `POST /api/jobs/<id>/delete` | admin | Delete job. Query: `?delete_library=true` to also remove library file |
 | `DELETE /api/jobs/<id>` | admin | Same as above |
 
@@ -342,7 +343,7 @@ Requires login for all endpoints.
 | GET | `/api/library/files/search?q=benchy` | login | Search files |
 | GET | `/api/library/files/<id>` | login | File metadata |
 | GET | `/api/library/files/<id>/thumbnail` | login | Thumbnail image (PNG) |
-| GET | `/api/library/files/<id>/toolpath` | login | Toolpath data |
+| GET | `/api/library/files/<id>/toolpath` | login | Parsed toolpath payload for 3D viewer (positions, feature indices, feature names, bounds, count) |
 | POST | `/api/library/files/<id>/move` | login | Move to folder. Body: `{"folder_id": 1}` (null = root) |
 | POST | `/api/library/files/<id>/print` | login | Create job from file |
 | DELETE | `/api/library/files/<id>` | admin | Delete file |
@@ -537,6 +538,46 @@ Admin only. Per-printer Obico failure detection config.
 
 ---
 
+## Software Update
+
+Admin only. Used by the Settings tab update controls.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/update/check` | Fetch origin refs and report pending commits vs current HEAD |
+| POST | `/api/update/apply` | Run git pull and trigger delayed restart of `the-print-farm.service` |
+
+### `GET /api/update/check`
+
+**Response:**
+```json
+{
+  "ok": true,
+  "current_commit": "599aae2",
+  "updates_available": 0,
+  "commits": []
+}
+```
+
+### `POST /api/update/apply`
+
+**Success Response:**
+```json
+{
+  "ok": true,
+  "message": "Already up to date.",
+  "restarting": true
+}
+```
+
+**Notes:**
+
+- Requires git on the host
+- Requires service-user permission to restart systemd service non-interactively
+- If restart permissions are missing, the endpoint can still pull code but restart will fail
+
+---
+
 ## OctoPrint-Compatible API
 
 These endpoints mimic OctoPrint's API so OrcaSlicer can connect to The Print Farm as a network printer.
@@ -711,7 +752,7 @@ Execute a Happy Hare macro. Only `MMU_*` prefixed macros are allowed.
 | DELETE | `/api/v1/jobs/<id>` | Delete job (admin) |
 | POST | `/api/v1/jobs/<id>/cancel` | Cancel job |
 | POST | `/api/v1/jobs/<id>/requeue` | Requeue job (admin) |
-| POST | `/api/v1/jobs/<id>/reprint` | Reprint job. Optional body: `{"printer": "voron"}` or `{"printers": ["voron", "P1S-1"]}` to immediately dispatch copies |
+| POST | `/api/v1/jobs/<id>/reprint` | Create queued reprint. Optional body: `{"printer": "voron"}` or `{"printers": ["voron", "P1S-1"]}` to immediately dispatch copies |
 | POST | `/api/v1/jobs/<id>/assign` | Assign to printer(s) (admin) |
 | GET | `/api/v1/jobs/<id>/filaments` | Filament requirements |
 

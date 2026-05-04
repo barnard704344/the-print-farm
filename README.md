@@ -7,13 +7,15 @@ A web-based print farm manager for **BambuLab** and **Klipper** 3D printers. Mon
 - **Multi-printer support** — BambuLab (P1S, X1C, A1) via MQTT/FTPS (LAN mode) and Klipper via Moonraker HTTP API
 - **Real-time dashboard** — Live status, temperatures, progress, and camera feeds
 - **Job queue** — Upload G-code, queue jobs, auto-assign to idle printers
-- **File library** — Persistent storage with folder organisation, search, and 3D interactive toolpath viewer (supports OrcaSlicer, PrusaSlicer, and Cura gcode)
+- **File library** — Persistent storage with folder organisation, search, and 3D interactive toolpath viewer (supports OrcaSlicer, PrusaSlicer, and Cura gcode), with staged loading feedback and feature-based colours (including support/interface paths)
 - **Printer discovery** — Auto-detect BambuLab (UDP broadcast) and Klipper (Moonraker port scan)
 - **Authentication** — Local users, Active Directory/LDAP, student/staff roles
 - **OrcaSlicer integration** — Slice and print directly from OrcaSlicer via virtual printers (OctoPrint-compatible) — no batch files needed
 - **AMS support** — Full filament tray management for BambuLab printers with AMS, including per-unit humidity/temperature monitoring
 - **Printer pool** — Auto-dispatch generic OrcaSlicer jobs to the next idle printer in a configurable pool
 - **Multi-printer dispatch** — Send a queued job to multiple printers at once; the job is cloned automatically
+- **Reprint to selected printers** — Reprint actions can create a queued copy and optionally dispatch to one or more selected printers
+- **In-app software updates** — Check upstream commits and apply updates from Settings (git pull + service restart)
 - **Mobile responsive** — Dashboard adapts to phones and tablets with touch-friendly targets and stacked layouts
 - **Camera streaming** — Live camera feeds from BambuLab printers and Klipper webcams (MJPEG/snapshot auto-detected via Moonraker)
 - **Notifications** — Email (SMTP) and Discord webhook alerts for job submission, print completion, pause, and failure
@@ -215,6 +217,21 @@ Jobs enter the queue unassigned and can be sent to any printer from the dashboar
 
 ## Configuration
 
+### Software Updates
+
+The Settings tab includes:
+
+- **Check for Updates** — runs a git fetch and reports pending commits
+- **Apply Update & Restart** — runs git pull and then restarts `the-print-farm.service`
+
+For one-click restart from the web UI, the service user (`www-data`) needs passwordless permission for this specific command:
+
+```bash
+www-data ALL=(root) NOPASSWD: /usr/bin/systemctl restart the-print-farm.service
+```
+
+Install this as a sudoers drop-in (for example `/etc/sudoers.d/the-print-farm-update`) with mode `440`.
+
 ### Printer Pool
 
 Add to `config/config.yaml` to enable auto-dispatch of generic queue jobs:
@@ -291,6 +308,17 @@ curl -X POST -H "X-Api-Key: YOUR_KEY" -F "file=@model.gcode" \
 # View full API spec
 curl -H "X-Api-Key: YOUR_KEY" http://localhost:5000/the-print-farm/api/v1/openapi.json
 ```
+
+### 3D Toolpath Viewer
+
+The File Library viewer is tuned for high detail:
+
+- Adaptive arc tessellation for smoother curved paths
+- High arc interpolation caps
+- High move-count ceiling before downsampling
+- Per-feature colours for walls, bridges, ironing, supports, and interfaces
+
+Large files may take longer to parse. The viewer shows staged loading/progress messages while toolpaths are being prepared.
 
 ## Requirements
 
