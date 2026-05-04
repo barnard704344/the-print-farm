@@ -49,16 +49,23 @@ No Klipper plugin or extra component is required beyond a standard Moonraker ins
 
 ## Core Features
 
-- Multi-printer support (BambuLab and Klipper)
-- Real-time dashboard with status, progress, and camera feeds
-- Job queue with upload, assign, and dispatch actions
-- File library with interactive 3D toolpath viewer
-- Authentication with local users and optional Active Directory
-- OrcaSlicer integration using OctoPrint-compatible endpoints
-- AMS and Happy Hare MMU support
-- Spoolman integration for filament tracking
-- Email and Discord notifications
-- In-app software update checks and apply flow
+- **Multi-printer support** — BambuLab (P1S, X1C, A1) via MQTT/FTPS (LAN mode) and Klipper via Moonraker HTTP API
+- **Real-time dashboard** — Live status, temperatures, progress, and camera feeds
+- **Job queue** — Upload G-code, queue jobs, auto-assign to idle printers
+- **File library** — Persistent storage with folder organisation, search, and interactive 3D toolpath viewer (supports OrcaSlicer, PrusaSlicer, and Cura G-code), with staged loading feedback and feature-based colours including support and interface paths
+- **Printer discovery** — Auto-detect BambuLab (UDP broadcast) and Klipper (Moonraker port scan)
+- **Authentication** — Local users, Active Directory/LDAP, student/staff roles
+- **OrcaSlicer integration** — Slice and print directly from OrcaSlicer via virtual printers (OctoPrint-compatible) — no batch files needed
+- **AMS support** — Full filament tray management for BambuLab printers with AMS, including per-unit humidity and temperature monitoring
+- **Printer pool** — Auto-dispatch generic OrcaSlicer jobs to the next idle printer in a configurable pool
+- **Multi-printer dispatch** — Send a queued job to multiple printers at once; the job is cloned automatically
+- **Reprint to selected printers** — Reprint actions can create a queued copy and optionally dispatch to one or more selected printers
+- **In-app software updates** — Check upstream commits and apply updates from Settings (git pull + service restart)
+- **Mobile responsive** — Dashboard adapts to phones and tablets with touch-friendly targets and stacked layouts
+- **Camera streaming** — Live camera feeds from BambuLab printers and Klipper webcams (MJPEG/snapshot auto-detected via Moonraker)
+- **Notifications** — Email (SMTP) and Discord webhook alerts for job submission, print completion, pause, and failure
+- **Obico integration** — Pulls AI failure detection data from a local Obico server when present
+- **Klipper Adaptive Flow** — Auto-detects [Klipper Adaptive Flow](https://github.com/barnard704344/Klipper-Adaptive-Flow) and shows a direct link on the printer card
 
 ## UI Screenshots
 

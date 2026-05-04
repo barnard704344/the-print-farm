@@ -21,6 +21,14 @@ Use the manual sudoers rule above only for legacy installs that were set up befo
 
 ## Printer Pool
 
+Auto-dispatch jobs from the generic OrcaSlicer port to idle printers:
+
+- **Configurable pool** — Choose which printers participate in auto-dispatch from Settings → Printer Pool
+- **Toggle on/off** — Enable or disable pool dispatch without removing the printer list
+- **Generic port only** — Only affects jobs submitted without a printer target; per-printer port jobs are unaffected
+- **Hot-reloadable** — Pool config changes take effect immediately, no restart required
+- **Smart filtering** — Only dispatches to pool printers that are connected and idle
+
 ```yaml
 pool:
   enabled: true
@@ -29,16 +37,36 @@ pool:
     - P1S-1
 ```
 
-Only generic queue jobs are auto-dispatched.
+Or configure from Settings → Printer Pool in the dashboard.
 
 ## Spoolman
+
+Optional integration with [Spoolman](https://github.com/Donkie/Spoolman) filament tracking:
+
+- **Spool management** — View, search, and manage spools via proxied API endpoints
+- **Auto-deduction** — Filament usage is automatically deducted from matched spools when print jobs complete
+- **Gate linking** — Assign Spoolman spools to Happy Hare MMU gates for per-gate filament tracking
+- **Settings UI** — Configure the Spoolman URL and test connectivity from the dashboard Settings tab
+- **Graceful fallback** — All Spoolman features are optional; the system works normally without it
 
 ```yaml
 spoolman:
   url: http://localhost:7912
 ```
 
+Or configure from Settings in the dashboard. Leave unconfigured to disable Spoolman features.
+
 ## Notifications
+
+Email and Discord alerts for print events:
+
+- **Email (SMTP)** — Configurable SMTP host, port, TLS, authentication, and recipient list
+- **Discord webhook** — Sends rich embed messages to any Discord channel
+- **Four events** — Job submitted, print completed, print paused, and print failed — each independently toggleable
+- **Error context** — Failed and paused notifications include the reason (error code, HMS messages, filament runout) in the subject line
+- **Smart deduplication** — Pause notifications only fire on state transition (RUNNING → PAUSED), not on every poll cycle
+- **Test buttons** — Send a test email or Discord message from the Settings UI to verify your setup
+- **Hot-reloadable** — Config changes take effect immediately, no restart required
 
 ```yaml
 notifications:
@@ -65,14 +93,8 @@ notifications:
 
 ## Happy Hare
 
-No required config. Auto-detected on compatible Klipper printers.
+No configuration needed — Happy Hare MMU is auto-detected on Klipper printers that have it installed. The MMU section appears on printer cards automatically with gate status, active tool, and filament state. See [Printers and OrcaSlicer](printers-and-orcaslicer.md) for full Happy Hare feature details.
 
-## REST API Usage
+## REST API
 
-```bash
-curl -H "X-Api-Key: YOUR_KEY" http://localhost:5000/the-print-farm/api/v1/printers
-curl -H "X-Api-Key: YOUR_KEY" http://localhost:5000/the-print-farm/api/v1/printers/MyPrinter
-curl -X POST -H "X-Api-Key: YOUR_KEY" -F "file=@model.gcode" \
-  http://localhost:5000/the-print-farm/api/v1/jobs
-curl -H "X-Api-Key: YOUR_KEY" http://localhost:5000/the-print-farm/api/v1/openapi.json
-```
+See [API Reference](api-reference.md) for the full endpoint list, authentication details, and usage examples.

@@ -33,3 +33,11 @@ python -m src.main
 ```
 
 Edit config/config.yaml before production use.
+
+## Requirements
+
+- Python 3.9+
+- Apache 2 with `mod_proxy` (installed automatically by `setup.sh`)
+- Debian 11+ / Ubuntu 22.04+ / Raspberry Pi OS
+- [Spoolman](https://github.com/Donkie/Spoolman) — optional, for filament tracking
+- Happy Hare — optional, for MMU control on Klipper printers

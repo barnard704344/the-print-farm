@@ -44,6 +44,28 @@ If [Klipper Adaptive Flow](https://github.com/barnard704344/Klipper-Adaptive-Flo
 
 If a local [Obico](https://www.obico.io/) server is running and the Obico plugin is installed on a Klipper printer, the dashboard automatically pulls failure detection data and remote monitoring info from it and displays it on the printer card. No additional configuration is required.
 
+## Happy Hare MMU Integration
+
+Full control of [Happy Hare](https://github.com/moggieuk/Happy-Hare) (multi-material unit) on Klipper printers:
+
+- **Auto-detected** — gate status, active tool, filament state, and encoder data appear on the printer card automatically when Happy Hare is present
+- **Macro control modal** — Click the MMU section on any printer card to open a modal with all Happy Hare macros organised by category (Selection, Filament, Control, Calibration, Info, Recovery)
+- **Parameter support** — Macros with parameters show an input dialog with defaults pre-filled
+- **Gate configuration** — Click any loaded gate to set material type and filament colour, sent directly to Happy Hare via `MMU_GATE_MAP`
+- **Spoolman integration** — If Spoolman is configured, the gate config modal shows a dropdown of your spool inventory; selecting a spool auto-fills colour, material, and links the spool ID to Happy Hare
+
+No Happy Hare plugin or extra configuration is required — detection is fully automatic.
+
+## BambuLab AMS Integration
+
+Full management of BambuLab AMS (Automatic Material System) units:
+
+- **Auto-detected** — AMS units, tray contents, filament colours, and active tray are shown on printer cards automatically
+- **Per-unit monitoring** — Humidity percentage and temperature for each AMS unit
+- **Tray management modal** — Click the AMS section to open a popup with Overview and Tray Management tabs
+- **Filament configuration** — Set filament type, colour, and nozzle temperature per tray, applied directly to the printer
+- **Spoolman integration** — If Spoolman is configured, select spools from your inventory to auto-fill tray settings
+
 ## OrcaSlicer Setup
 
 The print farm exposes OctoPrint-compatible endpoints so OrcaSlicer can send prints directly — no scripts or batch files needed.
