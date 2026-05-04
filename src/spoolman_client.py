@@ -8,6 +8,8 @@ Spoolman so spool weights stay accurate.
 Spoolman API docs: https://donkie.github.io/Spoolman/
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Optional
 from urllib.parse import urljoin

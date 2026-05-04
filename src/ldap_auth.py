@@ -6,6 +6,8 @@ Supports two roles based on OU container paths:
   - staff:   full admin access (add/remove printers, config, etc.)
 """
 
+from __future__ import annotations
+
 import logging
 
 from ldap3 import Server, Connection, ALL, SUBTREE

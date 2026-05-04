@@ -7,6 +7,8 @@ gcode headers, so we parse the OrcaSlicer gcode to extract real values
 (prediction time, weight, layer count, filament type).
 """
 
+from __future__ import annotations
+
 import hashlib
 import re
 import zipfile
