@@ -522,12 +522,48 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
 
     @bp.route("/jobs/<int:job_id>/reprint", methods=["POST"])
     def reprint_job(job_id):
-        """Create a new copy of a completed job."""
+        """Create a new copy of a job, optionally sending to one or more printers."""
+        data = request.get_json(silent=True) or {}
+        printer_name = data.get("printer")
+        printer_names = data.get("printers", [])
+
+        if printer_name and not printer_names:
+            printer_names = [printer_name]
+
+        # Validate all target printers first when immediate send is requested
+        for pname in printer_names:
+            printer = farm_manager.get_printer(pname)
+            if not printer:
+                return _error(f"Printer '{pname}' not found", 404, "PRINTER_NOT_FOUND")
+
         new_id = job_queue.reprint_job(job_id)
         if new_id is None:
             return _error("Job not found", 404, "JOB_NOT_FOUND")
+
+        # Backward-compatible behavior: create queued copy only
+        if not printer_names:
+            job = job_queue.get_job(new_id)
+            return _ok(job, 201)
+
+        results = []
+        first = printer_names[0]
+        ok = job_queue.assign_job(new_id, first)
+        if ok and send_job_fn:
+            t = threading.Thread(target=send_job_fn, args=(new_id, first), daemon=True)
+            t.start()
+        results.append({"printer": first, "job_id": new_id, "ok": bool(ok)})
+
+        # Additional printers get cloned jobs for parallel copies
+        for pname in printer_names[1:]:
+            clone_id = job_queue.clone_job_for_printer(new_id)
+            ok2 = job_queue.assign_job(clone_id, pname) if clone_id else False
+            if ok2 and send_job_fn:
+                t = threading.Thread(target=send_job_fn, args=(clone_id, pname), daemon=True)
+                t.start()
+            results.append({"printer": pname, "job_id": clone_id, "ok": bool(ok2)})
+
         job = job_queue.get_job(new_id)
-        return _ok(job, 201)
+        return _ok({"job": job, "results": results, "all_ok": all(r["ok"] for r in results)}, 201)
 
     @bp.route("/jobs/<int:job_id>/assign", methods=["POST"])
     @_admin_only
@@ -979,7 +1015,46 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
                     "post": {"summary": "Requeue job", "tags": ["Jobs"]},
                 },
                 "/jobs/{job_id}/reprint": {
-                    "post": {"summary": "Reprint job", "tags": ["Jobs"]},
+                    "post": {
+                        "summary": "Reprint job",
+                        "tags": ["Jobs"],
+                        "description": "Create a new reprint job. Optionally provide a target printer or list of printers to dispatch copies immediately.",
+                        "requestBody": {
+                            "required": False,
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "printer": {
+                                                "type": "string",
+                                                "description": "Single target printer name",
+                                            },
+                                            "printers": {
+                                                "type": "array",
+                                                "items": {"type": "string"},
+                                                "description": "Multiple target printers for parallel copies",
+                                            },
+                                        },
+                                    },
+                                    "examples": {
+                                        "queued_only": {
+                                            "summary": "Create queued reprint only",
+                                            "value": {},
+                                        },
+                                        "single_printer": {
+                                            "summary": "Reprint and send to one printer",
+                                            "value": {"printer": "voron"},
+                                        },
+                                        "multi_printer": {
+                                            "summary": "Reprint and send parallel copies",
+                                            "value": {"printers": ["voron", "P1S-1"]},
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
                 },
                 "/jobs/{job_id}/assign": {
                     "post": {"summary": "Assign job to printer(s)", "tags": ["Jobs"]},

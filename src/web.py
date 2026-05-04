@@ -979,11 +979,58 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     @app.route("/api/jobs/<int:job_id>/reprint", methods=["POST"])
     @owner_or_admin_required
     def reprint_job(job_id):
-        """Create a new queued copy of an existing job."""
+        """Create a new copy of an existing job, optionally sending to printers."""
+        data = request.get_json(silent=True) or {}
+        printer_name = data.get("printer")
+        printers = data.get("printers", [])
+
+        # Support single printer (backward compat) or list
+        if printer_name and not printers:
+            printers = [printer_name]
+
+        # Validate all printers first when immediate send is requested
+        for pname in printers:
+            p = farm_manager.get_printer(pname)
+            if not p:
+                return jsonify({"error": f"Printer '{pname}' not found"}), 404
+            if not p.is_connected():
+                return jsonify({"error": f"Printer '{pname}' not connected"}), 400
+            if not is_admin() and _is_staff_only_printer(pname):
+                return jsonify({"error": f"Printer '{pname}' is restricted to staff"}), 403
+
         new_id = job_queue.reprint_job(job_id)
         if new_id is None:
             return jsonify({"error": "Job not found"}), 404
-        return jsonify({"ok": True, "job_id": new_id})
+
+        # No printers selected: keep previous behavior (new queued job only)
+        if not printers:
+            return jsonify({"ok": True, "job_id": new_id})
+
+        results = []
+        first = printers[0]
+        ok = job_queue.assign_job(new_id, first)
+        if ok:
+            t = threading.Thread(target=_send_job_to_printer, args=(new_id, first), daemon=True)
+            t.start()
+            results.append({"printer": first, "job_id": new_id, "ok": True})
+        else:
+            results.append({"printer": first, "job_id": new_id, "ok": False})
+
+        # Additional printers get cloned jobs so multiple copies can run in parallel
+        for pname in printers[1:]:
+            clone_id = job_queue.clone_job_for_printer(new_id)
+            if clone_id:
+                ok2 = job_queue.assign_job(clone_id, pname)
+                if ok2:
+                    t = threading.Thread(target=_send_job_to_printer, args=(clone_id, pname), daemon=True)
+                    t.start()
+                    results.append({"printer": pname, "job_id": clone_id, "ok": True})
+                else:
+                    results.append({"printer": pname, "job_id": clone_id, "ok": False})
+            else:
+                results.append({"printer": pname, "job_id": None, "ok": False})
+
+        return jsonify({"ok": all(r["ok"] for r in results), "job_id": new_id, "results": results})
 
     @app.route(prefix + "/api/jobs/<int:job_id>/cancel", methods=["POST"])
     @app.route("/api/jobs/<int:job_id>/cancel", methods=["POST"])

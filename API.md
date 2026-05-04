@@ -300,7 +300,7 @@ Requires login. Multipart form upload.
 | `POST /api/jobs/<id>/assign` | owner/admin | Assign to printer. Body: `{"printer": "voron"}` or `{"printers": ["voron", "P1S-1"]}` |
 | `POST /api/jobs/<id>/cancel` | owner/admin | Cancel job (stops print if active) |
 | `POST /api/jobs/<id>/requeue` | admin | Requeue failed/cancelled job |
-| `POST /api/jobs/<id>/reprint` | owner/admin | Create new copy of job |
+| `POST /api/jobs/<id>/reprint` | owner/admin | Create new copy of job. Optional body: `{"printer": "voron"}` or `{"printers": ["voron", "P1S-1"]}` to immediately dispatch copies |
 | `POST /api/jobs/<id>/delete` | admin | Delete job. Query: `?delete_library=true` to also remove library file |
 | `DELETE /api/jobs/<id>` | admin | Same as above |
 
@@ -712,7 +712,7 @@ Execute a Happy Hare macro. Only `MMU_*` prefixed macros are allowed.
 | DELETE | `/api/v1/jobs/<id>` | Delete job (admin) |
 | POST | `/api/v1/jobs/<id>/cancel` | Cancel job |
 | POST | `/api/v1/jobs/<id>/requeue` | Requeue job (admin) |
-| POST | `/api/v1/jobs/<id>/reprint` | Reprint job |
+| POST | `/api/v1/jobs/<id>/reprint` | Reprint job. Optional body: `{"printer": "voron"}` or `{"printers": ["voron", "P1S-1"]}` to immediately dispatch copies |
 | POST | `/api/v1/jobs/<id>/assign` | Assign to printer(s) (admin) |
 | GET | `/api/v1/jobs/<id>/filaments` | Filament requirements |
 

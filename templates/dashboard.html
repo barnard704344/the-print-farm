@@ -4317,6 +4317,24 @@
                 assignBtn = `<button class="btn" disabled title="No available printers">Send to…</button>`;
             }
 
+            let reprintBtn = canReprint ? `<button class="btn" onclick="reprintJob(${job.id})" title="Create a new queued copy of this job">Reprint</button>` : '';
+            if (canReprint && availablePrinters.length > 0) {
+                const reprintCheckboxes = availablePrinters.map(p =>
+                    `<label><input type="checkbox" value="${p.name}"> ${p.name} <span class="send-dropdown-status">(${p.status.toLowerCase()})</span></label>`
+                ).join('');
+                reprintBtn = `${reprintBtn}
+                    <div class="send-dropdown" id="reprint-dd-${job.id}">
+                        <button class="btn send-dropdown-btn" onclick="toggleReprintDropdown(${job.id})" title="Create reprint(s) and send immediately">Reprint to…</button>
+                        <div class="send-dropdown-menu">
+                            ${reprintCheckboxes}
+                            <div class="send-dropdown-actions">
+                                <button class="btn btn-success" style="font-size:11px;padding:3px 10px;" onclick="reprintToSelected(${job.id})">Reprint + Send</button>
+                                <button class="btn" style="font-size:11px;padding:3px 10px;" onclick="closeReprintDropdown(${job.id})">Cancel</button>
+                            </div>
+                        </div>
+                    </div>`;
+            }
+
             return `
                 <tr>
                     <td>${job.id}</td>
@@ -4329,7 +4347,7 @@
                     <td>${formatDate(job.created_at)}</td>
                     <td class="job-actions">
                         ${assignBtn}
-                        ${canReprint ? `<button class="btn" onclick="reprintJob(${job.id})" title="Create a new copy of this job">Reprint</button>` : ''}
+                        ${reprintBtn}
                         ${canCancel ? `<button class="btn" onclick="jobAction(${job.id},'cancel')">Cancel</button>` : ''}
                         ${canRequeue ? `<button class="btn btn-primary" onclick="jobAction(${job.id},'requeue')">Requeue</button>` : ''}
                         ${canDelete ? `<button class="btn btn-danger" onclick="jobAction(${job.id},'delete')">Delete</button>` : ''}
@@ -4349,6 +4367,19 @@
 
         function closeSendDropdown(jobId) {
             document.getElementById(`send-dd-${jobId}`)?.classList.remove('open');
+        }
+
+        function toggleReprintDropdown(jobId) {
+            const dd = document.getElementById(`reprint-dd-${jobId}`);
+            // Close all other open dropdowns
+            document.querySelectorAll('.send-dropdown.open').forEach(el => {
+                if (el !== dd) el.classList.remove('open');
+            });
+            dd.classList.toggle('open');
+        }
+
+        function closeReprintDropdown(jobId) {
+            document.getElementById(`reprint-dd-${jobId}`)?.classList.remove('open');
         }
 
         // Close dropdowns when clicking outside
@@ -4418,6 +4449,23 @@
 
         async function reprintJob(jobId) {
             const res = await apiPost(`${BASE}/api/jobs/${jobId}/reprint`);
+            if (res.ok) {
+                refreshJobs();
+            } else {
+                alert('Reprint failed: ' + (res.error || 'Unknown error'));
+            }
+        }
+
+        async function reprintToSelected(jobId) {
+            const dd = document.getElementById(`reprint-dd-${jobId}`);
+            const checked = [...dd.querySelectorAll('input[type="checkbox"]:checked')].map(cb => cb.value);
+            if (checked.length === 0) {
+                alert('Select at least one printer');
+                return;
+            }
+
+            dd.classList.remove('open');
+            const res = await apiPost(`${BASE}/api/jobs/${jobId}/reprint`, { printers: checked });
             if (res.ok) {
                 refreshJobs();
             } else {
