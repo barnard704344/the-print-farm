@@ -337,6 +337,9 @@ if [[ "$SVC_USER" != "root" ]]; then
 ${SVC_USER} ALL=(root) NOPASSWD: /usr/sbin/a2ensite printer-*
 ${SVC_USER} ALL=(root) NOPASSWD: /usr/sbin/a2dissite printer-*
 ${SVC_USER} ALL=(root) NOPASSWD: /bin/systemctl reload apache2
+${SVC_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl reload apache2
+${SVC_USER} ALL=(root) NOPASSWD: /bin/systemctl restart the-print-farm
+${SVC_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl restart the-print-farm
 ${SVC_USER} ALL=(root) NOPASSWD: /usr/bin/tee /etc/apache2/sites-available/printer-*
 ${SVC_USER} ALL=(root) NOPASSWD: /usr/bin/tee -a /etc/apache2/ports.conf
 ${SVC_USER} ALL=(root) NOPASSWD: /usr/bin/tee /etc/apache2/ports.conf
@@ -344,6 +347,9 @@ ${SVC_USER} ALL=(root) NOPASSWD: /bin/cat /etc/apache2/ports.conf
 ${SVC_USER} ALL=(root) NOPASSWD: /bin/rm /etc/apache2/sites-available/printer-*
 SUDOEOF
     chmod 440 /etc/sudoers.d/the-print-farm
+    if command -v visudo >/dev/null 2>&1; then
+        visudo -cf /etc/sudoers.d/the-print-farm >/dev/null || fail "Invalid sudoers file: /etc/sudoers.d/the-print-farm"
+    fi
     ok "Sudo access configured for ${SVC_USER}"
 fi
 
