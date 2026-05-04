@@ -2220,9 +2220,9 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             cur = subprocess.run([git, "-C", repo, "rev-parse", "--short", "HEAD"],
                                  capture_output=True, timeout=10, text=True)
             current_commit = cur.stdout.strip()
-            # Commits on origin that are not in HEAD
+            # Commits on origin/main that are not in HEAD
             log = subprocess.run(
-                [git, "-C", repo, "log", "HEAD..origin/HEAD", "--oneline"],
+                [git, "-C", repo, "log", "HEAD..origin/main", "--oneline"],
                 capture_output=True, timeout=10, text=True,
             )
             commits = [l.strip() for l in log.stdout.strip().splitlines() if l.strip()]
