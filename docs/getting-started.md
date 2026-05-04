@@ -20,7 +20,7 @@ The setup script will:
 
 Dashboard URL:
 
-- http:// <your-server-ip> /the-print-farm
+- http://your-server-ip/the-print-farm
 
 ## Manual Setup
 
