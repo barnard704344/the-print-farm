@@ -4604,6 +4604,9 @@
                 document.getElementById('queueStats').textContent =
                     `${data.stats.queued || 0} queued · ${data.stats.printing || 0} printing · ${data.stats.completed || 0} completed`;
 
+                // Don't re-render while a dropdown is open — it would clobber it mid-interaction
+                if (document.querySelector('.send-dropdown.open')) return;
+
                 document.getElementById('jobTableBody').innerHTML =
                     data.jobs.map(renderJobRow).join('') || '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);">No jobs</td></tr>';
             } catch (err) {
