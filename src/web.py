@@ -85,7 +85,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         """Run a command with sudo if available, otherwise directly."""
         sudo = shutil.which("sudo")
         if sudo:
-            return subprocess.run([sudo] + args, capture_output=True)
+            return subprocess.run([sudo, "-n"] + args, capture_output=True)
         return subprocess.run(args, capture_output=True)
 
     def _write_file_privileged(path, content):

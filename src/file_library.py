@@ -393,8 +393,8 @@ class FileLibrary:
         sweep = end_angle - start_angle
         # Adaptive segment count based on arc length
         arc_len = abs(sweep) * r
-        # Use very tight arc segmentation for smoother curved features in the 3D toolpath view.
-        n = max(3, min(segments, int(arc_len / 0.12)))
+        # Ultra-fine arc segmentation for highest curvature fidelity in the 3D toolpath view.
+        n = max(3, min(segments, int(arc_len / 0.08)))
 
         result = []
         pz = cz
@@ -506,7 +506,7 @@ class FileLibrary:
                             cx, cy, cz, nx, ny, nz,
                             params.get("I", 0), params.get("J", 0),
                             clockwise=(cmd == "G2"),
-                            segments=180,
+                            segments=240,
                         )
                         for seg in arc_segs:
                             moves.append((*seg, current_feature))
@@ -517,8 +517,8 @@ class FileLibrary:
         if not moves:
             return None
 
-        # Downsample only when needed; keep an ultra-high global detail ceiling for all files.
-        max_moves = 350000
+        # Downsample only when needed; keep a very high global detail ceiling for all files.
+        max_moves = 800000
         if len(moves) > max_moves:
             step = len(moves) / max_moves
             sampled = []
@@ -539,8 +539,8 @@ class FileLibrary:
         feat_map = {}
         feat_idx = 0
         for x1, y1, z1, x2, y2, z2, feat in moves:
-            positions.extend([round(x1, 4), round(y1, 4), round(z1, 4),
-                              round(x2, 4), round(y2, 4), round(z2, 4)])
+            positions.extend([round(x1, 5), round(y1, 5), round(z1, 5),
+                              round(x2, 5), round(y2, 5), round(z2, 5)])
             if feat not in feat_map:
                 feat_map[feat] = feat_idx
                 feat_idx += 1

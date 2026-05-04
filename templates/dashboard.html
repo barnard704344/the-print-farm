@@ -1172,7 +1172,7 @@
         .library-card-thumb {
             width: 100%; aspect-ratio: 1; background: var(--bg);
             display: flex; align-items: center; justify-content: center;
-            overflow: hidden;
+            overflow: hidden; position: relative;
         }
         .library-card-thumb img { width: 100%; height: 100%; object-fit: contain; }
         .library-card-thumb .no-thumb { font-size: 48px; color: var(--text-muted); opacity: 0.3; }
@@ -1525,8 +1525,43 @@
         }
         .viewer-close:hover { background: var(--danger); }
         .viewer-loading {
-            position: absolute; inset: 0; display: flex; align-items: center;
-            justify-content: center; color: var(--text-muted); font-size: 14px;
+            position: absolute; inset: 0; z-index: 6;
+            display: flex; align-items: center; justify-content: center;
+            color: var(--text); font-size: 14px; text-align: center;
+            background: rgba(15, 17, 23, 0.55);
+        }
+        .viewer-loading-panel {
+            width: min(420px, calc(100% - 48px));
+            padding: 14px 16px;
+            border: 1px solid rgba(255,255,255,0.16);
+            border-radius: 12px;
+            background: rgba(8, 10, 14, 0.82);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+        }
+        .viewer-loading-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #f2f5ff;
+            margin-bottom: 6px;
+        }
+        .viewer-loading-sub {
+            font-size: 12px;
+            color: rgba(242,245,255,0.76);
+            margin-bottom: 10px;
+        }
+        .viewer-progress-track {
+            width: 100%;
+            height: 8px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.12);
+            overflow: hidden;
+        }
+        .viewer-progress-fill {
+            width: 0%;
+            height: 100%;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #4ba8ff 0%, #7cd4ff 60%, #b2ecff 100%);
+            transition: width 0.45s ease;
         }
         .viewer-hint {
             position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
@@ -4300,13 +4335,12 @@
                 assignBtn = `<button class="btn" disabled title="No available printers">Send to…</button>`;
             }
 
-            let reprintBtn = canReprint ? `<button class="btn" onclick="reprintJob(${job.id})" title="Create a new queued copy of this job">Reprint</button>` : '';
+            let reprintBtn = '';
             if (canReprint && availablePrinters.length > 0) {
                 const reprintCheckboxes = availablePrinters.map(p =>
                     `<label><input type="checkbox" value="${p.name}"> ${p.name} <span class="send-dropdown-status">(${p.status.toLowerCase()})</span></label>`
                 ).join('');
-                reprintBtn = `${reprintBtn}
-                    <div class="send-dropdown" id="reprint-dd-${job.id}">
+                reprintBtn = `<div class="send-dropdown" id="reprint-dd-${job.id}">
                         <button class="btn send-dropdown-btn" onclick="toggleReprintDropdown(${job.id})" title="Create reprint(s) and send immediately">Reprint to…</button>
                         <div class="send-dropdown-menu">
                             ${reprintCheckboxes}
@@ -4428,15 +4462,6 @@
             } catch (e) {}
             await apiPost(`${BASE}/api/jobs/${jobId}/assign`, { printers: [printerName] });
             refreshJobs();
-        }
-
-        async function reprintJob(jobId) {
-            const res = await apiPost(`${BASE}/api/jobs/${jobId}/reprint`);
-            if (res.ok) {
-                refreshJobs();
-            } else {
-                alert('Reprint failed: ' + (res.error || 'Unknown error'));
-            }
         }
 
         async function reprintToSelected(jobId) {
@@ -4689,11 +4714,13 @@
             if (file.file_size) meta.push(formatFileSize(file.file_size));
             if (file.print_count) meta.push('Printed ' + file.print_count + 'x');
             const actions = `<button class="btn btn-sm" onclick="printFromLibrary(${file.id})">Print</button>`
-                + ` <button class="btn btn-sm" onclick="open3DViewer(${file.id})" title="Interactive 3D view">3D</button>`
+                + ` <button class="btn btn-sm" onclick="open3DViewer(${file.id})" title="Interactive 3D toolpath view">Toolpath</button>`
                 + (isAdmin ? ` <button class="btn btn-sm" onclick="showMoveDialog(${file.id})">Move</button>
                     <button class="btn btn-sm btn-danger" onclick="deleteLibraryFile(${file.id})">Delete</button>` : '');
             return `<div class="library-card">
-                <div class="library-card-thumb" onclick="open3DViewer(${file.id})" style="cursor:pointer" title="Click for interactive 3D view">${thumb}</div>
+                <div class="library-card-thumb" onclick="open3DViewer(${file.id})" style="cursor:pointer" title="Click for interactive 3D toolpath view">
+                    ${thumb}
+                </div>
                 <div class="library-card-info">
                     <div class="library-card-name" title="${escapeHtml(file.original_name)}">${escapeHtml(file.original_name)}</div>
                     <div class="library-card-meta">${meta.map(m => '<span>' + m + '</span>').join('')}</div>
@@ -5715,7 +5742,13 @@
     <div class="viewer-overlay" id="viewerOverlay" onclick="if(event.target===this)close3DViewer()">
         <div class="viewer-container">
             <button class="viewer-close" onclick="close3DViewer()" title="Close">&times;</button>
-            <div class="viewer-loading" id="viewerLoading">Loading 3D model…</div>
+            <div class="viewer-loading" id="viewerLoading">
+                <div class="viewer-loading-panel">
+                    <div class="viewer-loading-title" id="viewerLoadingTitle">Generating 3D toolpath</div>
+                    <div class="viewer-loading-sub" id="viewerLoadingSub">Preparing parser… this can take a few seconds</div>
+                    <div class="viewer-progress-track"><div class="viewer-progress-fill" id="viewerProgressFill"></div></div>
+                </div>
+            </div>
             <canvas id="viewerCanvas"></canvas>
             <div class="viewer-hint">Drag to rotate · Scroll to zoom · Right-drag to pan</div>
         </div>
@@ -5724,9 +5757,14 @@
     // --- Interactive 3D Toolpath Viewer (Three.js) ---
     (function() {
         let scene, camera, renderer, controls, animId;
+        let loadingTimer = null;
+        let loadingProgress = 0;
         const overlay = document.getElementById('viewerOverlay');
         const canvas = document.getElementById('viewerCanvas');
         const loading = document.getElementById('viewerLoading');
+        const loadingTitle = document.getElementById('viewerLoadingTitle');
+        const loadingSub = document.getElementById('viewerLoadingSub');
+        const progressFill = document.getElementById('viewerProgressFill');
 
         const FEATURE_COLORS = {
             'Outer wall':      0x40d0ff,
@@ -5736,12 +5774,67 @@
             'Bottom surface':  0xe0a030,
             'Bridge':          0xff8040,
             'Internal Bridge': 0xd08040,
+            'Support':         0x9a6bff,
+            'Support material': 0x9a6bff,
+            'Support interface': 0xe087ff,
+            'Top interface':   0xe087ff,
+            'Bottom interface': 0x7d5ce0,
             'Ironing':         0xc0c0c0,
             '_default':        0x50a0d0
         };
 
         function getFeatureColor(name) {
-            return FEATURE_COLORS[name] !== undefined ? FEATURE_COLORS[name] : FEATURE_COLORS['_default'];
+            if (!name) return FEATURE_COLORS['_default'];
+            if (FEATURE_COLORS[name] !== undefined) return FEATURE_COLORS[name];
+
+            const lower = String(name).toLowerCase();
+            if (lower.includes('support interface') || lower.includes('top interface')) return FEATURE_COLORS['Support interface'];
+            if (lower.includes('bottom interface')) return FEATURE_COLORS['Bottom interface'];
+            if (lower.includes('support')) return FEATURE_COLORS['Support'];
+            if (lower.includes('outer wall') || lower.includes('overhang wall')) return FEATURE_COLORS['Outer wall'];
+            if (lower.includes('inner wall')) return FEATURE_COLORS['Inner wall'];
+            return FEATURE_COLORS['_default'];
+        }
+
+        function setLoadingState(title, sub) {
+            loadingTitle.textContent = title;
+            loadingSub.textContent = sub;
+        }
+
+        function stopLoadingAnimation() {
+            if (loadingTimer) {
+                clearInterval(loadingTimer);
+                loadingTimer = null;
+            }
+        }
+
+        function startLoadingAnimation() {
+            stopLoadingAnimation();
+            const phases = [
+                'Parsing gcode instructions…',
+                'Building extrusion paths…',
+                'Calculating layer bounds…',
+                'Preparing interactive preview…'
+            ];
+            let phase = 0;
+            loadingProgress = 7;
+            progressFill.style.width = loadingProgress + '%';
+            setLoadingState('Generating 3D toolpath', phases[phase] + ' this can take a few seconds');
+            loadingTimer = setInterval(function() {
+                phase = (phase + 1) % phases.length;
+                if (loadingProgress < 92) {
+                    loadingProgress = Math.min(92, loadingProgress + Math.floor(Math.random() * 8) + 2);
+                    progressFill.style.width = loadingProgress + '%';
+                }
+                loadingSub.textContent = phases[phase] + ' this can take a few seconds';
+            }, 550);
+        }
+
+        function completeLoadingAnimation() {
+            stopLoadingAnimation();
+            loadingProgress = 100;
+            progressFill.style.width = '100%';
+            setLoadingState('Rendering preview', 'Finalizing camera and controls…');
         }
 
         window.open3DViewer = function(fileId) {
@@ -5749,22 +5842,32 @@
             if (renderer) close3DViewer();
             overlay.classList.add('active');
             loading.style.display = 'flex';
-            loading.textContent = 'Loading 3D model\u2026';
+            startLoadingAnimation();
 
             if (typeof THREE === 'undefined') {
-                loading.textContent = 'Three.js failed to load';
+                stopLoadingAnimation();
+                setLoadingState('3D viewer unavailable', 'Three.js failed to load');
                 console.error('THREE is undefined');
                 return;
             }
 
             fetch(BASE + '/api/library/files/' + fileId + '/toolpath')
                 .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-                .then(data => { loading.style.display = 'none'; initViewer(data); })
-                .catch(err => { loading.textContent = 'Failed to load: ' + err.message; console.error(err); });
+                .then(data => {
+                    completeLoadingAnimation();
+                    initViewer(data);
+                    setTimeout(function() { loading.style.display = 'none'; }, 180);
+                })
+                .catch(err => {
+                    stopLoadingAnimation();
+                    setLoadingState('Failed to load toolpath', err.message);
+                    console.error(err);
+                });
         };
 
         window.close3DViewer = function() {
             overlay.classList.remove('active');
+            stopLoadingAnimation();
             if (animId) { cancelAnimationFrame(animId); animId = null; }
             if (renderer) { renderer.dispose(); renderer = null; }
             if (controls) { controls.dispose(); controls = null; }
