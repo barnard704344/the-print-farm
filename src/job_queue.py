@@ -1,15 +1,14 @@
 """
 Job Queue — SQLite-backed print job management.
 
-Tracks uploaded files, job assignments to printers, and history.
+Tracks uploaded files and job assignments to printers.
 """
 
 import logging
 import os
 import sqlite3
 import threading
-import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
@@ -65,17 +64,6 @@ class JobQueue:
                 submitted_by TEXT NOT NULL DEFAULT ''
             );
 
-            CREATE TABLE IF NOT EXISTS job_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                job_id INTEGER NOT NULL,
-                printer_name TEXT NOT NULL,
-                status TEXT NOT NULL,
-                started_at TEXT,
-                completed_at TEXT,
-                duration_seconds INTEGER,
-                FOREIGN KEY (job_id) REFERENCES jobs(id)
-            );
-
             CREATE TABLE IF NOT EXISTS printer_gate_configs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 printer_name TEXT NOT NULL,
@@ -98,20 +86,6 @@ class JobQueue:
             conn.execute("ALTER TABLE jobs ADD COLUMN submitted_by TEXT NOT NULL DEFAULT ''")
             conn.commit()
             logger.info("Migrated jobs table: added submitted_by column")
-        conn.close()
-
-        # Migration: add original_name column to job_history if missing
-        conn = self._get_conn()
-        try:
-            conn.execute("SELECT original_name FROM job_history LIMIT 1")
-        except sqlite3.OperationalError:
-            conn.execute("ALTER TABLE job_history ADD COLUMN original_name TEXT NOT NULL DEFAULT ''")
-            # Backfill from jobs table
-            conn.execute("""UPDATE job_history SET original_name = (
-                SELECT j.original_name FROM jobs j WHERE j.id = job_history.job_id
-            ) WHERE original_name = ''""")
-            conn.commit()
-            logger.info("Migrated job_history table: added original_name column")
         conn.close()
 
     def add_job(self, filename: str, original_name: str, file_path: str,
@@ -221,24 +195,6 @@ class JobQueue:
                        printer_name = NULL WHERE id = ?""",
                     (new_copies_done, job_id),
                 )
-
-            # Record history
-            started = job.get("started_at", now)
-            duration = None
-            if started:
-                try:
-                    start_dt = datetime.fromisoformat(started)
-                    duration = int((datetime.now(timezone.utc) - start_dt).total_seconds())
-                except (ValueError, TypeError):
-                    pass
-
-            conn.execute(
-                """INSERT INTO job_history (job_id, printer_name, status, started_at,
-                   completed_at, duration_seconds, original_name)
-                   VALUES (?, ?, 'completed', ?, ?, ?, ?)""",
-                (job_id, job.get("printer_name", ""), started, now, duration,
-                 job.get("original_name", "")),
-            )
             conn.commit()
             conn.close()
             logger.info(f"Job #{job_id} copy {new_copies_done}/{job['copies_total']} completed")
@@ -325,7 +281,6 @@ class JobQueue:
                 conn.close()
                 return False
 
-            conn.execute("DELETE FROM job_history WHERE job_id = ?", (job_id,))
             conn.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
             conn.commit()
 
@@ -349,18 +304,6 @@ class JobQueue:
                 except OSError:
                     pass
             return True
-
-    def get_history(self, limit: int = 50, days: int = 7) -> list:
-        conn = self._get_conn()
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-        rows = conn.execute(
-            """SELECT * FROM job_history
-               WHERE completed_at >= ?
-               ORDER BY completed_at DESC LIMIT ?""",
-            (cutoff, limit),
-        ).fetchall()
-        conn.close()
-        return [dict(r) for r in rows]
 
     def get_stats(self) -> dict:
         conn = self._get_conn()

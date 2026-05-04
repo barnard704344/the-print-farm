@@ -270,7 +270,6 @@ Restrict printer to staff only.
 | `GET /api/jobs` | All jobs + stats |
 | `GET /api/jobs/queued` | Queued jobs only |
 | `GET /api/jobs/active` | Active/printing jobs |
-| `GET /api/jobs/history` | Completed/failed/cancelled |
 | `GET /api/jobs/<job_id>` | Single job details |
 
 ### Upload & Create Job
@@ -716,7 +715,7 @@ Execute a Happy Hare macro. Only `MMU_*` prefixed macros are allowed.
 | POST | `/api/v1/jobs/<id>/assign` | Assign to printer(s) (admin) |
 | GET | `/api/v1/jobs/<id>/filaments` | Filament requirements |
 
-Status filter values: `queued`, `printing`, `active`, `history`
+Status filter values: `queued`, `printing`, `active`
 
 ### API v1 — File Library
 
