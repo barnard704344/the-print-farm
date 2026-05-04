@@ -146,11 +146,12 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         safe_name = re.sub(r'[^a-zA-Z0-9_-]', '-', printer_name).lower()
         conf_name = f"printer-{safe_name}"
         conf_path = f"/etc/apache2/sites-available/{conf_name}.conf"
+        web_port = app_config.get("web", {}).get("port", 5000)
         vhost = (
             f"<VirtualHost *:{port}>\n"
             f"    # OrcaSlicer per-printer proxy: {printer_name}\n"
-            f"    ProxyPass /api http://127.0.0.1:5000/{printer_name}/api\n"
-            f"    ProxyPassReverse /api http://127.0.0.1:5000/{printer_name}/api\n"
+            f"    ProxyPass /api http://127.0.0.1:{web_port}/{printer_name}/api\n"
+            f"    ProxyPassReverse /api http://127.0.0.1:{web_port}/{printer_name}/api\n"
             f"</VirtualHost>\n"
         )
         try:

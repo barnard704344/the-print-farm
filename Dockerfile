@@ -20,7 +20,12 @@ COPY config/config.example.yaml /app/config/config.example.yaml
 COPY docker/entrypoint.sh /entrypoint.sh
 
 RUN chmod +x /entrypoint.sh \
-    && mkdir -p /app/config /app/data /app/uploads /app/logs
+    && mkdir -p /app/config /app/data /app/uploads /app/logs \
+    && addgroup --system farm \
+    && adduser --system --ingroup farm --no-create-home farm \
+    && chown -R farm:farm /app
+
+USER farm
 
 EXPOSE 5000
 
