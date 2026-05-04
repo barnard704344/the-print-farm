@@ -2,6 +2,26 @@
 
 The Print Farm is a web-based print farm manager for BambuLab and Klipper printers.
 
+## BambuLab Support
+
+Supported BambuLab families include:
+
+- P1 series (for example P1S)
+- X1 series (for example X1C)
+- A1 series
+
+Connection method:
+
+- MQTT over LAN for printer state and control
+- FTPS over LAN for file transfer
+
+Prerequisites on each BambuLab printer:
+
+- Enable LAN mode / LAN-only access on the printer
+- Use the printer access code and serial in config or Add Printer flow
+
+Cloud-only mode is not used for core printer communication.
+
 ## Core Features
 
 - Multi-printer support (BambuLab and Klipper)
