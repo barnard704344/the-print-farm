@@ -78,6 +78,15 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
             return True  # No key configured = open access
         return request.headers.get("X-Api-Key", "") == api_key
 
+    def _request_submitter(default: str = "") -> str:
+        """Return session username, or API for API-key-authenticated requests."""
+        uname = (session.get("username", "") or "").strip()
+        if uname:
+            return uname
+        if _check_api_key():
+            return "API"
+        return default
+
     def _is_admin():
         return session.get("role") == "staff" or session.get("admin") is True
 
@@ -442,7 +451,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         priority = int(request.form.get("priority", 0))
         notes = request.form.get("notes", "")
         printer_name = request.form.get("printer", "")
-        submitted_by = session.get("username", "api")
+        submitted_by = _request_submitter("API")
 
         job_id = job_queue.add_job(
             filename=unique_name,
@@ -690,7 +699,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
             copies=1,
             priority=0,
             notes=f"Printed from library (file #{file_id})",
-            submitted_by=session.get("username", "api"),
+            submitted_by=_request_submitter("API"),
         )
         file_library.increment_print_count(file_id)
         job = job_queue.get_job(new_job_id)
