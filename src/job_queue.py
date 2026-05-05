@@ -74,6 +74,15 @@ class JobQueue:
                 updated_at TEXT NOT NULL,
                 UNIQUE(printer_name, gate)
             );
+
+            CREATE TABLE IF NOT EXISTS printer_ams_tray_configs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                printer_name TEXT NOT NULL,
+                tray_id INTEGER NOT NULL,
+                spool_id INTEGER NOT NULL DEFAULT -1,
+                updated_at TEXT NOT NULL,
+                UNIQUE(printer_name, tray_id)
+            );
         """)
         conn.commit()
         conn.close()
@@ -353,3 +362,45 @@ class JobQueue:
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
+
+    # ── AMS Tray Configs (BambuLab AMS) ──────────────────
+
+    def save_ams_tray_config(self, printer_name: str, tray_id: int,
+                             spool_id: int) -> None:
+        """Persist a Spoolman spool assignment for a specific AMS tray."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            conn = self._get_conn()
+            conn.execute(
+                """INSERT INTO printer_ams_tray_configs
+                       (printer_name, tray_id, spool_id, updated_at)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(printer_name, tray_id)
+                   DO UPDATE SET spool_id=excluded.spool_id,
+                                 updated_at=excluded.updated_at""",
+                (printer_name, tray_id, spool_id, now),
+            )
+            conn.commit()
+            conn.close()
+
+    def delete_ams_tray_config(self, printer_name: str, tray_id: int) -> None:
+        """Remove the spool assignment for a specific AMS tray."""
+        with self._lock:
+            conn = self._get_conn()
+            conn.execute(
+                "DELETE FROM printer_ams_tray_configs WHERE printer_name=? AND tray_id=?",
+                (printer_name, tray_id),
+            )
+            conn.commit()
+            conn.close()
+
+    def get_ams_tray_configs(self, printer_name: str) -> dict:
+        """Return {tray_id: spool_id} for all assigned trays on a printer."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT tray_id, spool_id FROM printer_ams_tray_configs "
+            "WHERE printer_name = ?",
+            (printer_name,),
+        ).fetchall()
+        conn.close()
+        return {r["tray_id"]: r["spool_id"] for r in rows}
