@@ -49,7 +49,7 @@ Image path:
 Example:
 
 ```bash
-docker pull ghcr.io/<owner>/the-print-farm:latest
+docker pull ghcr.io/barnard704344/the-print-farm:latest
 docker run -d --name the-print-farm \
   -p 5000:5000 \
   -v $(pwd)/config:/app/config \
