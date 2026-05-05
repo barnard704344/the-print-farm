@@ -56,5 +56,5 @@ docker run -d --name the-print-farm \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/uploads:/app/uploads \
   -v $(pwd)/logs:/app/logs \
-  ghcr.io/<owner>/the-print-farm:latest
+  ghcr.io/barnard704344/the-print-farm:latest
 ```
