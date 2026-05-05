@@ -956,6 +956,61 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
             return _error("Failed to update spool location", 502)
         return _ok(result)
 
+    # ── AMS Tray ↔ Spoolman spool assignment ─────────────
+
+    @bp.route("/printers/<name>/ams/trays", methods=["GET"])
+    @_spoolman_required
+    def ams_get_tray_spools(name):
+        """
+        Return the current AMS tray list with spool_id overlaid from the
+        persisted assignment table. Also fetches spool details from Spoolman
+        for assigned trays so the UI can show filament info immediately.
+        """
+        if not farm_manager.get_printer(name):
+            return _error("Printer not found", 404, "PRINTER_NOT_FOUND")
+        states = farm_manager.get_all_states()
+        p = states.get(name)
+        if not p or not p.get("has_ams"):
+            return _error("Printer has no AMS", 404, "NO_AMS")
+        trays = p.get("ams_trays") or []
+        # Fetch spool details for all assigned trays in one pass
+        spool_ids = {t["spool_id"] for t in trays if t.get("spool_id", -1) > 0}
+        spool_details = {}
+        for sid in spool_ids:
+            s = spoolman_client.get_spool(sid)
+            if s:
+                spool_details[sid] = s
+        result = []
+        for t in trays:
+            entry = dict(t)
+            sid = t.get("spool_id", -1)
+            entry["spool"] = spool_details.get(sid) if sid and sid > 0 else None
+            result.append(entry)
+        return _ok(result)
+
+    @bp.route("/printers/<name>/ams/trays/<int:tray_id>/spool/<int:spool_id>",
+              methods=["PUT"])
+    @_spoolman_required
+    def ams_assign_spool_to_tray(name, tray_id, spool_id):
+        """Assign a Spoolman spool to an AMS tray (persisted locally)."""
+        if not farm_manager.get_printer(name):
+            return _error("Printer not found", 404, "PRINTER_NOT_FOUND")
+        # Verify spool exists in Spoolman
+        spool = spoolman_client.get_spool(spool_id)
+        if spool is None:
+            return _error("Spool not found in Spoolman", 404, "SPOOL_NOT_FOUND")
+        farm_manager.save_ams_tray_config(name, tray_id, spool_id)
+        return _ok({"printer": name, "tray_id": tray_id, "spool_id": spool_id})
+
+    @bp.route("/printers/<name>/ams/trays/<int:tray_id>/spool", methods=["DELETE"])
+    @_spoolman_required
+    def ams_unassign_spool_from_tray(name, tray_id):
+        """Remove the Spoolman spool assignment for an AMS tray."""
+        if not farm_manager.get_printer(name):
+            return _error("Printer not found", 404, "PRINTER_NOT_FOUND")
+        farm_manager.delete_ams_tray_config(name, tray_id)
+        return _ok({"printer": name, "tray_id": tray_id, "spool_id": None})
+
     # ── OpenAPI Spec ─────────────────────────────────────
 
     @bp.route("/openapi.json", methods=["GET"])
@@ -965,7 +1020,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
             "openapi": "3.0.3",
             "info": {
                 "title": "The Print Farm API",
-                "version": "1.0.5",
+                "version": "1.0.6",
                 "description": "REST API for managing a 3D printer farm (BambuLab + Klipper).",
             },
             "servers": [

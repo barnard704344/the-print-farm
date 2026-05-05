@@ -58,6 +58,10 @@ class FarmManager:
         # Persisted MMU gate configs: {printer_name: {gate_index: {material, color, spool_id}}}
         self._gate_configs: Dict[str, Dict[int, dict]] = {}
         self._gate_config_saver = None  # callable set by load_gate_configs()
+        # Persisted AMS tray spool assignments: {printer_name: {tray_id: spool_id}}
+        self._ams_tray_configs: Dict[str, Dict[int, int]] = {}
+        self._ams_tray_saver = None   # callable(printer, tray_id, spool_id)
+        self._ams_tray_deleter = None  # callable(printer, tray_id)
 
         for cfg in (printer_configs or []):
             name = cfg["name"]
@@ -114,6 +118,35 @@ class FarmManager:
                     }
                     for c in configs
                 }
+
+    def load_ams_tray_configs(self, job_queue) -> None:
+        """Load persisted AMS tray spool assignments from the database."""
+        self._ams_tray_saver = job_queue.save_ams_tray_config
+        self._ams_tray_deleter = job_queue.delete_ams_tray_config
+        for name in self._printers:
+            configs = job_queue.get_ams_tray_configs(name)
+            if configs:
+                self._ams_tray_configs[name] = configs
+
+    def save_ams_tray_config(self, printer_name: str, tray_id: int,
+                             spool_id: int) -> None:
+        """Persist an AMS tray spool assignment in memory and to the database."""
+        if printer_name not in self._ams_tray_configs:
+            self._ams_tray_configs[printer_name] = {}
+        self._ams_tray_configs[printer_name][tray_id] = spool_id
+        if self._ams_tray_saver:
+            self._ams_tray_saver(printer_name, tray_id, spool_id)
+
+    def delete_ams_tray_config(self, printer_name: str, tray_id: int) -> None:
+        """Remove an AMS tray spool assignment."""
+        if printer_name in self._ams_tray_configs:
+            self._ams_tray_configs[printer_name].pop(tray_id, None)
+        if self._ams_tray_deleter:
+            self._ams_tray_deleter(printer_name, tray_id)
+
+    def get_ams_tray_spool_id(self, printer_name: str, tray_id: int) -> int:
+        """Return the assigned spool_id for an AMS tray, or -1 if unassigned."""
+        return self._ams_tray_configs.get(printer_name, {}).get(tray_id, -1)
 
     def save_gate_config(self, printer_name: str, gate: int,
                          material: str = '', color: str = '',
@@ -205,6 +238,17 @@ class FarmManager:
                     if not gate.get("color") and persisted.get("color"):
                         gate["color"] = persisted["color"]
                 state["mmu"] = mmu_copy
+
+            # Overlay persisted AMS tray spool assignments
+            ams_tray_cfgs = self._ams_tray_configs.get(name)
+            if ams_tray_cfgs and state["has_ams"] and state["ams_trays"]:
+                trays_copy = copy.deepcopy(state["ams_trays"])
+                for tray in trays_copy:
+                    tray["spool_id"] = ams_tray_cfgs.get(tray["id"], -1)
+                state["ams_trays"] = trays_copy
+            elif state["has_ams"] and state["ams_trays"]:
+                for tray in state["ams_trays"]:
+                    tray.setdefault("spool_id", -1)
 
             states[name] = state
         return states
