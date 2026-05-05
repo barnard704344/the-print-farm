@@ -1020,7 +1020,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
             "openapi": "3.0.3",
             "info": {
                 "title": "The Print Farm API",
-                "version": "1.0.6",
+                "version": "1.0.7",
                 "description": "REST API for managing a 3D printer farm (BambuLab + Klipper).",
             },
             "servers": [

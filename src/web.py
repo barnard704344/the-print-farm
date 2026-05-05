@@ -2292,6 +2292,8 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         spoolman_client=spoolman_client,
     )
     app.register_blueprint(api_v1, url_prefix=prefix + "/api/v1")
+    if prefix:
+        app.register_blueprint(api_v1, url_prefix="/api/v1", name="api_v1_nopfx")
 
     return app
 

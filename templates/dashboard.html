@@ -821,16 +821,7 @@
         .ams-modal-close:hover { color: var(--text); }
         .ams-modal-body { overflow-y: auto; padding: 16px 20px; flex: 1; }
 
-        .ams-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); padding: 0 20px; }
-        .ams-tab-btn {
-            padding: 10px 18px; font-size: 13px; font-weight: 600; cursor: pointer;
-            border-bottom: 2px solid transparent; color: var(--text-muted); transition: all 0.15s;
-            background: none; border-top: none; border-left: none; border-right: none;
-        }
-        .ams-tab-btn:hover { color: var(--text); }
-        .ams-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
-        .ams-tab-pane { display: none; }
-        .ams-tab-pane.active { display: block; }
+        /* ams-tabs/pane removed — single-view layout */
 
         /* AMS popup status banner */
         .ams-pop-banner {
@@ -890,6 +881,26 @@
         .ams-pop-tray:hover .ams-pop-tray-edit { opacity: 1; }
         .ams-pop-tray-edit:hover { color: var(--accent); }
         .ams-pop-tray-temps { font-size: 9px; color: var(--text-muted); white-space: nowrap; }
+
+        /* Spool chip shown inside each AMS tray card */
+        .ams-pop-tray-spool {
+            display: flex; align-items: center; gap: 3px; margin-top: 4px;
+            font-size: 9px; color: var(--text-muted); white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+            padding: 2px 4px; border-radius: 3px;
+            border: 1px dashed rgba(255,255,255,0.12);
+        }
+        .ams-pop-tray-spool.has-spool {
+            border-color: var(--accent); color: var(--accent);
+        }
+        .ams-pop-tray-spool-dot {
+            width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .ams-pop-tray-spool-name {
+            overflow: hidden; text-overflow: ellipsis; flex: 1;
+        }
+        .ams-pop-tray-spool-rem { color: var(--text-muted); flex-shrink: 0; }
 
         /* Filament path for AMS */
         .ams-pop-filpath {
@@ -1458,8 +1469,7 @@
             /* AMS popup: tight */
             .ams-modal-header { padding: 12px 14px; }
             .ams-modal-header h2 { font-size: 16px; }
-            .ams-tabs { padding: 0 10px; }
-            .ams-tab-btn { padding: 8px 12px; font-size: 12px; }
+            /* ams responsive tab overrides removed */
             .ams-pop-banner { padding: 10px 12px; gap: 8px; }
             .ams-pop-stat-val { font-size: 13px; }
             .ams-pop-tray { padding: 8px 4px; }
@@ -2126,14 +2136,7 @@
                 <h2>📦 AMS — <span id="amsPrinterName"></span></h2>
                 <button class="ams-modal-close" onclick="closeAmsModal()">&times;</button>
             </div>
-            <div class="ams-tabs">
-                <button class="ams-tab-btn active" data-ams-tab="overview" onclick="switchAmsTab(this)">Overview</button>
-                <button class="ams-tab-btn" data-ams-tab="manage" onclick="switchAmsTab(this)">Tray Management</button>
-            </div>
-            <div class="ams-modal-body">
-                <div class="ams-tab-pane active" id="amsTabOverview"></div>
-                <div class="ams-tab-pane" id="amsTabManage"></div>
-            </div>
+            <div class="ams-modal-body" id="amsTabOverview"></div>
         </div>
     </div>
 
@@ -2296,7 +2299,7 @@
     </div>
 
     <div class="modal-overlay" id="trayConfigOverlay" style="display:none">
-        <div class="modal" style="max-width:400px;">
+        <div class="modal" style="max-width:460px;">
             <div class="modal-header">
                 <h2 style="font-size:18px;">Configure Tray <span id="trayConfigSlotLabel"></span></h2>
                 <button class="modal-close" onclick="closeTrayConfig()">&times;</button>
@@ -2304,6 +2307,31 @@
             <div class="tray-config-form">
                 <input type="hidden" id="trayConfigPrinter">
                 <input type="hidden" id="trayConfigId">
+
+                <!-- Spoolman spool picker -->
+                <div class="form-group" id="traySpoolSection">
+                    <label style="display:flex;align-items:center;justify-content:space-between;">
+                        <span>Spoolman Spool</span>
+                        <span id="traySpoolLinked" style="font-size:11px;color:var(--accent);display:none;">linked</span>
+                    </label>
+                    <div style="position:relative;">
+                        <input type="text" id="traySpoolSearch" placeholder="Search spools…"
+                            style="width:100%;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;box-sizing:border-box;"
+                            oninput="_traySpoolFilter()" autocomplete="off">
+                        <div id="traySpoolDropdown" style="display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:6px;max-height:200px;overflow-y:auto;z-index:10;"></div>
+                    </div>
+                    <div id="traySpoolSelected" style="display:none;margin-top:6px;padding:7px 10px;background:var(--bg);border:1px solid var(--accent);border-radius:6px;display:none;align-items:center;gap:8px;">
+                        <div id="traySpoolSelectedSwatch" style="width:14px;height:14px;border-radius:50%;border:1px solid rgba(255,255,255,0.2);flex-shrink:0;"></div>
+                        <span id="traySpoolSelectedName" style="flex:1;font-size:12px;font-weight:600;"></span>
+                        <span id="traySpoolSelectedMeta" style="font-size:11px;color:var(--text-muted);"></span>
+                        <button onclick="_trayClearSpool()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:16px;padding:0 2px;line-height:1;" title="Unlink spool">✕</button>
+                    </div>
+                    <div id="traySpoolMsg" style="font-size:11px;color:var(--text-muted);margin-top:3px;"></div>
+                </div>
+
+                <div style="border-top:1px solid var(--border);margin:4px 0 14px;opacity:0.4;"></div>
+                <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;" id="trayManualNote">Manual overrides — auto-filled when a spool is selected above.</div>
+
                 <div class="form-group">
                     <label>Filament Type</label>
                     <select id="trayConfigType">
@@ -2367,7 +2395,7 @@
     <style>
         .modal-overlay {
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.7); z-index: 1000;
+            background: rgba(0,0,0,0.7); z-index: 3000;
             display: flex; align-items: center; justify-content: center;
         }
         .modal {
@@ -3871,11 +3899,6 @@
         }
 
         function filterSpoolPicker() {
-            // In AMS tray mode (_spoolPickerPrinter === null), delegate to AMS renderer
-            if (_spoolPickerPrinter === null) {
-                _renderAmsTraySpoolList();
-                return;
-            }
             const q = document.getElementById('spoolPickerSearch').value.toLowerCase();
             const filtered = _allSpoolsCache.filter(s => {
                 const fil = s.filament || {};
@@ -3985,13 +4008,23 @@
             'PC': [260, 280], 'PVA': [190, 210],
         };
 
-        function openTrayConfig(printerName, trayId, slot, currentType, currentColor, tempMin, tempMax) {
+        // State for the tray config spool picker
+        let _trayConfigSpoolId = -1;
+        let _trayConfigSpoolsAll = [];
+        let _trayConfigPrinterName = '';
+        let _trayConfigTrayId = -1;
+
+        async function openTrayConfig(printerName, trayId, slot, currentType, currentColor, tempMin, tempMax) {
+            _trayConfigPrinterName = printerName;
+            _trayConfigTrayId = trayId;
+            _trayConfigSpoolId = -1;
+
             document.getElementById('trayConfigPrinter').value = printerName;
             document.getElementById('trayConfigId').value = trayId;
             document.getElementById('trayConfigSlotLabel').textContent = `#${slot + 1}`;
             document.getElementById('trayConfigResult').innerHTML = '';
 
-            // Set type (default to PLA if not in list)
+            // Set type
             const typeSelect = document.getElementById('trayConfigType');
             typeSelect.value = currentType && [...typeSelect.options].some(o => o.value === currentType) ? currentType : 'PLA';
 
@@ -4001,13 +4034,123 @@
             document.getElementById('trayConfigColorHex').value = safeColor;
 
             // Set temps
-            const mins = parseInt(tempMin) || 190;
-            const maxs = parseInt(tempMax) || 230;
-            document.getElementById('trayConfigTempMin').value = mins;
-            document.getElementById('trayConfigTempMax').value = maxs;
+            document.getElementById('trayConfigTempMin').value = parseInt(tempMin) || 190;
+            document.getElementById('trayConfigTempMax').value = parseInt(tempMax) || 230;
+
+            // Reset spool picker UI
+            document.getElementById('traySpoolSearch').value = '';
+            document.getElementById('traySpoolDropdown').style.display = 'none';
+            document.getElementById('traySpoolSelected').style.display = 'none';
+            document.getElementById('traySpoolLinked').style.display = 'none';
+            document.getElementById('traySpoolMsg').textContent = '';
+
+            // Pre-populate with currently linked spool if any
+            const cachedSpool = (window._amsTraySpoolsCache[printerName] || {})[trayId];
+            if (cachedSpool) {
+                _trayConfigSpoolId = cachedSpool.id;
+                _trayApplySpoolToUI(cachedSpool, false);
+            }
 
             document.getElementById('trayConfigOverlay').style.display = 'flex';
+
+            // Load spools in background
+            _trayConfigSpoolsAll = [];
+            document.getElementById('traySpoolMsg').textContent = 'Loading spools…';
+            try {
+                const data = await hhFetch('/api/v1/spoolman/spools');
+                _trayConfigSpoolsAll = data.data || data || [];
+                document.getElementById('traySpoolMsg').textContent = '';
+                document.getElementById('traySpoolSection').style.display = '';
+            } catch(e) {
+                document.getElementById('traySpoolMsg').textContent = 'Spoolman not configured — skipping spool link.';
+                document.getElementById('traySpoolSection').style.display = 'none';
+            }
         }
+
+        function _trayApplySpoolToUI(spool, autofillFields) {
+            const hex = spool.filament?.color_hex ? '#' + spool.filament.color_hex : null;
+            const name = spool.filament?.name || `Spool #${spool.id}`;
+            const mat = spool.filament?.material || '';
+            const rem = spool.remaining_weight != null ? `${Math.round(spool.remaining_weight)}g left` : '';
+
+            document.getElementById('traySpoolSelectedSwatch').style.background = hex || '#888';
+            document.getElementById('traySpoolSelectedName').textContent = name;
+            document.getElementById('traySpoolSelectedMeta').textContent = [mat, rem].filter(Boolean).join(' · ');
+            document.getElementById('traySpoolSelected').style.display = 'flex';
+            document.getElementById('traySpoolLinked').style.display = 'inline';
+            document.getElementById('traySpoolSearch').value = '';
+            document.getElementById('traySpoolDropdown').style.display = 'none';
+
+            if (autofillFields) {
+                // Auto-fill type
+                if (mat) {
+                    const typeSelect = document.getElementById('trayConfigType');
+                    const match = [...typeSelect.options].find(o => o.value.toUpperCase() === mat.toUpperCase());
+                    if (match) typeSelect.value = match.value;
+                    const temps = FILAMENT_TEMPS[typeSelect.value];
+                    if (temps) {
+                        document.getElementById('trayConfigTempMin').value = spool.filament?.settings_extruder_temp || temps[0];
+                        document.getElementById('trayConfigTempMax').value = spool.filament?.settings_extruder_temp || temps[1];
+                    }
+                }
+                // Auto-fill color
+                if (hex) {
+                    const safeHex = hex.length >= 7 ? hex.substring(0, 7) : hex;
+                    document.getElementById('trayConfigColor').value = safeHex;
+                    document.getElementById('trayConfigColorHex').value = safeHex;
+                }
+            }
+        }
+
+        function _traySpoolFilter() {
+            const q = document.getElementById('traySpoolSearch').value.toLowerCase();
+            const dropdown = document.getElementById('traySpoolDropdown');
+            if (!q) { dropdown.style.display = 'none'; return; }
+            const matches = _trayConfigSpoolsAll.filter(s => {
+                return (s.filament?.name || '').toLowerCase().includes(q)
+                    || (s.filament?.material || '').toLowerCase().includes(q)
+                    || (s.filament?.vendor?.name || '').toLowerCase().includes(q);
+            }).slice(0, 20);
+            if (!matches.length) {
+                dropdown.innerHTML = '<div style="padding:8px 12px;font-size:12px;color:var(--text-muted);">No spools found</div>';
+            } else {
+                dropdown.innerHTML = matches.map(s => {
+                    const hex = s.filament?.color_hex ? '#' + s.filament.color_hex : '#888';
+                    const name = s.filament?.name || `Spool #${s.id}`;
+                    const mat = s.filament?.material || '';
+                    const rem = s.remaining_weight != null ? `${Math.round(s.remaining_weight)}g` : '';
+                    return `<div onclick="_traySelectSpool(${s.id})" style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;font-size:12px;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background=''">
+                        <span style="width:12px;height:12px;border-radius:50%;background:${hex};flex-shrink:0;display:inline-block;"></span>
+                        <span style="flex:1;">${name}</span>
+                        <span style="color:var(--text-muted);font-size:11px;">${[mat,rem].filter(Boolean).join(' · ')}</span>
+                    </div>`;
+                }).join('');
+            }
+            dropdown.style.display = 'block';
+        }
+
+        function _traySelectSpool(spoolId) {
+            _trayConfigSpoolId = spoolId;
+            const spool = _trayConfigSpoolsAll.find(s => s.id === spoolId);
+            if (spool) _trayApplySpoolToUI(spool, true);
+        }
+
+        function _trayClearSpool() {
+            _trayConfigSpoolId = -1;
+            document.getElementById('traySpoolSelected').style.display = 'none';
+            document.getElementById('traySpoolLinked').style.display = 'none';
+            document.getElementById('traySpoolSearch').value = '';
+            document.getElementById('traySpoolDropdown').style.display = 'none';
+        }
+
+        // Close spool dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            const dd = document.getElementById('traySpoolDropdown');
+            const inp = document.getElementById('traySpoolSearch');
+            if (dd && inp && !dd.contains(e.target) && e.target !== inp) {
+                dd.style.display = 'none';
+            }
+        });
 
         function closeTrayConfig() {
             document.getElementById('trayConfigOverlay').style.display = 'none';
@@ -4039,18 +4182,36 @@
             const tempMin = parseInt(document.getElementById('trayConfigTempMin').value) || 190;
             const tempMax = parseInt(document.getElementById('trayConfigTempMax').value) || 230;
             const resultEl = document.getElementById('trayConfigResult');
-            resultEl.innerHTML = '<span class="spinner"></span> Sending to printer...';
+            resultEl.innerHTML = '<span class="spinner"></span> Saving…';
             try {
+                // 1. Save filament config to printer
                 const resp = await apiPost(`${BASE}/api/printer/${encodeURIComponent(name)}/tray_config`, {
                     tray_id: trayId, type: type, color: color,
                     nozzle_temp_min: tempMin, nozzle_temp_max: tempMax,
                 });
-                if (resp && resp.ok) {
-                    resultEl.innerHTML = '<span class="test-ok">&#10003; Saved! Tray info sent to printer.</span>';
-                    setTimeout(closeTrayConfig, 1200);
-                } else {
-                    resultEl.innerHTML = '<span class="test-fail">&#10007; Failed to send command.</span>';
+                if (!resp || !resp.ok) {
+                    resultEl.innerHTML = '<span class="test-fail">&#10007; Failed to send to printer.</span>';
+                    return;
                 }
+
+                // 2. Save Spoolman spool link / unlink
+                const currentLinked = (window._amsTraySpoolsCache[name] || {})[trayId];
+                if (_trayConfigSpoolId > 0) {
+                    await hhFetch(`/api/v1/printers/${encodeURIComponent(name)}/ams/trays/${trayId}/spool/${_trayConfigSpoolId}`, { method: 'PUT' });
+                    // Bust cache so overview refreshes with new spool info
+                    if (window._amsTraySpoolsCache[name]) delete window._amsTraySpoolsCache[name][trayId];
+                    await _amsLoadTraySpools(name);
+                } else if (_trayConfigSpoolId === -1 && currentLinked) {
+                    // User cleared an existing link
+                    try { await hhFetch(`/api/v1/printers/${encodeURIComponent(name)}/ams/trays/${trayId}/spool`, { method: 'DELETE' }); } catch(_) {}
+                    if (window._amsTraySpoolsCache[name]) delete window._amsTraySpoolsCache[name][trayId];
+                }
+
+                resultEl.innerHTML = '<span class="test-ok">&#10003; Saved!</span>';
+                setTimeout(() => {
+                    closeTrayConfig();
+                    if (window._amsPrinterName === name) _amsRenderOverview(name);
+                }, 900);
             } catch (e) {
                 resultEl.innerHTML = `<span class="test-fail">&#10007; Error: ${e.message}</span>`;
             }
@@ -5494,12 +5655,7 @@
             window._amsPrinterName = printerName;
             document.getElementById('amsPrinterName').textContent = printerName;
             document.getElementById('amsOverlay').style.display = 'flex';
-            // Reset to overview tab
-            document.querySelectorAll('.ams-tab-btn').forEach(t => t.classList.toggle('active', t.dataset.amsTab === 'overview'));
-            document.querySelectorAll('.ams-tab-pane').forEach(t => t.classList.toggle('active', t.id === 'amsTabOverview'));
             document.getElementById('amsTabOverview').innerHTML = '<p style="color:var(--text-muted)">Loading…</p>';
-            document.getElementById('amsTabManage').innerHTML = '';
-            window._amsManageLoaded = false;
             _amsRenderOverview(printerName);
             _amsStartRefresh(printerName);
         }
@@ -5510,25 +5666,14 @@
             window._amsPrinterName = null;
         }
 
-        function switchAmsTab(tabEl) {
-            const tabId = tabEl.dataset.amsTab;
-            document.querySelectorAll('.ams-tab-btn').forEach(t => t.classList.toggle('active', t === tabEl));
-            document.querySelectorAll('.ams-tab-pane').forEach(t => {
-                t.classList.toggle('active', t.id === 'amsTab' + tabId.charAt(0).toUpperCase() + tabId.slice(1));
-            });
-            if (tabId === 'manage' && !window._amsManageLoaded) {
-                _amsRenderManage(window._amsPrinterName);
-            }
-        }
+
 
         function _amsStartRefresh(printerName) {
             _amsStopRefresh();
             _amsRefreshInterval = setInterval(() => {
                 if (document.getElementById('amsOverlay').style.display === 'none') { _amsStopRefresh(); return; }
-                if (document.getElementById('amsTabOverview').classList.contains('active')) {
-                    _amsRenderOverview(printerName);
-                }
-            }, 2000);
+                _amsRenderOverview(printerName);
+            }, 3000);
         }
         function _amsStopRefresh() {
             if (_amsRefreshInterval) { clearInterval(_amsRefreshInterval); _amsRefreshInterval = null; }
@@ -5568,7 +5713,23 @@
             return 'Wet';
         }
 
-        function _amsRenderOverview(printerName) {
+        // Cache for spool assignments keyed by printer name
+        window._amsTraySpoolsCache = window._amsTraySpoolsCache || {};
+
+        async function _amsLoadTraySpools(printerName) {
+            try {
+                const res = await fetch(BASE + `/api/v1/printers/${encodeURIComponent(printerName)}/ams/trays`,
+                    { headers: { 'X-Api-Key': hhApiKey() } });
+                if (res.ok) {
+                    const data = await res.json();
+                    const map = {};
+                    (data.data || data).forEach(t => { map[t.id] = t.spool; });
+                    window._amsTraySpoolsCache[printerName] = map;
+                }
+            } catch(_) {}
+        }
+
+        async function _amsRenderOverview(printerName) {
             const p = _amsGetPrinter(printerName);
             const container = document.getElementById('amsTabOverview');
             if (!p || !p.has_ams || !p.ams_trays || p.ams_trays.length === 0) {
@@ -5576,70 +5737,55 @@
                 return;
             }
 
+            // Fetch spool assignments on first render; use cache on subsequent
+            if (!window._amsTraySpoolsCache[printerName]) {
+                await _amsLoadTraySpools(printerName);
+            }
+            const traySpools = window._amsTraySpoolsCache[printerName] || {};
+
             const trays = p.ams_trays;
             const units = p.ams_units || [];
             const trayNow = p.ams_tray_now;
             const isExternal = trayNow === 254;
             const vt = p.vt_tray || {};
 
-            // Find active tray info
             const activeTray = trays.find(t => t.active);
             const activeTrayLabel = activeTray ? `Slot ${activeTray.slot + 1} (Unit ${activeTray.unit + 1})` : isExternal ? 'External Spool' : 'None';
             const activeMaterial = activeTray ? (activeTray.type || '—') : isExternal ? (vt.tray_type || '—') : '—';
-
-            // Count stats
             const loadedCount = trays.filter(t => t.loaded).length;
-            const bblCount = trays.filter(t => t.is_bbl).length;
 
             let html = '';
 
-            // --- Status Banner ---
+            // Status Banner
             html += `<div class="ams-pop-banner">
                 <div class="ams-pop-stat"><span class="ams-pop-stat-label">Active Tray</span><span class="ams-pop-stat-val ${activeTray || isExternal ? 'green' : ''}">${activeTrayLabel}</span></div>
                 <div class="ams-pop-stat"><span class="ams-pop-stat-label">Material</span><span class="ams-pop-stat-val">${activeMaterial}</span></div>
-                <div class="ams-pop-stat"><span class="ams-pop-stat-label">Loaded Slots</span><span class="ams-pop-stat-val">${loadedCount} / ${trays.length}</span></div>
-                <div class="ams-pop-stat"><span class="ams-pop-stat-label">BambuLab Spools</span><span class="ams-pop-stat-val">${bblCount}</span></div>
+                <div class="ams-pop-stat"><span class="ams-pop-stat-label">Loaded</span><span class="ams-pop-stat-val">${loadedCount} / ${trays.length}</span></div>
                 <div class="ams-pop-stat"><span class="ams-pop-stat-label">AMS Units</span><span class="ams-pop-stat-val">${units.length || Math.ceil(trays.length / 4)}</span></div>
             </div>`;
 
-            // --- Filament Path ---
+            // Filament Path
             const feeding = activeTray || isExternal;
             const activeColor = activeTray ? (activeTray.color || 'var(--accent)') : 'var(--accent)';
-            const lineClass = feeding ? 'active' : '';
-
             html += `<div class="ams-pop-filpath">
                 <div class="ams-pop-filpath-seg">
                     <div class="ams-pop-filpath-label">${isExternal ? 'External' : activeTray ? `AMS ${activeTray.unit + 1}` : 'AMS'}</div>
                     <div class="ams-pop-filpath-icon">${isExternal ? '🔗' : '📦'}</div>
                 </div>
-                <div class="ams-pop-filpath-line ${lineClass}" ${feeding ? `style="background:linear-gradient(90deg, ${activeColor}, ${activeColor}44)"` : ''}></div>
-                <div class="ams-pop-filpath-seg">
-                    <div class="ams-pop-filpath-label">PTFE Tube</div>
-                    <div class="ams-pop-filpath-icon">〰️</div>
-                </div>
-                <div class="ams-pop-filpath-line ${lineClass}" ${feeding ? `style="background:linear-gradient(90deg, ${activeColor}88, ${activeColor}44)"` : ''}></div>
-                <div class="ams-pop-filpath-seg">
-                    <div class="ams-pop-filpath-label">Extruder</div>
-                    <div class="ams-pop-filpath-icon">⚙️</div>
-                </div>
-                <div class="ams-pop-filpath-line ${feeding ? 'active' : ''}" ${feeding ? `style="background:linear-gradient(90deg, ${activeColor}66, ${activeColor}22)"` : ''}></div>
-                <div class="ams-pop-filpath-seg">
-                    <div class="ams-pop-filpath-label">Nozzle</div>
-                    <div class="ams-pop-filpath-icon">${feeding ? '🔴' : '⚪'}</div>
-                </div>
+                <div class="ams-pop-filpath-line ${feeding ? 'active' : ''}" ${feeding ? `style="background:linear-gradient(90deg,${activeColor},${activeColor}44)"` : ''}></div>
+                <div class="ams-pop-filpath-seg"><div class="ams-pop-filpath-label">Tube</div><div class="ams-pop-filpath-icon">〰️</div></div>
+                <div class="ams-pop-filpath-line ${feeding ? 'active' : ''}" ${feeding ? `style="background:linear-gradient(90deg,${activeColor}88,${activeColor}44)"` : ''}></div>
+                <div class="ams-pop-filpath-seg"><div class="ams-pop-filpath-label">Extruder</div><div class="ams-pop-filpath-icon">⚙️</div></div>
+                <div class="ams-pop-filpath-line ${feeding ? 'active' : ''}" ${feeding ? `style="background:linear-gradient(90deg,${activeColor}66,${activeColor}22)"` : ''}></div>
+                <div class="ams-pop-filpath-seg"><div class="ams-pop-filpath-label">Nozzle</div><div class="ams-pop-filpath-icon">${feeding ? '🔴' : '⚪'}</div></div>
             </div>`;
 
-            // --- AMS Units with Trays ---
-            // Group trays by unit
+            // AMS Units — click tray to configure (admin) or load (non-admin)
             const unitMap = {};
-            trays.forEach(t => {
-                if (!unitMap[t.unit]) unitMap[t.unit] = [];
-                unitMap[t.unit].push(t);
-            });
+            trays.forEach(t => { if (!unitMap[t.unit]) unitMap[t.unit] = []; unitMap[t.unit].push(t); });
 
             html += '<div class="ams-units-grid">';
-            const unitIds = Object.keys(unitMap).sort((a, b) => a - b);
-            unitIds.forEach(uid => {
+            Object.keys(unitMap).sort((a,b) => a-b).forEach(uid => {
                 const unitTrays = unitMap[uid];
                 const unitInfo = units.find(u => u.id == uid) || {};
                 const humidity = unitInfo.humidity || '';
@@ -5661,9 +5807,30 @@
                     const remainPct = t.remain >= 0 ? t.remain : -1;
                     const remainCol = _amsRemainColor(remainPct);
                     const tempRange = (t.nozzle_temp_min && t.nozzle_temp_min !== '0') ? `${t.nozzle_temp_min}-${t.nozzle_temp_max}°C` : '';
-                    const editMarkup = isAdmin && t.loaded ? `<div class="ams-pop-tray-edit" onclick="event.stopPropagation();openTrayConfig('${printerName}', ${t.id}, ${t.slot}, '${(t.type||'').replace(/'/g,"\\'")}', '${t.color||'#333333'}', '${t.nozzle_temp_min}', '${t.nozzle_temp_max}')" title="Configure">&#9998;</div>` : '';
-                    html += `<div class="ams-pop-tray ${activeClass} ${emptyClass}" ${isAdmin && t.loaded ? `onclick="amsLoadTray('${printerName}', ${t.id})"` : ''} title="${t.loaded ? (t.type || 'Filament') + ' · ' + (tempRange || '') : 'Empty slot'}">
-                        ${editMarkup}
+                    const spool = traySpools[t.id];
+                    const spoolHex = spool?.filament?.color_hex ? '#' + spool.filament.color_hex : null;
+                    const spoolName = spool ? (spool.filament?.name || `Spool #${spool.id}`) : null;
+                    const spoolRem = spool?.remaining_weight != null ? `${Math.round(spool.remaining_weight)}g` : '';
+
+                    // Admin: click to configure. Non-admin: click to load.
+                    const clickAttr = t.loaded
+                        ? (isAdmin
+                            ? `onclick="openTrayConfig('${printerName}',${t.id},${t.slot},'${(t.type||'').replace(/'/g,"\\'")}','${t.color||'#333333'}','${t.nozzle_temp_min}','${t.nozzle_temp_max}')"`
+                            : `onclick="amsLoadTray('${printerName}',${t.id})"`)
+                        : '';
+
+                    const spoolRow = spool
+                        ? `<div class="ams-pop-tray-spool has-spool">
+                                ${spoolHex ? `<span class="ams-pop-tray-spool-dot" style="background:${spoolHex}"></span>` : '🧵'}
+                                <span class="ams-pop-tray-spool-name">${spoolName}</span>
+                                ${spoolRem ? `<span class="ams-pop-tray-spool-rem">${spoolRem}</span>` : ''}
+                           </div>`
+                        : (isAdmin && t.loaded
+                            ? `<div class="ams-pop-tray-spool">+ Link spool</div>`
+                            : '');
+
+                    html += `<div class="ams-pop-tray ${activeClass} ${emptyClass}" ${clickAttr}
+                            title="${t.loaded ? (isAdmin ? 'Click to configure / link spool' : 'Click to load') : 'Empty slot'}">
                         <div class="ams-pop-swatch ${bblClass}" style="background:${sw}"></div>
                         <div class="ams-pop-tray-info">
                             <div class="ams-pop-tray-type">${t.type || '—'}</div>
@@ -5671,13 +5838,14 @@
                             ${tempRange ? `<div class="ams-pop-tray-temps">${tempRange}</div>` : ''}
                         </div>
                         ${remainPct >= 0 ? `<div class="ams-pop-tray-remain-bar"><div class="ams-pop-tray-remain-fill" style="width:${remainPct}%;background:${remainCol}"></div></div><div class="ams-pop-tray-remain-text">${remainPct}%</div>` : ''}
+                        ${spoolRow}
                     </div>`;
                 });
                 html += `</div></div>`;
             });
             html += '</div>';
 
-            // --- External Spool ---
+            // External Spool
             const extColor = vt.tray_color ? `#${vt.tray_color.substring(0, 6)}` : '#666';
             const extType = vt.tray_type || 'Unknown';
             html += `<div class="ams-pop-external ${isExternal ? 'active' : ''}">
@@ -5689,169 +5857,15 @@
                 ${isAdmin ? `<button class="ams-pop-action-btn" onclick="amsLoadTray('${printerName}', 254)" style="font-size:11px;padding:6px 10px;">Load External</button>` : ''}
             </div>`;
 
-            // --- Quick Actions (admin only) ---
             if (isAdmin) {
-                html += '<div style="margin-bottom:8px;margin-top:16px;font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Quick Actions</div>';
-                html += '<div class="ams-pop-actions">';
-                html += `<button class="ams-pop-action-btn" onclick="amsLoadTray('${printerName}', 255)">⏏ Unload Filament</button>`;
-                html += '</div>';
-
-                // Tray selection buttons
-                html += '<div style="margin-bottom:8px;font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Load Tray</div>';
-                html += '<div class="ams-pop-tray-btns">';
-                trays.forEach(t => {
-                    if (!t.loaded) return;
-                    const isActive = t.active;
-                    const sw = t.color || '#888';
-                    html += `<button class="ams-pop-tray-btn ${isActive ? 'active' : ''}" onclick="amsLoadTray('${printerName}', ${t.id})" title="${t.type || 'Tray'} (Unit ${t.unit + 1}, Slot ${t.slot + 1})" style="border-bottom: 3px solid ${sw}">
-                        ${t.slot + 1}
-                    </button>`;
-                });
-                html += `<button class="ams-pop-tray-btn ${isExternal ? 'active' : ''}" onclick="amsLoadTray('${printerName}', 254)" title="External Spool" style="width:auto;padding:0 10px;">Ext</button>`;
-                html += '</div>';
+                html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+                    <button class="ams-pop-action-btn" onclick="amsLoadTray('${printerName}', 255)">⏏ Unload Filament</button>
+                </div>`;
             }
 
             container.innerHTML = html;
         }
 
-        async function _amsRenderManage(printerName) {
-            window._amsManageLoaded = true;
-            const p = _amsGetPrinter(printerName);
-            const container = document.getElementById('amsTabManage');
-            if (!p || !p.has_ams || !p.ams_trays) {
-                container.innerHTML = '<p style="color:var(--text-muted)">No AMS data available.</p>';
-                return;
-            }
-
-            container.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">Loading spool assignments…</p>';
-
-            // Fetch tray spool details from API (includes Spoolman spool info if Spoolman configured)
-            let traySpools = {};
-            try {
-                const res = await fetch(BASE + `/api/v1/printers/${encodeURIComponent(printerName)}/ams/trays`);
-                if (res.ok) {
-                    const data = await res.json();
-                    (data.data || data).forEach(t => { traySpools[t.id] = t.spool; });
-                }
-            } catch(e) { /* Spoolman not configured — fall through with empty map */ }
-
-            const trays = p.ams_trays;
-            let html = '<p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Click the tray card to configure filament settings. Use <b>Link Spool</b> to assign a Spoolman spool.</p>';
-
-            html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;">';
-            trays.forEach(t => {
-                const sw = t.loaded ? (t.color || '#888') : '#333';
-                const trayClickHandler = isAdmin ? `onclick="openTrayConfig('${printerName}', ${t.id}, ${t.slot}, '${(t.type||'').replace(/'/g,"\\'")}', '${t.color||'#333333'}', '${t.nozzle_temp_min}', '${t.nozzle_temp_max}')"` : '';
-                const spool = traySpools[t.id];
-                const spoolHex = spool?.filament?.color_hex ? '#' + spool.filament.color_hex : null;
-                let spoolHtml = '';
-                if (spool) {
-                    const spoolName = spool.filament?.name || `Spool #${spool.id}`;
-                    const spoolMat = spool.filament?.material || '';
-                    const remaining = spool.remaining_weight != null ? `${Math.round(spool.remaining_weight)}g left` : '';
-                    spoolHtml = `<div style="margin-top:8px;padding:6px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;display:flex;align-items:center;gap:6px;">
-                        ${spoolHex ? `<div style="width:12px;height:12px;border-radius:50%;background:${spoolHex};border:1px solid rgba(255,255,255,0.15);flex-shrink:0;"></div>` : ''}
-                        <div style="flex:1;min-width:0;">
-                            <div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${spoolName}</div>
-                            <div style="font-size:10px;color:var(--text-muted);">${[spoolMat, remaining].filter(Boolean).join(' · ')}</div>
-                        </div>
-                        ${isAdmin ? `<button onclick="event.stopPropagation();_amsUnlinkSpool('${printerName}',${t.id})" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:0 2px;" title="Unlink spool">✕</button>` : ''}
-                    </div>`;
-                } else if (isAdmin) {
-                    spoolHtml = `<div style="margin-top:8px;">
-                        <button onclick="event.stopPropagation();_amsOpenSpoolPicker('${printerName}',${t.id})" style="width:100%;padding:5px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;color:var(--text-muted);cursor:pointer;font-size:11px;text-align:center;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">+ Link Spoolman Spool</button>
-                    </div>`;
-                }
-                html += `<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;cursor:${isAdmin ? 'pointer' : 'default'};transition:border-color 0.15s;" ${trayClickHandler} onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
-                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-                        <div style="width:20px;height:20px;border-radius:50%;background:${sw};border:1px solid rgba(255,255,255,0.15);flex-shrink:0;"></div>
-                        <span style="font-weight:600;font-size:13px;">${t.type || '—'}</span>
-                    </div>
-                    <div style="font-size:11px;color:var(--text-muted);">Unit ${t.unit + 1} · Slot ${t.slot + 1}</div>
-                    ${t.loaded ? `<div style="font-size:11px;color:var(--text-muted);">${t.nozzle_temp_min && t.nozzle_temp_min !== '0' ? t.nozzle_temp_min + '-' + t.nozzle_temp_max + '°C' : ''} ${t.is_bbl ? '· BambuLab' : '· 3rd Party'}</div>` : '<div style="font-size:11px;color:var(--text-muted);opacity:0.5;">Empty</div>'}
-                    ${t.remain >= 0 ? `<div style="margin-top:4px;height:3px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${t.remain}%;background:${_amsRemainColor(t.remain)};border-radius:2px;"></div></div><div style="font-size:10px;color:var(--text-muted);margin-top:2px;">${t.remain}% remaining</div>` : ''}
-                    ${spoolHtml}
-                </div>`;
-            });
-            html += '</div>';
-
-            container.innerHTML = html;
-        }
-
-        // AMS tray spool picker state
-        let _amsTrayPickerPrinter = '';
-        let _amsTrayPickerTrayId = -1;
-        let _amsTrayAllSpools = [];
-
-        async function _amsOpenSpoolPicker(printerName, trayId) {
-            _amsTrayPickerPrinter = printerName;
-            _amsTrayPickerTrayId = trayId;
-            // Reuse the existing spool picker UI but wire different confirm action
-            _spoolPickerPrinter = null; // signal that this is AMS mode
-            document.getElementById('spoolPickerPrinter').textContent = `${printerName} — AMS Slot ${trayId + 1}`;
-            document.getElementById('spoolPickerSearch').value = '';
-            document.getElementById('spoolPickerResult').innerHTML = '';
-            document.getElementById('spoolPickerList').innerHTML = '<p style="color:var(--text-muted)">Loading spools…</p>';
-            document.getElementById('spoolPickerOverlay').style.display = 'flex';
-            try {
-                const data = await hhFetch('/api/v1/spoolman/spools');
-                _amsTrayAllSpools = data.data || data || [];
-                _renderAmsTraySpoolList();
-            } catch(e) {
-                document.getElementById('spoolPickerList').innerHTML = `<p style="color:var(--danger)">Failed to load spools: ${e.message}</p>`;
-            }
-        }
-
-        function _renderAmsTraySpoolList() {
-            const q = document.getElementById('spoolPickerSearch').value.toLowerCase();
-            const spools = _amsTrayAllSpools.filter(s => {
-                const name = (s.filament?.name || '').toLowerCase();
-                const mat = (s.filament?.material || '').toLowerCase();
-                const vendor = (s.filament?.vendor?.name || '').toLowerCase();
-                return !q || name.includes(q) || mat.includes(q) || vendor.includes(q);
-            });
-            const container = document.getElementById('spoolPickerList');
-            if (!spools.length) { container.innerHTML = '<p style="color:var(--text-muted)">No spools found.</p>'; return; }
-            container.innerHTML = spools.map(s => {
-                const hex = s.filament?.color_hex ? '#' + s.filament.color_hex : '#888';
-                const name = s.filament?.name || `Spool #${s.id}`;
-                const mat = s.filament?.material || '';
-                const rem = s.remaining_weight != null ? `${Math.round(s.remaining_weight)}g` : '';
-                return `<div onclick="_amsConfirmSpoolLink(${s.id})" class="spool-assign-row" style="cursor:pointer;">
-                    <div class="spool-assign-swatch" style="background:${hex}"></div>
-                    <div class="spool-assign-info">
-                        <div class="spool-name">${name}</div>
-                        <div class="spool-meta">${[mat, rem].filter(Boolean).join(' · ')}</div>
-                    </div>
-                </div>`;
-            }).join('');
-        }
-
-        async function _amsConfirmSpoolLink(spoolId) {
-            const resultEl = document.getElementById('spoolPickerResult');
-            resultEl.innerHTML = 'Linking…';
-            try {
-                await hhFetch(`/api/v1/printers/${encodeURIComponent(_amsTrayPickerPrinter)}/ams/trays/${_amsTrayPickerTrayId}/spool/${spoolId}`, { method: 'PUT' });
-                resultEl.innerHTML = '<span style="color:var(--accent)">Spool linked!</span>';
-                setTimeout(() => {
-                    document.getElementById('spoolPickerOverlay').style.display = 'none';
-                    window._amsManageLoaded = false;
-                    _amsRenderManage(_amsTrayPickerPrinter);
-                }, 600);
-            } catch(e) {
-                resultEl.innerHTML = `<span style="color:var(--danger)">Failed: ${e.message}</span>`;
-            }
-        }
-
-        async function _amsUnlinkSpool(printerName, trayId) {
-            try {
-                await hhFetch(`/api/v1/printers/${encodeURIComponent(printerName)}/ams/trays/${trayId}/spool`, { method: 'DELETE' });
-                window._amsManageLoaded = false;
-                _amsRenderManage(printerName);
-            } catch(e) {
-                alert('Failed to unlink spool: ' + e.message);
-            }
-        }
     </script>
 
     <!-- 3D Viewer Modal -->
