@@ -2258,7 +2258,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             subprocess.run([git, "config", "--global", "--add", "safe.directory", repo],
                            capture_output=True, timeout=10)
             result = subprocess.run(
-                [git, "-C", repo, "pull", "origin", "main"],
+                [git, "-C", repo, "pull", "--ff-only", "origin", "main"],
                 capture_output=True, timeout=60, text=True,
             )
             output = (result.stdout + result.stderr).strip()
