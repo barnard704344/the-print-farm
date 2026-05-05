@@ -139,7 +139,11 @@ class SpoolmanClient:
         Optional params: filament.name, filament.material, filament.vendor.name,
                          location, allow_archived, sort, limit, offset.
         """
-        return self._get("spool", params=kwargs or None)
+        # Spoolman expects lowercase 'true'/'false' for boolean query params
+        params = {}
+        for k, v in kwargs.items():
+            params[k] = str(v).lower() if isinstance(v, bool) else v
+        return self._get("spool", params=params or None)
 
     def get_spool(self, spool_id: int) -> Optional[dict]:
         return self._get(f"spool/{spool_id}")
@@ -168,8 +172,12 @@ class SpoolmanClient:
     # ── Convenience ───────────────────────────────────────
 
     def get_spools_by_location(self, location: str) -> Optional[list]:
-        """Get all spools at a given location (e.g. a printer name)."""
-        return self.get_spools(location=location)
+        """Get all spools at a given location (e.g. a printer name).
+
+        Wraps the name in quotes to force an exact match in Spoolman's
+        partial-search location filter.
+        """
+        return self.get_spools(location=f'"{location}"')
 
     def get_active_spools(self) -> Optional[list]:
         """Get all non-archived spools."""
