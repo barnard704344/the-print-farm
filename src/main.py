@@ -81,10 +81,31 @@ def _deduct_filament_usage(spoolman, job, farm):
             return
 
         file_path = job.get("file_path", "")
-        if not file_path.lower().endswith(".gcode"):
+        gcode_path = file_path
+
+        # If a .3mf was uploaded directly, look for an embedded gcode inside it
+        if file_path.lower().endswith(".3mf"):
+            import zipfile as _zf
+            import tempfile as _tmp
+            try:
+                with _zf.ZipFile(file_path) as zf:
+                    gcode_entries = [n for n in zf.namelist() if n.lower().endswith(".gcode")]
+                    if gcode_entries:
+                        tmp = _tmp.NamedTemporaryFile(suffix=".gcode", delete=False)
+                        tmp.write(zf.read(gcode_entries[0]))
+                        tmp.flush()
+                        gcode_path = tmp.name
+                    else:
+                        logger.debug(f"No gcode inside {file_path}, skipping Spoolman deduction")
+                        return
+            except Exception as e:
+                logger.debug(f"Could not extract gcode from {file_path}: {e}")
+                return
+        elif not file_path.lower().endswith(".gcode"):
+            logger.debug(f"Unsupported file type for Spoolman deduction: {file_path}")
             return
 
-        info = parse_gcode_filaments(file_path)
+        info = parse_gcode_filaments(gcode_path)
         used_filaments = info.get("used_filaments", [])
         if not used_filaments:
             return
