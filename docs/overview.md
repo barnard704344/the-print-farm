@@ -65,7 +65,7 @@ No Klipper plugin or extra component is required beyond a standard Moonraker ins
 - **Camera streaming** — Live camera feeds from BambuLab printers and Klipper webcams (MJPEG/snapshot auto-detected via Moonraker)
 - **Notifications** — Email (SMTP) and Discord webhook alerts for job submission, print completion, pause, and failure
 - **Obico integration** — Pulls AI failure detection data from a local Obico server when present
-- **Klipper Adaptive Flow** — Auto-detects [Klipper Adaptive Flow](https://github.com/barnard704344/Klipper-Adaptive-Flow) and shows a direct link on the printer card
+- **Spoolman integration** - Add in your local instance of spoolman and track your filament usage. https://github.com/Donkie/Spoolman
 
 ## UI Screenshots
 
