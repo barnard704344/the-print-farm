@@ -2214,8 +2214,11 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         repo = _repo_dir()
         try:
             # Fetch latest refs from origin (no checkout)
-            subprocess.run([git, "-C", repo, "fetch", "origin"],
-                           capture_output=True, timeout=30)
+            fetch = subprocess.run([git, "-C", repo, "fetch", "origin"],
+                           capture_output=True, timeout=30, text=True)
+            if fetch.returncode != 0:
+                err = (fetch.stdout + fetch.stderr).strip()
+                return jsonify({"ok": False, "message": f"git fetch failed: {err or 'check network/auth'}"})
             # Current short commit hash
             cur = subprocess.run([git, "-C", repo, "rev-parse", "--short", "HEAD"],
                                  capture_output=True, timeout=10, text=True)
@@ -2249,7 +2252,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         repo = _repo_dir()
         try:
             result = subprocess.run(
-                [git, "-C", repo, "pull"],
+                [git, "-C", repo, "pull", "origin", "main"],
                 capture_output=True, timeout=60, text=True,
             )
             output = (result.stdout + result.stderr).strip()
