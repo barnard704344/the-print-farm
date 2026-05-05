@@ -2213,6 +2213,9 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             return jsonify({"ok": False, "message": "git not found on this system"})
         repo = _repo_dir()
         try:
+            # Ensure git trusts this directory regardless of ownership
+            subprocess.run([git, "config", "--global", "--add", "safe.directory", repo],
+                           capture_output=True, timeout=10)
             # Fetch latest refs from origin (no checkout)
             fetch = subprocess.run([git, "-C", repo, "fetch", "origin"],
                            capture_output=True, timeout=30, text=True)
@@ -2251,6 +2254,9 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             return jsonify({"ok": False, "message": "git not found on this system"})
         repo = _repo_dir()
         try:
+            # Ensure git trusts this directory regardless of ownership
+            subprocess.run([git, "config", "--global", "--add", "safe.directory", repo],
+                           capture_output=True, timeout=10)
             result = subprocess.run(
                 [git, "-C", repo, "pull", "origin", "main"],
                 capture_output=True, timeout=60, text=True,
