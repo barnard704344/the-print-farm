@@ -1825,6 +1825,29 @@
                     </p>
                 </div>
 
+                <div class="setup-section" id="orca-virtual-section" style="display:none;">
+                    <h3>Virtual Printer — LAN Mode (AMS Sync)</h3>
+                    <p style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">
+                        Add these directly in OrcaSlicer as a <strong>BambuLab LAN printer</strong> to get live AMS slot sync.
+                        Files you send from Orca will be queued in the farm for staff to assign.
+                    </p>
+                    <table style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:6px;">
+                        <thead>
+                            <tr style="text-align:left; color:var(--text-muted); border-bottom:1px solid var(--border);">
+                                <th style="padding:6px 8px;">Printer</th>
+                                <th style="padding:6px 8px;">Virtual IP</th>
+                                <th style="padding:6px 8px;">Serial Number</th>
+                                <th style="padding:6px 8px;">Access Code</th>
+                                <th style="padding:6px 8px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="orca-virtual-table"></tbody>
+                    </table>
+                    <p style="font-size:11px; color:var(--text-muted);">
+                        In OrcaSlicer: <em>Printer → Add → BambuLab → LAN mode</em> — enter the IP, access code and serial above.
+                    </p>
+                </div>
+
                 <div class="setup-section">
                     <h3>Notes</h3>
                     <ul class="setup-notes">
@@ -2703,6 +2726,16 @@
             }
             // Show/hide the Spoolman nav tab based on whether it's configured
             initSpoolmanTab();
+            // Show virtual printer section only for staff/admin
+            if (isAdmin) {
+                fetch(BASE + '/api/farm/status')
+                    .then(r => r.json())
+                    .then(d => populateOrcaVirtualTable(d.printers || {}))
+                    .catch(() => {});
+            } else {
+                const s = document.getElementById('orca-virtual-section');
+                if (s) s.style.display = 'none';
+            }
             // Re-render printers and jobs to show/hide controls
             lastPrinterNames = [];  // Force full rebuild
             await refreshPrinters();
@@ -3306,6 +3339,28 @@
 
         // ── OrcaSlicer hostname ──────────────────────────────
         const farmHost = `http://${location.hostname}:5000`;
+
+        // Populate virtual printer LAN mode table
+        async function populateOrcaVirtualTable(printers) {
+            const tbody = document.getElementById('orca-virtual-table');
+            const section = document.getElementById('orca-virtual-section');
+            if (!tbody || !section) return;
+            const entries = Object.entries(printers).filter(([, p]) => p.virtual_ip);
+            if (!entries.length) return;
+            section.style.display = '';
+            tbody.innerHTML = entries.map(([name, p]) => `
+                <tr style="border-bottom:1px solid var(--border);">
+                    <td style="padding:8px;"><strong>${name}</strong></td>
+                    <td style="padding:8px;"><code style="user-select:all;">${p.virtual_ip}</code></td>
+                    <td style="padding:8px;"><code style="user-select:all;">${p.serial || '—'}</code>
+                        ${p.serial ? `<button class="btn" style="font-size:10px;margin-left:6px;" onclick="copyText('${p.serial}')">Copy</button>` : ''}
+                    </td>
+                    <td style="padding:8px;"><code style="user-select:all;">${p.access_code || '—'}</code>
+                        ${p.access_code ? `<button class="btn" style="font-size:10px;margin-left:6px;" onclick="copyText('${p.access_code}')">Copy</button>` : ''}
+                    </td>
+                    <td style="padding:8px;"><button class="btn" style="font-size:11px;" onclick="copyText('${p.virtual_ip}')">Copy IP</button></td>
+                </tr>`).join('');
+        }
 
         // Populate per-printer connection table
         async function populateOrcaPrinterTable() {

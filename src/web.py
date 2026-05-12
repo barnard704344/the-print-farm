@@ -376,15 +376,35 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 return p.get("orca_port")
         return None
 
+    def _get_printer_config_fields(printer_name):
+        """Return virtual_ip, serial, and access_code from config for a printer."""
+        for p in app_config.get("printers", []):
+            if p.get("name") == printer_name:
+                return {
+                    "virtual_ip": p.get("virtual_ip"),
+                    "serial": p.get("serial", ""),
+                    "access_code": p.get("access_code", ""),
+                }
+        return {}
+
     @app.route(prefix + "/api/farm/status")
     @app.route("/api/farm/status")
     def farm_status():
         """Full status of all printers + farm summary."""
         states = farm_manager.get_all_states()
-        # Merge staff_only flag and orca_port from config into each printer state
+        # Merge config fields into each printer state
+        staff = is_admin()
         for name in states:
             states[name]["staff_only"] = _is_staff_only_printer(name)
             states[name]["orca_port"] = _get_printer_orca_port(name)
+            cfg = _get_printer_config_fields(name)
+            if staff:
+                states[name].update(cfg)
+            else:
+                # Do not expose virtual_ip / serial / access_code to students
+                states[name]["virtual_ip"] = None
+                states[name]["serial"] = ""
+                states[name]["access_code"] = ""
         return jsonify({
             "summary": farm_manager.get_farm_summary(),
             "printers": states,
