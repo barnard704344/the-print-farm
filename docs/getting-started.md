@@ -10,13 +10,15 @@ sudo bash setup.sh
 
 The setup script will:
 
-1. Install Python 3, pip, and Apache
+1. Install Python 3, pip, Apache, `isc-dhcp-client`, and `openssl`
 2. Create a virtual environment and install dependencies
 3. Create an admin user account
 4. Detect whether install location is accessible by www-data
-5. Configure systemd service and Apache reverse proxy
+5. Configure systemd service (with required network capabilities) and Apache reverse proxy
 6. Auto-assign OrcaSlicer ports and create Apache vhosts
 7. Start the farm manager
+
+Virtual printers (for OrcaSlicer LAN mode / AMS sync) start automatically — no additional configuration is needed. See [Printers and OrcaSlicer](printers-and-orcaslicer.md#virtual-printer--lan-mode-orcaslicer-ams-sync) for details.
 
 Dashboard URL:
 

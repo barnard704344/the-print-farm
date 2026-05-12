@@ -49,13 +49,13 @@ esac
 # ── System packages ──────────────────────────────────────
 info "Installing system dependencies..."
 apt-get update -qq
-apt-get install -y -qq python3 python3-venv python3-pip apache2 sudo libapache2-mod-proxy-html > /dev/null 2>&1 || \
-    apt-get install -y -qq python3 python3-venv python3-pip apache2 sudo > /dev/null 2>&1
+apt-get install -y -qq python3 python3-venv python3-pip apache2 sudo libapache2-mod-proxy-html isc-dhcp-client openssl > /dev/null 2>&1 || \
+    apt-get install -y -qq python3 python3-venv python3-pip apache2 sudo isc-dhcp-client openssl > /dev/null 2>&1
 ok "System packages installed"
 
 # ── Project directories ──────────────────────────────────
 info "Creating directories..."
-mkdir -p data uploads uploads/thumbnails logs config
+mkdir -p data uploads uploads/thumbnails logs config data/dhcp config/certs
 ok "Directories ready"
 
 # ── Python virtual environment ───────────────────────────
@@ -215,6 +215,8 @@ Group=${SVC_GROUP}
 WorkingDirectory=${SCRIPT_DIR}
 ExecStart=${SCRIPT_DIR}/venv/bin/python -u -m src.main
 Environment=PYTHONUNBUFFERED=1
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal

@@ -21,6 +21,7 @@ This README is now a documentation index. Full content is split into modular doc
 - Python 3.9+
 - Apache 2 with mod_proxy
 - Debian 11+ / Ubuntu 22.04+ / Raspberry Pi OS
+- `isc-dhcp-client` and `openssl` — installed automatically by `setup.sh` (required for virtual printers)
 - Spoolman (optional)
 - Happy Hare (optional)
 
