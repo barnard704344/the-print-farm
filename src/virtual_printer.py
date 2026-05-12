@@ -358,11 +358,25 @@ def _build_state_payload(printer_name: str, serial: str, farm_manager) -> dict:
                 "tray": trays,
             })
 
+        # ams_exist_bits: one bit per AMS unit that is present
+        ams_exist_int = 0
+        for uid in units_map:
+            ams_exist_int |= (1 << uid)
+        # tray_exist_bits: one bit per global tray slot that has filament loaded
+        tray_exist_int = 0
+        tray_is_bbl_int = 0
+        for tray in s.ams_trays:
+            gid = int(tray.get("id", 0))
+            if tray.get("loaded"):
+                tray_exist_int |= (1 << gid)
+            if tray.get("is_bbl"):
+                tray_is_bbl_int |= (1 << gid)
+
         payload["ams"] = {
             "ams": ams_list,
-            "ams_exist_bits": "f",
-            "tray_exist_bits": "f",
-            "tray_is_bbl_bits": "0",
+            "ams_exist_bits": format(ams_exist_int, "x"),
+            "tray_exist_bits": format(tray_exist_int, "x"),
+            "tray_is_bbl_bits": format(tray_is_bbl_int, "x"),
             "tray_now": str(s.ams_tray_now),
             "tray_pre": "255",
             "tray_tar": "255",
