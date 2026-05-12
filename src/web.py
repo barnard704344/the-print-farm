@@ -257,7 +257,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         """Require admin OR having an active job on the printer (name must be a route param)."""
         @wraps(f)
         def decorated(*args, **kwargs):
-            if is_admin():
+            if is_admin() or _check_api_key():
                 return f(*args, **kwargs)
             if not is_authenticated():
                 return jsonify({"error": "Login required"}), 401
@@ -752,7 +752,11 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 job_queue.mark_printing(job_id)
                 # Wait for file to be ready before starting print
                 time.sleep(2 if printer_type == "bambulab" else 0.5)
-                printer.start_print(remote_name)
+                from .bambu_client import read_3mf_first_extruder
+                num_ams = len(printer.state.ams_trays) if printer.state.ams_trays else 4
+                first_ext = read_3mf_first_extruder(file_path) if file_path.lower().endswith(".3mf") else None
+                use_ams = None if (first_ext is None or first_ext < num_ams) else False
+                printer.start_print(remote_name, use_ams=use_ams)
                 logger.info(f"Started printing job #{job_id} on {printer_name}")
             else:
                 job_queue.mark_failed(job_id)
@@ -927,6 +931,14 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         data = request.get_json(silent=True) or {}
         printer_name = data.get("printer")
         printers = data.get("printers", [])
+        job = job_queue.get_job(job_id)
+
+        if not job:
+            return jsonify({"error": "Job not found"}), 404
+
+        file_path = job.get("file_path", "")
+        if not file_path or not os.path.exists(file_path):
+            return jsonify({"error": "Job source file is missing; re-upload the file to print again"}), 400
 
         # Support single printer (backward compat) or list
         if printer_name and not printers:
@@ -941,7 +953,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 return jsonify({"error": f"Printer '{pname}' not found"}), 404
             if not p.is_connected():
                 return jsonify({"error": f"Printer '{pname}' not connected"}), 400
-            if not is_admin() and _is_staff_only_printer(pname):
+            if not (is_admin() or _check_api_key()) and _is_staff_only_printer(pname):
                 return jsonify({"error": f"Printer '{pname}' is restricted to staff"}), 403
 
         results = []
@@ -979,6 +991,14 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         data = request.get_json(silent=True) or {}
         printer_name = data.get("printer")
         printers = data.get("printers", [])
+        original_job = job_queue.get_job(job_id)
+
+        if not original_job:
+            return jsonify({"error": "Job not found"}), 404
+
+        source_path = original_job.get("file_path", "")
+        if not source_path or not os.path.exists(source_path):
+            return jsonify({"error": "Job source file is missing; re-upload the file to print again"}), 400
 
         # Support single printer (backward compat) or list
         if printer_name and not printers:
@@ -991,7 +1011,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 return jsonify({"error": f"Printer '{pname}' not found"}), 404
             if not p.is_connected():
                 return jsonify({"error": f"Printer '{pname}' not connected"}), 400
-            if not is_admin() and _is_staff_only_printer(pname):
+            if not (is_admin() or _check_api_key()) and _is_staff_only_printer(pname):
                 return jsonify({"error": f"Printer '{pname}' is restricted to staff"}), 403
 
         new_id = job_queue.reprint_job(job_id)
@@ -1044,6 +1064,14 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     @app.route("/api/jobs/<int:job_id>/requeue", methods=["POST"])
     @admin_required
     def requeue_job(job_id):
+        job = job_queue.get_job(job_id)
+        if not job:
+            return jsonify({"error": "Job not found"}), 404
+
+        file_path = job.get("file_path", "")
+        if not file_path or not os.path.exists(file_path):
+            return jsonify({"error": "Job source file is missing; re-upload the file to print again"}), 400
+
         ok = job_queue.requeue_job(job_id)
         return jsonify({"ok": ok})
 

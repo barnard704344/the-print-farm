@@ -19,6 +19,7 @@ import socket
 import ssl
 import threading
 import time
+import zipfile
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Callable, Optional
@@ -73,6 +74,20 @@ class ImplicitFTPS(ftplib.FTP_TLS):
         return self.voidresp()
 
 logger = logging.getLogger(__name__)
+
+
+def read_3mf_first_extruder(path: str) -> Optional[int]:
+    """Return the first_extruder index from a .3mf file's plate_1.json.
+
+    Returns None if the file cannot be read or the field is absent.
+    On a 4-slot AMS machine, first_extruder >= 4 means the external/bypass spool.
+    """
+    try:
+        with zipfile.ZipFile(path, "r") as z:
+            data = json.loads(z.read("Metadata/plate_1.json"))
+            return int(data.get("first_extruder", 0))
+    except Exception:
+        return None
 
 
 class PrintStatus(Enum):
@@ -247,14 +262,18 @@ class BambuClient:
             "print": {"command": "stop", "sequence_id": str(int(time.time()))}
         })
 
-    def start_print(self, filename: str, plate_number: int = 1) -> bool:
+    def start_print(self, filename: str, plate_number: int = 1, use_ams: Optional[bool] = None) -> bool:
         """Start printing a file already uploaded to the printer's root.
 
         For .3mf files, uses project_file command.
         For raw .gcode, also wraps via project_file with ftp:// URL.
+
+        use_ams: override whether to activate AMS routing. If None, defaults to
+        True when the printer has an AMS. Pass False for external/bypass spool jobs.
         """
         subtask = filename.replace(".3mf", "").replace(".gcode", "")
-        use_ams = self._state.has_ams
+        if use_ams is None:
+            use_ams = self._state.has_ams
 
         cmd = {
             "print": {

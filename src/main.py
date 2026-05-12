@@ -441,7 +441,11 @@ def cmd_run(args, config: dict):
                         if ok:
                             queue.mark_printing(job["id"])
                             time.sleep(2)
-                            printer.start_print(remote_name)
+                            from .bambu_client import read_3mf_first_extruder
+                            num_ams = len(printer.state.ams_trays) if printer.state.ams_trays else 4
+                            first_ext = read_3mf_first_extruder(file_path) if file_path.lower().endswith(".3mf") else None
+                            use_ams = None if (first_ext is None or first_ext < num_ams) else False
+                            printer.start_print(remote_name, use_ams=use_ams)
                             logger.info(f"Started printing job #{job['id']} on {printer_name}")
                         else:
                             queue.mark_failed(job["id"])
