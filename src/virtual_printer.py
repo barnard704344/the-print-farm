@@ -28,6 +28,7 @@ live AMS slot colours/materials from the actual printer.
 If virtual_ip is absent, the virtual printer is disabled for that entry.
 """
 
+import hashlib
 import json
 import logging
 import os
@@ -170,6 +171,18 @@ def _iface_name(printer_name: str) -> str:
     return f"vbbl-{safe}"
 
 
+def _stable_mac(printer_name: str) -> str:
+    """
+    Derive a stable, locally-administered unicast MAC address from the printer
+    name.  Same name → same MAC every time, so the DHCP server issues the same
+    IP lease across restarts.
+    """
+    digest = hashlib.sha256(printer_name.encode()).digest()
+    b = list(digest[:6])
+    b[0] = (b[0] & 0xFE) | 0x02  # clear multicast, set locally-administered
+    return ":".join(f"{x:02x}" for x in b)
+
+
 def _setup_macvlan_dhcp(printer_name: str, nic: str) -> Optional[str]:
     """
     Create a macvlan sub-interface on *nic*, obtain a DHCP lease, and return
@@ -180,7 +193,8 @@ def _setup_macvlan_dhcp(printer_name: str, nic: str) -> Optional[str]:
     # Tear down any leftover interface from a previous run
     subprocess.run(["ip", "link", "del", iface], capture_output=True)
 
-    # Create macvlan (bridge mode so it can talk to the host)
+    # Create macvlan with a deterministic MAC so DHCP gives the same IP each restart
+    mac = _stable_mac(printer_name)
     r = subprocess.run(
         ["ip", "link", "add", iface, "link", nic, "type", "macvlan", "mode", "bridge"],
         capture_output=True,
@@ -189,6 +203,8 @@ def _setup_macvlan_dhcp(printer_name: str, nic: str) -> Optional[str]:
         logger.error(f"[{printer_name}] macvlan create failed: {r.stderr.decode().strip()}")
         return None
 
+    # Set stable MAC before bringing the interface up
+    subprocess.run(["ip", "link", "set", iface, "address", mac], capture_output=True)
     subprocess.run(["ip", "link", "set", iface, "up"], capture_output=True)
 
     # Get DHCP lease — use a no-op script so samba/other hooks don't interfere,
