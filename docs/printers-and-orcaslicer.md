@@ -98,6 +98,7 @@ Jobs enter the queue unassigned and can be sent to any printer from the dashboar
 
 - Each printer gets a dedicated Apache VirtualHost on its own port (5001, 5002, …)
 - Apache proxies `/api` requests on that port to Flask's per-printer OctoPrint-compatible routes
+- Each vhost includes `Header always set Access-Control-Allow-Origin "*"` so the dashboard's port-reachability probe (a cross-origin fetch) succeeds and printers are never falsely shown as firewall-blocked
 - The `setup.sh` script auto-configures ports for all printers in `config.yaml`
 - Adding, removing, or renaming printers from the dashboard automatically manages Apache vhosts
 - Jobs uploaded via a per-printer port are assigned to that printer but **not auto-sent** — send them manually from the Job Queue tab when the printer is ready
@@ -115,7 +116,7 @@ At startup, the farm manager automatically:
 1. Creates a macvlan sub-interface (`vbbl-<printer>`) on the server's physical NIC
 2. Obtains a real DHCP lease for that interface — the virtual printer gets its own IP address on your LAN
 3. Starts a BambuLab-compatible MQTT broker (TLS, port 8883) and implicit FTPS server (port 990) bound to that IP
-4. Broadcasts SSDP discovery packets so OrcaSlicer can find the printer automatically
+4. Broadcasts SSDP discovery packets every 30 seconds **and** responds immediately to active SSDP M-SEARCH queries — OrcaSlicer's auto-connect flow works without waiting for the next broadcast
 5. Relays live state (AMS contents, print progress, temperatures) from the real printer to OrcaSlicer
 
 No manual IP configuration is needed. DHCP handles everything automatically on each service start.
@@ -159,5 +160,6 @@ printers:
 |---|---|
 | Virtual IP not appearing in dashboard | `journalctl -u the-print-farm -n 50` — look for `dhclient` or `macvlan` errors |
 | DHCP lease not obtained | Ensure the server NIC name in `virtual_printer.py` matches your host (default: `eth0`) |
-| OrcaSlicer can't connect | Confirm port 8883 is not blocked by a firewall on the server |
+| OrcaSlicer shows "Failed to connect to printer" on first try | Use **Manual Setup** to enter IP and access code directly — this bypasses SSDP discovery. If it succeeds, the virtual printer is working correctly |
+| OrcaSlicer can't connect at all | Confirm port 8883 is not blocked by a firewall on the server |
 | Permission denied creating interface | Ensure `AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW` is present in the service unit (`systemctl cat the-print-farm`) |

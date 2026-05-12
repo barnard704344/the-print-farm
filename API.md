@@ -17,6 +17,7 @@ Complete reference for all REST API endpoints.
 - [Happy Hare / MMU](#happy-hare--mmu)
 - [Active Directory Config](#active-directory-config)
 - [Obico Config](#obico-config)
+- [UI Preferences](#ui-preferences)
 - [Software Update](#software-update)
 - [OctoPrint-Compatible API](#octoprint-compatible-api)
 - [API v1 Reference](#api-v1-reference)
@@ -538,6 +539,50 @@ Admin only. Per-printer Obico failure detection config.
 
 ---
 
+## UI Preferences
+
+Controls display settings (timezone, locale) that affect how dates and times are
+rendered across the dashboard. GET requires login; POST requires admin.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/ui/config` | Get current UI preferences |
+| POST | `/api/ui/config` | Save UI preferences |
+
+### `GET /api/ui/config`
+
+**Response:**
+```json
+{
+  "timezone": "Australia/Sydney",
+  "locale": "en-AU"
+}
+```
+
+`timezone` is an IANA timezone string (e.g. `Australia/Sydney`, `Europe/London`,
+`America/New_York`). Empty string means auto-detect from the viewer's browser.
+
+### `POST /api/ui/config`
+
+**Body:**
+```json
+{
+  "timezone": "Australia/Sydney",
+  "locale": "en-AU"
+}
+```
+
+Both fields are optional — omit one to leave it unchanged. Settings are persisted
+to `config.yaml` under `ui.timezone` and `ui.locale` and take effect immediately
+on next page load.
+
+**Response:**
+```json
+{ "ok": true }
+```
+
+---
+
 ## Software Update
 
 Admin only. Used by the Settings tab update controls.
@@ -581,6 +626,8 @@ Admin only. Used by the Settings tab update controls.
 ## OctoPrint-Compatible API
 
 These endpoints mimic OctoPrint's API so OrcaSlicer can connect to The Print Farm as a network printer.
+
+Each per-printer port (5001, 5002, …) is served by a dedicated Apache VirtualHost that proxies `/api` requests to Flask. These vhosts include `Header always set Access-Control-Allow-Origin "*"` so the dashboard's cross-origin port-reachability probes succeed from any network. The general queue on port 80 is always reachable without this header.
 
 ### Generic Endpoints
 

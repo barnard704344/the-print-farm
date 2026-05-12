@@ -1,5 +1,20 @@
 # Configuration
 
+## Display Preferences
+
+Control how dates and times are shown across the dashboard. Configure from **Settings → Display Preferences**.
+
+- **Timezone** — Select any IANA timezone (e.g. `Australia/Sydney`, `Europe/London`, `America/New_York`). Leave blank to auto-detect from each viewer's browser. The selected timezone is persisted server-side so all users see the same zone by default.
+- **Locale** — Controls date format. Currently fixed to `en-AU` (DD/MM/YYYY). Configurable via the API if needed.
+
+```yaml
+ui:
+  timezone: Australia/Sydney
+  locale: en-AU
+```
+
+Or configure from **Settings → Display Preferences** in the dashboard.
+
 ## Software Updates
 
 Settings tab provides:
