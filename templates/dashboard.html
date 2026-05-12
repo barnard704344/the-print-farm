@@ -4616,8 +4616,8 @@
             if (!iso) return '--';
             const d = new Date(iso);
             const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-            return d.toLocaleDateString(undefined, {timeZone: tz}) + ' ' +
-                   d.toLocaleTimeString(undefined, {hour: '2-digit', minute: '2-digit', timeZone: tz});
+            return d.toLocaleDateString('en-AU', {timeZone: tz}) + ' ' +
+                   d.toLocaleTimeString('en-AU', {hour: '2-digit', minute: '2-digit', timeZone: tz});
         }
 
         function formatDuration(seconds) {
