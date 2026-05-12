@@ -25,6 +25,7 @@ from .file_library import FileLibrary
 from .camera import CameraManager
 from .spoolman_client import SpoolmanClient
 from .notifications import NotificationManager
+from .virtual_printer import VirtualPrinterManager
 from .web import create_app, start_web_server
 
 logger = logging.getLogger("the_print_farm")
@@ -332,6 +333,11 @@ def cmd_run(args, config: dict):
                      config=config, file_library=library,
                      spoolman_client=spoolman)
     start_web_server(app, host=host, port=port)
+
+    # Virtual printers — emulate each Bambu printer on a virtual IP for Orca sync
+    vp_manager = VirtualPrinterManager()
+    uploads_dir = queue_cfg.get("upload_dir", "./uploads")
+    vp_manager.start_all(printers, farm, queue, uploads_dir)
     print(f"Dashboard: http://{host}:{port}")
 
     # Notifications
@@ -348,6 +354,7 @@ def cmd_run(args, config: dict):
 
     def signal_handler(sig, frame):
         print("\nShutting down...")
+        vp_manager.stop_all()
         camera_mgr.stop_all()
         farm.disconnect_all()
         summary = farm.get_farm_summary()
