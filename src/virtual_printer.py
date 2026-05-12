@@ -898,10 +898,8 @@ class VirtualFTPServer:
 # SSDP broadcaster — makes Orca auto-discover the virtual printer
 # ---------------------------------------------------------------------------
 
-def _ssdp_broadcast_loop(name: str, virtual_ip: str, serial: str,
-                          model: str, stopped_event: threading.Event):
-    """Broadcast Bambu-style SSDP discovery packets so Orca sees the virtual printer."""
-    payload = json.dumps({
+def _ssdp_build_payload(name: str, serial: str, virtual_ip: str, model: str) -> bytes:
+    return json.dumps({
         "dev_name": name,
         "dev_id": serial,
         "dev_ip": virtual_ip,
@@ -909,6 +907,12 @@ def _ssdp_broadcast_loop(name: str, virtual_ip: str, serial: str,
         "dev_signal": "-50dBm",
         "dev_connection_type": "lan",
     }).encode()
+
+
+def _ssdp_broadcast_loop(name: str, virtual_ip: str, serial: str,
+                          model: str, stopped_event: threading.Event):
+    """Broadcast Bambu-style SSDP discovery packets so Orca sees the virtual printer."""
+    payload = _ssdp_build_payload(name, serial, virtual_ip, model)
 
     while not stopped_event.wait(SSDP_INTERVAL):
         try:
@@ -924,6 +928,50 @@ def _ssdp_broadcast_loop(name: str, virtual_ip: str, serial: str,
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.sendto(payload, (SSDP_ADDR, SSDP_PORT))
+    except Exception:
+        pass
+
+
+def _ssdp_msearch_listener(name: str, virtual_ip: str, serial: str,
+                            model: str, stopped_event: threading.Event):
+    """
+    Listen for Bambu-style SSDP M-SEARCH queries on the multicast group and
+    reply unicast so OrcaSlicer's auto-connect flow can find the printer
+    immediately without waiting for the next passive broadcast.
+    """
+    payload = _ssdp_build_payload(name, serial, virtual_ip, model)
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        sock.bind(("", SSDP_PORT))
+        mreq = socket.inet_aton(SSDP_ADDR) + socket.inet_aton(virtual_ip)
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+        sock.settimeout(1.0)
+    except Exception as e:
+        logger.warning(f"[{name}] SSDP listener setup failed: {e}")
+        return
+
+    while not stopped_event.is_set():
+        try:
+            data, addr = sock.recvfrom(4096)
+        except socket.timeout:
+            continue
+        except Exception as e:
+            logger.debug(f"[{name}] SSDP listener recv error: {e}")
+            continue
+        try:
+            msg = data.decode(errors="ignore")
+            if "M-SEARCH" in msg:
+                # Reply unicast to the requester
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as reply_sock:
+                    reply_sock.sendto(payload, addr)
+                logger.debug(f"[{name}] Replied to SSDP M-SEARCH from {addr}")
+        except Exception as e:
+            logger.debug(f"[{name}] SSDP M-SEARCH handle error: {e}")
+
+    try:
+        sock.close()
     except Exception:
         pass
 
@@ -1019,6 +1067,17 @@ class VirtualPrinterServer:
         )
         self._threads.append(t_ssdp)
         t_ssdp.start()
+
+        # SSDP M-SEARCH responder (handles OrcaSlicer auto-connect queries)
+        t_msearch = threading.Thread(
+            target=_ssdp_msearch_listener,
+            args=(self.printer_name, self.virtual_ip, self.serial,
+                  self.model, self._stopped),
+            name=f"vp-ssdp-rx-{self.printer_name}",
+            daemon=True,
+        )
+        self._threads.append(t_msearch)
+        t_msearch.start()
 
         # State push loop
         t_push = threading.Thread(
