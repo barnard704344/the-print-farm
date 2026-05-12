@@ -1159,6 +1159,7 @@
 
         /* File Library */
         .library-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+        .library-toolbar-actions { display: flex; gap: 8px; align-items: center; }
         .library-toolbar input[type="text"] {
             flex: 1; min-width: 200px; padding: 8px 12px; border-radius: 8px;
             border: 1px solid var(--border); background: var(--surface); color: var(--text);
@@ -1174,12 +1175,67 @@
             overflow: hidden; transition: border-color 0.2s; cursor: pointer; position: relative;
         }
         .library-card:hover { border-color: var(--accent); }
+        .library-card.dragging {
+            opacity: 0.45;
+            border-style: dashed;
+        }
+        .library-drop-target.drag-over {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px var(--accent-glow) inset;
+        }
         .library-card.folder-card {
             display: flex; align-items: center; gap: 12px; padding: 16px;
             min-height: 60px;
         }
+        .library-folder-main {
+            min-width: 0;
+            flex: 1;
+        }
         .library-card.folder-card .folder-icon { font-size: 28px; flex-shrink: 0; }
         .library-card.folder-card .folder-name { font-size: 14px; font-weight: 500; word-break: break-word; }
+        .library-folder-actions {
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+        .library-card.folder-card:hover .library-folder-actions {
+            opacity: 1;
+        }
+        .folder-action-btn {
+            width: 28px;
+            height: 28px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg);
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 13px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .folder-action-btn:hover {
+            color: var(--text);
+            border-color: var(--text-muted);
+        }
+        .folder-action-btn.delete:hover {
+            color: var(--danger);
+            border-color: var(--danger);
+        }
+        .library-drop-pill {
+            border: 1px dashed var(--border);
+            border-radius: 16px;
+            padding: 2px 10px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        .library-drop-pill.drag-over {
+            color: var(--accent);
+            border-color: var(--accent);
+            background: var(--accent-dim);
+        }
         .library-card-thumb {
             width: 100%; aspect-ratio: 1; background: var(--bg);
             display: flex; align-items: center; justify-content: center;
@@ -1670,7 +1726,11 @@
             </div>
             <div class="library-toolbar">
                 <input type="text" id="librarySearch" placeholder="Search files..." oninput="debounceLibrarySearch()">
-                <button class="btn" onclick="showNewFolderDialog()">New Folder</button>
+                <div class="library-toolbar-actions">
+                    <span class="library-drop-pill library-drop-target" id="libraryRootDropHint" title="Drop files/folders here to move to root"
+                        ondragover="onLibraryDragOver(event)" ondragleave="onLibraryDragLeave(event)" ondrop="onLibraryDropToRoot(event)">Drop to Root</span>
+                    <button class="btn" onclick="showNewFolderDialog()">New Folder</button>
+                </div>
             </div>
             <div class="library-grid" id="libraryGrid">
                 <div class="library-empty">Loading...</div>
@@ -2137,6 +2197,48 @@
                 <button class="ams-modal-close" onclick="closeAmsModal()">&times;</button>
             </div>
             <div class="ams-modal-body" id="amsTabOverview"></div>
+        </div>
+    </div>
+
+    <!-- File Library Folder Modal -->
+    <div class="modal-overlay" id="libraryFolderOverlay" style="display:none" onclick="if(event.target===this)closeLibraryFolderModal()">
+        <div class="modal" style="max-width:430px;">
+            <div class="modal-header">
+                <h2 style="font-size:18px;" id="libraryFolderModalTitle">New Folder</h2>
+                <button class="modal-close" onclick="closeLibraryFolderModal()">&times;</button>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                <div id="libraryFolderModalContext" style="font-size:12px;color:var(--text-muted);"></div>
+                <input type="text" id="libraryFolderNameInput" placeholder="Folder name"
+                    style="width:100%; padding:9px 10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:14px;"
+                    onkeydown="if(event.key==='Enter')submitLibraryFolderModal()">
+                <div id="libraryFolderModalError" style="color:var(--danger); font-size:12px; min-height:16px;"></div>
+                <div style="display:flex; justify-content:flex-end; gap:8px;">
+                    <button class="btn" onclick="closeLibraryFolderModal()">Cancel</button>
+                    <button class="btn btn-success" onclick="submitLibraryFolderModal()" id="libraryFolderModalSubmitBtn">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Library Move Modal -->
+    <div class="modal-overlay" id="libraryMoveOverlay" style="display:none" onclick="if(event.target===this)closeLibraryMoveModal()">
+        <div class="modal" style="max-width:470px;">
+            <div class="modal-header">
+                <h2 style="font-size:18px;" id="libraryMoveModalTitle">Move Item</h2>
+                <button class="modal-close" onclick="closeLibraryMoveModal()">&times;</button>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                <div id="libraryMoveModalContext" style="font-size:12px;color:var(--text-muted);"></div>
+                <select id="libraryMoveSelect"
+                    style="width:100%; padding:9px 10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:14px;">
+                </select>
+                <div id="libraryMoveModalError" style="color:var(--danger); font-size:12px; min-height:16px;"></div>
+                <div style="display:flex; justify-content:flex-end; gap:8px;">
+                    <button class="btn" onclick="closeLibraryMoveModal()">Cancel</button>
+                    <button class="btn btn-success" onclick="submitLibraryMoveModal()">Move</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -4790,10 +4892,65 @@
         let libraryFolderPath = [];        // [{id, name}, ...]
         let librarySearchTimer = null;
         let libraryLoaded = false;
+        let libraryAllFolders = [];
+        let libraryFolderModalState = null;
+        let libraryMoveModalState = null;
+        let libraryDragState = null;
 
         function debounceLibrarySearch() {
             clearTimeout(librarySearchTimer);
             librarySearchTimer = setTimeout(() => refreshLibrary(), 300);
+        }
+
+        async function refreshLibraryFolderTree() {
+            const res = await fetch(BASE + '/api/library/folders/tree');
+            const data = await res.json();
+            libraryAllFolders = data.folders || [];
+        }
+
+        function getFolderChildrenMap() {
+            const children = new Map();
+            libraryAllFolders.forEach(f => {
+                const pid = f.parent_id == null ? 'root' : String(f.parent_id);
+                if (!children.has(pid)) children.set(pid, []);
+                children.get(pid).push(f);
+            });
+            for (const list of children.values()) {
+                list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+            }
+            return children;
+        }
+
+        function flattenFolderTree() {
+            const out = [];
+            const children = getFolderChildrenMap();
+            const walk = (parentId, depth) => {
+                const key = parentId == null ? 'root' : String(parentId);
+                const list = children.get(key) || [];
+                for (const f of list) {
+                    out.push({ ...f, depth });
+                    walk(f.id, depth + 1);
+                }
+            };
+            walk(null, 0);
+            return out;
+        }
+
+        function getFolderDescendants(folderId) {
+            const children = getFolderChildrenMap();
+            const descendants = new Set();
+            const stack = [folderId];
+            while (stack.length) {
+                const current = stack.pop();
+                const list = children.get(String(current)) || [];
+                for (const child of list) {
+                    if (!descendants.has(child.id)) {
+                        descendants.add(child.id);
+                        stack.push(child.id);
+                    }
+                }
+            }
+            return descendants;
         }
 
         async function refreshLibrary() {
@@ -4801,6 +4958,7 @@
             const query = document.getElementById('librarySearch').value.trim();
             libraryLoaded = true;
             try {
+                await refreshLibraryFolderTree();
                 let files, folders = [];
                 if (query) {
                     const res = await fetch(BASE + '/api/library/files/search?q=' + encodeURIComponent(query));
@@ -4829,11 +4987,11 @@
 
         function renderBreadcrumb() {
             const bc = document.getElementById('libraryBreadcrumb');
-            let html = '<a onclick="navigateFolder(null)">Library</a>';
+            let html = '<a class="library-drop-target" onclick="navigateFolder(null)" ondragover="onLibraryDragOver(event)" ondragleave="onLibraryDragLeave(event)" ondrop="onLibraryDropToRoot(event)">Library</a>';
             libraryFolderPath.forEach((f, i) => {
                 html += ' <span>/</span> ';
                 if (i < libraryFolderPath.length - 1) {
-                    html += `<a onclick="navigateToPathIndex(${i})">${escapeHtml(f.name)}</a>`;
+                    html += `<a class="library-drop-target" onclick="navigateToPathIndex(${i})" ondragover="onLibraryDragOver(event)" ondragleave="onLibraryDragLeave(event)" ondrop="onLibraryDropToFolder(event, ${f.id})">${escapeHtml(f.name)}</a>`;
                 } else {
                     html += `<span style="color:var(--text)">${escapeHtml(f.name)}</span>`;
                 }
@@ -4866,10 +5024,26 @@
         }
 
         function renderFolderCard(folder) {
-            return `<div class="library-card folder-card" onclick="navigateFolder(${folder.id}, '${escapeHtml(folder.name).replace(/'/g, "\\'")}')"
-                    oncontextmenu="event.preventDefault(); showFolderMenu(event, ${folder.id}, '${escapeHtml(folder.name).replace(/'/g, "\\'")}')" title="Click to open">
+            const safeName = escapeHtml(folder.name).replace(/'/g, "\\'");
+            const folderActions = `
+                <div class="library-folder-actions" onclick="event.stopPropagation()">
+                    <button class="folder-action-btn" title="Rename" onclick="startRenameFolder(${folder.id}, '${safeName}')">✎</button>
+                    <button class="folder-action-btn" title="Move" onclick="showMoveFolderDialog(${folder.id}, '${safeName}')">↕</button>
+                    ${isAdmin ? `<button class="folder-action-btn delete" title="Delete" onclick="deleteFolder(${folder.id}, '${safeName}')">🗑</button>` : ''}
+                </div>`;
+            return `<div class="library-card folder-card library-drop-target" onclick="navigateFolder(${folder.id}, '${safeName}')"
+                    title="Click to open"
+                    draggable="true"
+                    ondragstart="onLibraryDragStart(event, 'folder', ${folder.id}, '${safeName}')"
+                    ondragend="onLibraryDragEnd(event)"
+                    ondragover="onLibraryDragOver(event)"
+                    ondragleave="onLibraryDragLeave(event)"
+                    ondrop="onLibraryDropToFolder(event, ${folder.id})">
                 <div class="folder-icon">📁</div>
-                <div class="folder-name">${escapeHtml(folder.name)}</div>
+                <div class="library-folder-main">
+                    <div class="folder-name">${escapeHtml(folder.name)}</div>
+                </div>
+                ${folderActions}
             </div>`;
         }
 
@@ -4882,11 +5056,15 @@
             if (file.print_time_seconds) meta.push(formatDuration(file.print_time_seconds));
             if (file.file_size) meta.push(formatFileSize(file.file_size));
             if (file.print_count) meta.push('Printed ' + file.print_count + 'x');
+            const safeName = escapeHtml(file.original_name).replace(/'/g, "\\'");
             const actions = `<button class="btn btn-sm" onclick="printFromLibrary(${file.id})">Print</button>`
                 + ` <button class="btn btn-sm" onclick="open3DViewer(${file.id})" title="Interactive 3D toolpath view">Toolpath</button>`
-                + (isAdmin ? ` <button class="btn btn-sm" onclick="showMoveDialog(${file.id})">Move</button>
+                + (isAdmin ? ` <button class="btn btn-sm" onclick="showMoveDialog(${file.id}, '${safeName}')">Move</button>
                     <button class="btn btn-sm btn-danger" onclick="deleteLibraryFile(${file.id})">Delete</button>` : '');
-            return `<div class="library-card">
+            return `<div class="library-card"
+                draggable="true"
+                ondragstart="onLibraryDragStart(event, 'file', ${file.id}, '${safeName}')"
+                ondragend="onLibraryDragEnd(event)">
                 <div class="library-card-thumb" onclick="open3DViewer(${file.id})" style="cursor:pointer" title="Click for interactive 3D toolpath view">
                     ${thumb}
                 </div>
@@ -4905,64 +5083,225 @@
         }
 
         function showNewFolderDialog() {
-            const name = prompt('Folder name:');
-            if (!name || !name.trim()) return;
-            fetch(BASE + '/api/library/folders', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: name.trim(), parent_id: libraryCurrentFolder })
-            }).then(r => r.json()).then(d => {
-                if (d.error) alert(d.error);
-                else refreshLibrary();
-            }).catch(err => alert('Failed to create folder'));
+            libraryFolderModalState = {
+                mode: 'create',
+                folderId: null,
+                parentId: libraryCurrentFolder,
+                folderName: ''
+            };
+            document.getElementById('libraryFolderModalTitle').textContent = 'New Folder';
+            document.getElementById('libraryFolderModalContext').textContent = libraryCurrentFolder ? 'Create folder in current location' : 'Create folder in library root';
+            document.getElementById('libraryFolderModalSubmitBtn').textContent = 'Create';
+            document.getElementById('libraryFolderNameInput').value = '';
+            document.getElementById('libraryFolderModalError').textContent = '';
+            document.getElementById('libraryFolderOverlay').style.display = 'flex';
+            document.getElementById('libraryFolderNameInput').focus();
         }
 
-        function showFolderMenu(event, folderId, folderName) {
-            const action = prompt(`Folder: ${folderName}\nType "rename" to rename or "delete" to delete:`);
-            if (!action) return;
-            if (action.toLowerCase() === 'rename') {
-                const newName = prompt('New folder name:', folderName);
-                if (!newName || !newName.trim()) return;
-                fetch(BASE + `/api/library/folders/${folderId}/rename`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: newName.trim() })
-                }).then(r => r.json()).then(d => {
-                    if (d.error) alert(d.error);
-                    else refreshLibrary();
-                });
-            } else if (action.toLowerCase() === 'delete') {
-                if (!confirm('Delete folder "' + folderName + '" and all its contents?')) return;
-                fetch(BASE + `/api/library/folders/${folderId}/delete`, { method: 'DELETE' })
-                    .then(r => r.json()).then(d => {
-                        if (d.error) alert(d.error);
-                        else refreshLibrary();
+        function closeLibraryFolderModal() {
+            document.getElementById('libraryFolderOverlay').style.display = 'none';
+            libraryFolderModalState = null;
+        }
+
+        async function submitLibraryFolderModal() {
+            const errorEl = document.getElementById('libraryFolderModalError');
+            const name = document.getElementById('libraryFolderNameInput').value.trim();
+            errorEl.textContent = '';
+            if (!name) {
+                errorEl.textContent = 'Folder name is required.';
+                return;
+            }
+
+            try {
+                let res;
+                if (libraryFolderModalState.mode === 'create') {
+                    res = await fetch(BASE + '/api/library/folders', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, parent_id: libraryFolderModalState.parentId })
                     });
+                } else {
+                    res = await fetch(BASE + `/api/library/folders/${libraryFolderModalState.folderId}/rename`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name })
+                    });
+                }
+                const data = await res.json();
+                if (data.error) {
+                    errorEl.textContent = data.error;
+                    return;
+                }
+                closeLibraryFolderModal();
+                refreshLibrary();
+            } catch (err) {
+                errorEl.textContent = 'Request failed. Please try again.';
             }
         }
 
-        function showMoveDialog(fileId) {
-            fetch(BASE + '/api/library/files').then(r => r.json()).then(data => {
-                const allFolders = data.folders || [];
-                if (!allFolders.length) {
-                    alert('No folders to move to. Create a folder first.');
-                    return;
+        function startRenameFolder(folderId, folderName) {
+            libraryFolderModalState = {
+                mode: 'rename',
+                folderId,
+                parentId: null,
+                folderName
+            };
+            document.getElementById('libraryFolderModalTitle').textContent = 'Rename Folder';
+            document.getElementById('libraryFolderModalContext').textContent = 'Update folder name';
+            document.getElementById('libraryFolderModalSubmitBtn').textContent = 'Save';
+            document.getElementById('libraryFolderNameInput').value = folderName;
+            document.getElementById('libraryFolderModalError').textContent = '';
+            document.getElementById('libraryFolderOverlay').style.display = 'flex';
+            document.getElementById('libraryFolderNameInput').focus();
+        }
+
+        async function deleteFolder(folderId, folderName) {
+            if (!confirm('Delete folder "' + folderName + '" and all nested folders? Files will move to root.')) return;
+            const res = await fetch(BASE + `/api/library/folders/${folderId}/delete`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.error) alert(data.error);
+            else refreshLibrary();
+        }
+
+        async function openLibraryMoveModal(itemType, itemId, itemName) {
+            libraryMoveModalState = { type: itemType, id: itemId, name: itemName };
+            document.getElementById('libraryMoveModalTitle').textContent = itemType === 'file' ? 'Move File' : 'Move Folder';
+            document.getElementById('libraryMoveModalContext').textContent = itemName ? ('Moving: ' + itemName) : 'Choose destination';
+            document.getElementById('libraryMoveModalError').textContent = '';
+
+            await refreshLibraryFolderTree();
+            populateLibraryMoveSelect();
+            document.getElementById('libraryMoveOverlay').style.display = 'flex';
+        }
+
+        function populateLibraryMoveSelect() {
+            const select = document.getElementById('libraryMoveSelect');
+            const flattened = flattenFolderTree();
+            const excludeDescendants = libraryMoveModalState && libraryMoveModalState.type === 'folder'
+                ? getFolderDescendants(libraryMoveModalState.id)
+                : new Set();
+
+            let html = '<option value="">Root (no folder)</option>';
+            for (const f of flattened) {
+                if (libraryMoveModalState && libraryMoveModalState.type === 'folder') {
+                    if (f.id === libraryMoveModalState.id) continue;
+                    if (excludeDescendants.has(f.id)) continue;
                 }
-                const choices = ['Root (no folder)', ...allFolders.map(f => f.name)];
-                const choice = prompt('Move to folder:\n' + choices.map((c, i) => i + ': ' + c).join('\n') + '\n\nEnter number:');
-                if (choice === null) return;
-                const idx = parseInt(choice);
-                if (isNaN(idx) || idx < 0 || idx >= choices.length) return;
-                const targetFolderId = idx === 0 ? null : allFolders[idx - 1].id;
-                fetch(BASE + `/api/library/files/${fileId}/move`, {
+                const indent = '&nbsp;'.repeat(f.depth * 4);
+                html += `<option value="${f.id}">${indent}${escapeHtml(f.name)}</option>`;
+            }
+            select.innerHTML = html;
+        }
+
+        function closeLibraryMoveModal() {
+            document.getElementById('libraryMoveOverlay').style.display = 'none';
+            libraryMoveModalState = null;
+        }
+
+        async function submitLibraryMoveModal() {
+            const err = document.getElementById('libraryMoveModalError');
+            err.textContent = '';
+            if (!libraryMoveModalState) return;
+
+            const selected = document.getElementById('libraryMoveSelect').value;
+            const destinationId = selected === '' ? null : parseInt(selected, 10);
+            const isFile = libraryMoveModalState.type === 'file';
+            const url = isFile
+                ? `${BASE}/api/library/files/${libraryMoveModalState.id}/move`
+                : `${BASE}/api/library/folders/${libraryMoveModalState.id}/move`;
+            const payload = isFile
+                ? { folder_id: destinationId }
+                : { parent_id: destinationId };
+
+            try {
+                const res = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ folder_id: targetFolderId })
-                }).then(r => r.json()).then(d => {
-                    if (d.error) alert(d.error);
-                    else refreshLibrary();
+                    body: JSON.stringify(payload)
                 });
-            });
+                const data = await res.json();
+                if (data.error) {
+                    err.textContent = data.error;
+                    return;
+                }
+                closeLibraryMoveModal();
+                refreshLibrary();
+            } catch (e) {
+                err.textContent = 'Move failed. Please try again.';
+            }
+        }
+
+        function showMoveDialog(fileId, fileName) {
+            openLibraryMoveModal('file', fileId, fileName || 'File');
+        }
+
+        function showMoveFolderDialog(folderId, folderName) {
+            openLibraryMoveModal('folder', folderId, folderName || 'Folder');
+        }
+
+        function onLibraryDragStart(event, type, id, name) {
+            libraryDragState = { type, id, name };
+            event.currentTarget.classList.add('dragging');
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', `${type}:${id}`);
+        }
+
+        function onLibraryDragEnd(event) {
+            event.currentTarget.classList.remove('dragging');
+            document.querySelectorAll('.library-drop-target.drag-over').forEach(el => el.classList.remove('drag-over'));
+            libraryDragState = null;
+        }
+
+        function onLibraryDragOver(event) {
+            if (!libraryDragState) return;
+            event.preventDefault();
+            event.currentTarget.classList.add('drag-over');
+        }
+
+        function onLibraryDragLeave(event) {
+            event.currentTarget.classList.remove('drag-over');
+        }
+
+        async function onLibraryDropToFolder(event, folderId) {
+            event.preventDefault();
+            event.currentTarget.classList.remove('drag-over');
+            if (!libraryDragState) return;
+
+            if (libraryDragState.type === 'file') {
+                await fetch(BASE + `/api/library/files/${libraryDragState.id}/move`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder_id: folderId })
+                });
+            } else {
+                await fetch(BASE + `/api/library/folders/${libraryDragState.id}/move`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ parent_id: folderId })
+                });
+            }
+            refreshLibrary();
+        }
+
+        async function onLibraryDropToRoot(event) {
+            event.preventDefault();
+            event.currentTarget.classList.remove('drag-over');
+            if (!libraryDragState) return;
+
+            if (libraryDragState.type === 'file') {
+                await fetch(BASE + `/api/library/files/${libraryDragState.id}/move`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder_id: null })
+                });
+            } else {
+                await fetch(BASE + `/api/library/folders/${libraryDragState.id}/move`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ parent_id: null })
+                });
+            }
+            refreshLibrary();
         }
 
         function deleteLibraryFile(fileId) {

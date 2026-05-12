@@ -1198,6 +1198,14 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         parent_id = data.get("parent_id")
         return jsonify(file_library.create_folder(name, parent_id))
 
+    @app.route(prefix + "/api/library/folders/tree")
+    @app.route("/api/library/folders/tree")
+    @login_required
+    def library_folder_tree():
+        if not file_library:
+            return jsonify({"folders": []})
+        return jsonify({"folders": file_library.get_all_folders()})
+
     @app.route(prefix + "/api/library/folders/<int:folder_id>/rename", methods=["POST"])
     @app.route("/api/library/folders/<int:folder_id>/rename", methods=["POST"])
     @login_required
@@ -1207,6 +1215,16 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         data = request.get_json(silent=True) or {}
         name = data.get("name", "").strip()
         return jsonify(file_library.rename_folder(folder_id, name))
+
+    @app.route(prefix + "/api/library/folders/<int:folder_id>/move", methods=["POST"])
+    @app.route("/api/library/folders/<int:folder_id>/move", methods=["POST"])
+    @login_required
+    def library_move_folder(folder_id):
+        if not file_library:
+            return jsonify({"error": "Library not available"}), 500
+        data = request.get_json(silent=True) or {}
+        parent_id = data.get("parent_id")
+        return jsonify(file_library.move_folder(folder_id, parent_id))
 
     @app.route(prefix + "/api/library/folders/<int:folder_id>/delete", methods=["POST", "DELETE"])
     @app.route("/api/library/folders/<int:folder_id>/delete", methods=["POST", "DELETE"])

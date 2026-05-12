@@ -72,6 +72,27 @@ class FileLibrary:
 
     # ── Folder operations ─────────────────────────────────
 
+    def _folder_exists(self, conn: sqlite3.Connection, folder_id: int) -> bool:
+        row = conn.execute("SELECT id FROM folders WHERE id = ?", (folder_id,)).fetchone()
+        return bool(row)
+
+    def _folder_name(self, conn: sqlite3.Connection, folder_id: int) -> Optional[str]:
+        row = conn.execute("SELECT name FROM folders WHERE id = ?", (folder_id,)).fetchone()
+        return row["name"] if row else None
+
+    def _is_descendant(self, conn: sqlite3.Connection, candidate_id: int, ancestor_id: int) -> bool:
+        """Return True when candidate_id is inside ancestor_id subtree."""
+        current_id = candidate_id
+        while current_id is not None:
+            row = conn.execute("SELECT parent_id FROM folders WHERE id = ?", (current_id,)).fetchone()
+            if not row:
+                return False
+            parent_id = row["parent_id"]
+            if parent_id == ancestor_id:
+                return True
+            current_id = parent_id
+        return False
+
     def create_folder(self, name: str, parent_id: Optional[int] = None) -> dict:
         name = name.strip()
         if not name:
@@ -80,6 +101,9 @@ class FileLibrary:
             conn = self._get_conn()
             now = datetime.now(timezone.utc).isoformat()
             try:
+                if parent_id is not None and not self._folder_exists(conn, parent_id):
+                    conn.close()
+                    return {"ok": False, "error": "Parent folder not found"}
                 conn.execute(
                     "INSERT INTO folders (name, parent_id, created_at) VALUES (?, ?, ?)",
                     (name, parent_id, now),
@@ -130,6 +154,57 @@ class FileLibrary:
             ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
+
+    def get_all_folders(self) -> list:
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM folders ORDER BY CASE WHEN parent_id IS NULL THEN 0 ELSE 1 END, parent_id, name"
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def move_folder(self, folder_id: int, parent_id: Optional[int]) -> dict:
+        with self._lock:
+            conn = self._get_conn()
+            if not self._folder_exists(conn, folder_id):
+                conn.close()
+                return {"ok": False, "error": "Folder not found"}
+
+            if parent_id is not None and not self._folder_exists(conn, parent_id):
+                conn.close()
+                return {"ok": False, "error": "Destination folder not found"}
+
+            if parent_id == folder_id:
+                conn.close()
+                return {"ok": False, "error": "Cannot move a folder into itself"}
+
+            if parent_id is not None and self._is_descendant(conn, parent_id, folder_id):
+                conn.close()
+                return {"ok": False, "error": "Cannot move a folder into its own child"}
+
+            folder_name = self._folder_name(conn, folder_id)
+            try:
+                if parent_id is None:
+                    conflict = conn.execute(
+                        "SELECT id FROM folders WHERE name = ? AND parent_id IS NULL AND id != ?",
+                        (folder_name, folder_id),
+                    ).fetchone()
+                else:
+                    conflict = conn.execute(
+                        "SELECT id FROM folders WHERE name = ? AND parent_id = ? AND id != ?",
+                        (folder_name, parent_id, folder_id),
+                    ).fetchone()
+                if conflict:
+                    conn.close()
+                    return {"ok": False, "error": "A folder with that name already exists in destination"}
+
+                conn.execute("UPDATE folders SET parent_id = ? WHERE id = ?", (parent_id, folder_id))
+                conn.commit()
+                conn.close()
+                return {"ok": True}
+            except sqlite3.IntegrityError:
+                conn.close()
+                return {"ok": False, "error": "A folder with that name already exists in destination"}
 
     # ── File operations ───────────────────────────────────
 
@@ -198,6 +273,15 @@ class FileLibrary:
     def move_file(self, file_id: int, folder_id: Optional[int]) -> dict:
         with self._lock:
             conn = self._get_conn()
+            row = conn.execute("SELECT id FROM files WHERE id = ?", (file_id,)).fetchone()
+            if not row:
+                conn.close()
+                return {"ok": False, "error": "File not found"}
+
+            if folder_id is not None and not self._folder_exists(conn, folder_id):
+                conn.close()
+                return {"ok": False, "error": "Destination folder not found"}
+
             conn.execute("UPDATE files SET folder_id = ? WHERE id = ?", (folder_id, file_id))
             conn.commit()
             conn.close()
