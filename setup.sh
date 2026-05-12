@@ -232,7 +232,7 @@ ok "Service installed (the-print-farm.service)"
 
 # ── Apache reverse proxy ─────────────────────────────────
 info "Configuring Apache reverse proxy..."
-a2enmod proxy proxy_http proxy_wstunnel rewrite > /dev/null 2>&1 || true
+a2enmod proxy proxy_http proxy_wstunnel rewrite headers > /dev/null 2>&1 || true
 
 # Determine the web port from config
 WEB_PORT=$(./venv/bin/python -c "
@@ -320,6 +320,7 @@ else:
             f.write(f'    # OrcaSlicer per-printer proxy: {name}\n')
             f.write(f'    ProxyPass /api http://127.0.0.1:${WEB_PORT}/{name}/api\n')
             f.write(f'    ProxyPassReverse /api http://127.0.0.1:${WEB_PORT}/{name}/api\n')
+            f.write(f'    Header always set Access-Control-Allow-Origin \"*\"\n')
             f.write(f'</VirtualHost>\n')
         subprocess.run(['a2ensite', f'printer-{safe}'], capture_output=True)
         if f'Listen {port}' not in ports_content:
