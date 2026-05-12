@@ -151,6 +151,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             f"    # OrcaSlicer per-printer proxy: {printer_name}\n"
             f"    ProxyPass /api http://127.0.0.1:{web_port}/{printer_name}/api\n"
             f"    ProxyPassReverse /api http://127.0.0.1:{web_port}/{printer_name}/api\n"
+            f"    Header always set Access-Control-Allow-Origin \"*\"\n"
             f"</VirtualHost>\n"
         )
         try:
