@@ -2161,6 +2161,24 @@
 
             <!-- Software Update -->
             <div class="setup-section" style="max-width:700px; margin-top:32px;">
+                <h3 style="margin-bottom:16px;">Display Preferences</h3>
+                <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
+                    Controls how dates and times are shown across the dashboard.
+                </p>
+                <div style="display:flex; flex-direction:column; gap:14px;">
+                    <div>
+                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Timezone</label>
+                        <select id="uiTimezone" class="ad-input" style="max-width:320px;"></select>
+                        <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Leave blank to auto-detect from your browser.</div>
+                    </div>
+                    <div style="display:flex; gap:8px; margin-top:4px;">
+                        <button class="btn btn-success" onclick="saveUiConfig()">Save</button>
+                    </div>
+                    <div id="uiConfigResult" style="font-size:13px; margin-top:2px;"></div>
+                </div>
+            </div>
+
+            <div class="setup-section" style="max-width:700px; margin-top:32px;">
                 <h3 style="margin-bottom:16px;">Software Update</h3>
                 <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
                     Check for updates from the Git repository and apply them.
@@ -3140,6 +3158,60 @@
             }
         }
 
+        // ── UI Preferences ───────────────────────────────────
+        (function populateTimezoneDropdown() {
+            const sel = document.getElementById('uiTimezone');
+            if (!sel) return;
+            const zones = Intl.supportedValuesOf ? Intl.supportedValuesOf('timeZone') : [];
+            const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const opt0 = document.createElement('option');
+            opt0.value = '';
+            opt0.textContent = `Auto-detect (${browserTz})`;
+            sel.appendChild(opt0);
+            zones.forEach(tz => {
+                const opt = document.createElement('option');
+                opt.value = tz;
+                opt.textContent = tz;
+                sel.appendChild(opt);
+            });
+        })();
+
+        async function loadUiConfig() {
+            try {
+                const res = await fetch(BASE + '/api/ui/config');
+                if (!res.ok) return;
+                const data = await res.json();
+                window._uiTimezone = data.timezone || '';
+                window._uiLocale = data.locale || 'en-AU';
+                const sel = document.getElementById('uiTimezone');
+                if (sel) sel.value = data.timezone || '';
+            } catch (e) {}
+        }
+
+        async function saveUiConfig() {
+            const resultEl = document.getElementById('uiConfigResult');
+            const tz = document.getElementById('uiTimezone').value;
+            try {
+                const res = await fetch(BASE + '/api/ui/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ timezone: tz, locale: 'en-AU' }),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    window._uiTimezone = tz;
+                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; Saved</span>';
+                } else {
+                    resultEl.innerHTML = `<span style="color:var(--danger);">${data.message || 'Error'}</span>`;
+                }
+            } catch (e) {
+                resultEl.textContent = 'Failed to save';
+            }
+        }
+
+        // Load UI prefs on page load so formatDate works immediately
+        loadUiConfig();
+
         // ── Notification Settings ────────────────────────────
         async function loadNotificationConfig() {
             try {
@@ -3431,7 +3503,7 @@
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 tab.classList.add('active');
                 document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
-                if (tab.dataset.tab === 'settings') { loadApiKey(); loadADConfig(); populateObicoPrinterDropdown(); loadSpoolmanConfig(); loadPoolConfig(); loadNotificationConfig(); }
+                if (tab.dataset.tab === 'settings') { loadApiKey(); loadADConfig(); populateObicoPrinterDropdown(); loadSpoolmanConfig(); loadPoolConfig(); loadNotificationConfig(); loadUiConfig(); }
                 if (tab.dataset.tab === 'library') refreshLibrary();
             });
         });
@@ -4615,9 +4687,10 @@
         function formatDate(iso) {
             if (!iso) return '--';
             const d = new Date(iso);
-            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-            return d.toLocaleDateString('en-AU', {timeZone: tz}) + ' ' +
-                   d.toLocaleTimeString('en-AU', {hour: '2-digit', minute: '2-digit', timeZone: tz});
+            const tz = window._uiTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const locale = window._uiLocale || 'en-AU';
+            return d.toLocaleDateString(locale, {timeZone: tz}) + ' ' +
+                   d.toLocaleTimeString(locale, {hour: '2-digit', minute: '2-digit', timeZone: tz});
         }
 
         function formatDuration(seconds) {

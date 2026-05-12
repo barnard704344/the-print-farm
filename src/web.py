@@ -1780,6 +1780,43 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         except Exception as e:
             return jsonify({"ok": False, "message": str(e)}), 500
 
+    # ── UI Preferences API ────────────────────────────────
+
+    @app.route(prefix + "/api/ui/config", methods=["GET"])
+    @app.route("/api/ui/config", methods=["GET"])
+    @login_required
+    def ui_get_config():
+        """Get UI preferences (timezone, locale, etc.)."""
+        ui = app_config.get("ui", {})
+        return jsonify({
+            "timezone": ui.get("timezone", ""),
+            "locale": ui.get("locale", "en-AU"),
+        })
+
+    @app.route(prefix + "/api/ui/config", methods=["POST"])
+    @app.route("/api/ui/config", methods=["POST"])
+    @admin_required
+    def ui_save_config():
+        """Save UI preferences to config.yaml."""
+        data = request.get_json(silent=True) or {}
+        config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
+        try:
+            with open(config_path) as f:
+                file_config = yaml.safe_load(f) or {}
+            ui = file_config.get("ui", {})
+            if "timezone" in data:
+                ui["timezone"] = data["timezone"].strip()
+            if "locale" in data:
+                ui["locale"] = data["locale"].strip()
+            file_config["ui"] = ui
+            with open(config_path, "w") as f:
+                yaml.dump(file_config, f, default_flow_style=False, sort_keys=False)
+            app_config["ui"] = ui
+            return jsonify({"ok": True})
+        except Exception as e:
+            logger.error(f"Failed to save UI config: {e}")
+            return jsonify({"ok": False, "message": str(e)}), 500
+
     # ── Spoolman Config API ───────────────────────────────
 
     @app.route(prefix + "/api/spoolman/config", methods=["GET"])
