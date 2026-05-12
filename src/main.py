@@ -327,17 +327,18 @@ def cmd_run(args, config: dict):
         else:
             print(f"WARNING: Spoolman configured but unreachable at {spoolman_url}")
 
+    # Virtual printers — start first so DHCP IPs are known before web app init
+    vp_manager = VirtualPrinterManager()
+    uploads_dir = queue_cfg.get("upload_dir", "./uploads")
+    vp_manager.start_all(printers, farm, queue, uploads_dir)
+
     app = create_app(farm, queue, camera_manager=camera_mgr,
                      api_key=web_cfg.get("api_key", ""),
                      admin_password=web_cfg.get("admin_password", ""),
                      config=config, file_library=library,
-                     spoolman_client=spoolman)
+                     spoolman_client=spoolman,
+                     vp_manager=vp_manager)
     start_web_server(app, host=host, port=port)
-
-    # Virtual printers — emulate each Bambu printer on a virtual IP for Orca sync
-    vp_manager = VirtualPrinterManager()
-    uploads_dir = queue_cfg.get("upload_dir", "./uploads")
-    vp_manager.start_all(printers, farm, queue, uploads_dir)
     print(f"Dashboard: http://{host}:{port}")
 
     # Notifications

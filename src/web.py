@@ -36,7 +36,7 @@ def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin_password=None, config=None, file_library=None, spoolman_client=None):
+def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin_password=None, config=None, file_library=None, spoolman_client=None, vp_manager=None):
     """Create the Flask app with references to farm manager, job queue, and camera manager."""
     app = Flask(
         __name__,
@@ -50,8 +50,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     if config is None:
         config = {}
     app_config = config
-
-    # Support running behind a reverse proxy at /the-print-farm
+    _vp_manager = vp_manager  # VirtualPrinterManager, may be None
     prefix = os.environ.get("APP_PREFIX", "/the-print-farm")
 
     def _get_ad_config():
@@ -377,15 +376,22 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         return None
 
     def _get_printer_config_fields(printer_name):
-        """Return virtual_ip, serial, and access_code from config for a printer."""
+        """Return virtual_ip (live from vp_manager), serial, and access_code."""
+        serial = ""
+        access_code = ""
         for p in app_config.get("printers", []):
             if p.get("name") == printer_name:
-                return {
-                    "virtual_ip": p.get("virtual_ip"),
-                    "serial": p.get("serial", ""),
-                    "access_code": p.get("access_code", ""),
-                }
-        return {}
+                serial = p.get("serial", "")
+                access_code = p.get("access_code", "")
+                break
+        # Live virtual IP from running server (DHCP-assigned)
+        virtual_ip = None
+        if _vp_manager:
+            for srv in _vp_manager._servers:
+                if srv.printer_name == printer_name:
+                    virtual_ip = srv.virtual_ip
+                    break
+        return {"virtual_ip": virtual_ip, "serial": serial, "access_code": access_code}
 
     @app.route(prefix + "/api/farm/status")
     @app.route("/api/farm/status")

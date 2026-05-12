@@ -149,7 +149,7 @@ def _ensure_cert(cert_dir: str, name: str):
                     "openssl", "req", "-newkey", "rsa:2048", "-nodes",
                     "-keyout", keyfile, "-x509", "-days", "3650",
                     "-out", certfile,
-                    "-subj", f"/CN=BambuVirtual/{name}",
+                    "-subj", f"/CN=BambuVirtual-{safe}",
                 ],
                 capture_output=True, check=True,
             )
@@ -161,29 +161,108 @@ def _ensure_cert(cert_dir: str, name: str):
 
 
 # ---------------------------------------------------------------------------
-# IP alias management
+# Network interface management — macvlan + DHCP
 # ---------------------------------------------------------------------------
 
-def _add_ip_alias(ip: str, nic: str):
-    try:
-        subprocess.run(
-            ["ip", "addr", "add", f"{ip}/22", "dev", nic],
-            capture_output=True,
-        )
-        logger.info(f"Added IP alias {ip} on {nic}")
-    except Exception as e:
-        logger.warning(f"Could not add IP alias {ip}: {e}")
+def _iface_name(printer_name: str) -> str:
+    """Derive a <=15-char interface name from printer name."""
+    safe = "".join(c for c in printer_name if c.isalnum() or c in "-_")[:9]
+    return f"vbbl-{safe}"
 
 
-def _remove_ip_alias(ip: str, nic: str):
+def _setup_macvlan_dhcp(printer_name: str, nic: str) -> Optional[str]:
+    """
+    Create a macvlan sub-interface on *nic*, obtain a DHCP lease, and return
+    the assigned IP address.  Returns None on failure.
+    """
+    iface = _iface_name(printer_name)
+
+    # Tear down any leftover interface from a previous run
+    subprocess.run(["ip", "link", "del", iface], capture_output=True)
+
+    # Create macvlan (bridge mode so it can talk to the host)
+    r = subprocess.run(
+        ["ip", "link", "add", iface, "link", nic, "type", "macvlan", "mode", "bridge"],
+        capture_output=True,
+    )
+    if r.returncode != 0:
+        logger.error(f"[{printer_name}] macvlan create failed: {r.stderr.decode().strip()}")
+        return None
+
+    subprocess.run(["ip", "link", "set", iface, "up"], capture_output=True)
+
+    # Get DHCP lease — use a no-op script so samba/other hooks don't interfere,
+    # then apply the IP ourselves via Python (we have CAP_NET_ADMIN).
+    lease_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "dhcp")
+    os.makedirs(lease_dir, exist_ok=True)
+    lease_file = os.path.join(lease_dir, f"{iface}.leases")
+    pid_file = os.path.join(lease_dir, f"{iface}.pid")
+    # No-op script: dhclient sends DISCOVER/REQUEST/ACK but doesn't configure the
+    # interface itself — we read the lease file and apply the IP manually.
+    noop_script = os.path.join(lease_dir, "dhclient-noop")
+    if not os.path.exists(noop_script):
+        with open(noop_script, "w") as f:
+            f.write("#!/bin/sh\nexit 0\n")
+        os.chmod(noop_script, 0o755)
+    r = subprocess.run(
+        ["dhclient", "-1", "-v", "-lf", lease_file, "-pf", pid_file,
+         "-sf", noop_script, iface],
+        capture_output=True, timeout=30,
+    )
+    if r.returncode != 0:
+        logger.error(f"[{printer_name}] dhclient failed: {r.stderr.decode().strip()}")
+        subprocess.run(["ip", "link", "del", iface], capture_output=True)
+        return None
+
+    # Parse IP, netmask and router from lease file
+    assigned_ip = None
+    prefix_len = "24"
+    router = None
     try:
-        subprocess.run(
-            ["ip", "addr", "del", f"{ip}/22", "dev", nic],
-            capture_output=True,
-        )
-        logger.info(f"Removed IP alias {ip} on {nic}")
-    except Exception as e:
-        logger.warning(f"Could not remove IP alias {ip}: {e}")
+        content = open(lease_file).read()
+        for line in content.splitlines():
+            line = line.strip().rstrip(";")
+            if line.startswith("fixed-address"):
+                assigned_ip = line.split()[1]
+            elif line.startswith("option subnet-mask"):
+                mask = line.split()[2]
+                # Convert dotted mask to prefix length
+                bits = sum(bin(int(x)).count("1") for x in mask.split("."))
+                prefix_len = str(bits)
+            elif line.startswith("option routers"):
+                router = line.split()[2]
+    except Exception:
+        pass
+
+    if not assigned_ip:
+        logger.error(f"[{printer_name}] No IP in DHCP lease file")
+        subprocess.run(["ip", "link", "del", iface], capture_output=True)
+        return None
+
+    # Apply IP to the interface ourselves (CAP_NET_ADMIN)
+    subprocess.run(["ip", "addr", "add", f"{assigned_ip}/{prefix_len}", "dev", iface],
+                   capture_output=True)
+    if router:
+        subprocess.run(["ip", "route", "add", "default", "via", router,
+                        "dev", iface, "metric", "200"], capture_output=True)
+
+    logger.info(f"[{printer_name}] macvlan {iface} assigned IP {assigned_ip}/{prefix_len}")
+    return assigned_ip
+
+
+def _teardown_macvlan(printer_name: str):
+    iface = _iface_name(printer_name)
+    lease_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "dhcp")
+    lease_file = os.path.join(lease_dir, f"{iface}.leases")
+    pid_file = os.path.join(lease_dir, f"{iface}.pid")
+    noop_script = os.path.join(lease_dir, "dhclient-noop")
+    subprocess.run(
+        ["dhclient", "-r", "-lf", lease_file, "-pf", pid_file, "-sf", noop_script, iface],
+        capture_output=True,
+    )
+    subprocess.run(["ip", "addr", "flush", "dev", iface], capture_output=True)
+    subprocess.run(["ip", "link", "del", iface], capture_output=True)
+    logger.info(f"[{printer_name}] Removed macvlan interface {iface}")
 
 
 # ---------------------------------------------------------------------------
@@ -825,19 +904,21 @@ def _ssdp_broadcast_loop(name: str, virtual_ip: str, serial: str,
 
 class VirtualPrinterServer:
     """
-    Emulates one BambuLab P1S on the LAN at ``virtual_ip``.
+    Emulates one BambuLab P1S on the LAN.
 
-    Real printer connection is untouched — this reads live state from it.
+    Creates a macvlan sub-interface, obtains a DHCP lease, then binds
+    MQTT (8883) and FTP (990) on that IP.  The real printer connection is
+    untouched — state is read from it.
     """
 
     def __init__(self, printer_cfg: dict, farm_manager, job_queue,
                  uploads_dir: str, cert_dir: str = "config/certs"):
         self.printer_name = printer_cfg["name"]
-        self.virtual_ip = printer_cfg["virtual_ip"]
         self.virtual_nic = printer_cfg.get("virtual_nic", "eth0")
         self.serial = printer_cfg.get("serial", "")
         self.access_code = printer_cfg.get("access_code", "")
         self.model = printer_cfg.get("model", "3DPrinter-P1S-v1")
+        self.virtual_ip: Optional[str] = None  # assigned after DHCP
         self._farm = farm_manager
         self._jq = job_queue
         self._uploads = uploads_dir
@@ -853,9 +934,12 @@ class VirtualPrinterServer:
             logger.error(f"[{self.printer_name}] Cannot start virtual printer: no TLS cert")
             return
 
-        # Add IP alias
-        _add_ip_alias(self.virtual_ip, self.virtual_nic)
-        time.sleep(0.3)  # Allow kernel to register the alias
+        # Create macvlan interface and get DHCP IP
+        ip = _setup_macvlan_dhcp(self.printer_name, self.virtual_nic)
+        if not ip:
+            logger.error(f"[{self.printer_name}] Cannot start virtual printer: DHCP failed")
+            return
+        self.virtual_ip = ip
 
         # MQTT broker
         self._mqtt = VirtualMQTTBroker(
@@ -931,7 +1015,7 @@ class VirtualPrinterServer:
             self._mqtt.stop()
         if self._ftp:
             self._ftp.stop()
-        _remove_ip_alias(self.virtual_ip, self.virtual_nic)
+        _teardown_macvlan(self.printer_name)
         logger.info(f"[{self.printer_name}] Virtual printer stopped")
 
 
@@ -940,7 +1024,7 @@ class VirtualPrinterServer:
 # ---------------------------------------------------------------------------
 
 class VirtualPrinterManager:
-    """Starts a VirtualPrinterServer for every printer that has virtual_ip set."""
+    """Starts a VirtualPrinterServer for every BambuLab printer."""
 
     def __init__(self):
         self._servers: list = []
@@ -948,16 +1032,16 @@ class VirtualPrinterManager:
     def start_all(self, printer_configs: list, farm_manager, job_queue,
                   uploads_dir: str, cert_dir: str = "config/certs"):
         for cfg in printer_configs:
-            if not cfg.get("virtual_ip"):
-                continue
             if cfg.get("type", "bambulab").lower() != "bambulab":
-                continue  # Only Bambu printers
+                continue
+            if cfg.get("virtual_printer") is False:
+                continue  # Opt-out via virtual_printer: false
             srv = VirtualPrinterServer(cfg, farm_manager, job_queue,
                                        uploads_dir, cert_dir)
             srv.start()
             self._servers.append(srv)
         if not self._servers:
-            logger.info("Virtual printers: none configured (add virtual_ip to printer config to enable)")
+            logger.info("Virtual printers: no BambuLab printers configured")
 
     def stop_all(self):
         for srv in self._servers:
