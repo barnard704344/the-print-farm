@@ -1698,25 +1698,18 @@
                 <input type="file" id="fileInput" accept=".gcode,.3mf" style="display:none" multiple>
             </div>
 
-            <h2 style="font-size:16px; margin:24px 0 12px;">
-                <span id="queueStats" style="font-size:12px; color:var(--text-muted); margin-left:8px;"></span>
-            </h2>
-            <table class="job-table">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>File</th>
-                        <th>Status</th>
-                        <th>Printer</th>
-                        <th>Submitted By</th>
-                        <th>Copies</th>
-                        <th>Priority</th>
-                        <th>Created</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="jobTableBody"></tbody>
-            </table>
+            <div style="margin:16px 0 8px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                <span id="queueStats" style="font-size:12px; color:var(--text-muted);"></span>
+                <div id="bulkToolbar" style="display:none; align-items:center; gap:8px; margin-left:auto;">
+                    <span id="bulkCount" style="font-size:12px; color:var(--text-muted);"></span>
+                    <label style="font-size:12px; display:flex; align-items:center; gap:4px; cursor:pointer;">
+                        <input type="checkbox" id="bulkDeleteLib"> Also delete from library
+                    </label>
+                    <button class="btn btn-danger" onclick="bulkDeleteSelected()">Delete Selected</button>
+                    <button class="btn" onclick="clearBulkSelection()">Clear Selection</button>
+                </div>
+            </div>
+            <div id="jobTableContainer"></div>
         </div>
 
         <!-- File Library Tab -->
@@ -4702,7 +4695,114 @@
 
         const priorityLabels = { 0: 'Normal', 1: 'High', 2: 'Urgent' };
 
-        function renderJobRow(job) {
+        function getWeekLabel(dateStr) {
+            const d = new Date(dateStr);
+            const startOfWeek = (dt) => { const d2 = new Date(dt); d2.setHours(0,0,0,0); d2.setDate(d2.getDate() - d2.getDay()); return d2; };
+            const thisWeek = startOfWeek(new Date());
+            const jobWeek = startOfWeek(d);
+            const diffWeeks = Math.round((thisWeek - jobWeek) / (7 * 86400000));
+            if (diffWeeks === 0) return 'This Week';
+            if (diffWeeks === 1) return 'Last Week';
+            const tz = window._uiTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const locale = window._uiLocale || 'en-AU';
+            return 'Week of ' + jobWeek.toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: tz });
+        }
+
+        function renderJobsGroupedByWeek(jobs) {
+            const container = document.getElementById('jobTableContainer');
+            if (!jobs || jobs.length === 0) {
+                container.innerHTML = '<p style="text-align:center;color:var(--text-muted);margin:24px 0;">No jobs</p>';
+                return;
+            }
+            const groups = [];
+            const groupMap = {};
+            for (const job of jobs) {
+                const label = getWeekLabel(job.created_at);
+                if (!groupMap[label]) { groupMap[label] = []; groups.push({ label, jobs: groupMap[label] }); }
+                groupMap[label].push(job);
+            }
+            const colCount = isAdmin ? 10 : 9;
+            let html = '';
+            for (const group of groups) {
+                const weekId = 'week_' + group.label.replace(/[^a-z0-9]/gi, '_');
+                const isExpanded = group.label === 'This Week';
+                html += `<table class="job-table" style="margin-bottom:24px;">
+                    <thead>
+                        <tr style="background:rgba(255,255,255,0.06);">
+                            <th colspan="${colCount}" style="padding:8px 10px;font-size:13px;font-weight:600;letter-spacing:0;">
+                                <button type="button" id="${weekId}_toggle" onclick="toggleWeekCollapse('${weekId}')" style="margin-right:8px;border:none;background:transparent;color:var(--text);cursor:pointer;font-size:12px;">${isExpanded ? '&#9662;' : '&#9656;'}</button>
+                                ${isAdmin ? `<input type="checkbox" id="${weekId}_all" onchange="toggleWeekSelection('${weekId}')">` : ''}
+                                ${group.label}
+                                <span style="font-weight:400;font-size:11px;color:var(--text-muted);margin-left:6px;">(${group.jobs.length} job${group.jobs.length !== 1 ? 's' : ''})</span>
+                            </th>
+                        </tr>
+                        <tr id="${weekId}_cols" style="${isExpanded ? '' : 'display:none;'}">
+                            ${isAdmin ? '<th style="width:32px;"></th>' : ''}
+                            <th>#</th><th>File</th><th>Status</th><th>Printer</th>
+                            <th>Submitted By</th><th>Copies</th><th>Priority</th><th>Created</th><th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="${weekId}_body" style="${isExpanded ? '' : 'display:none;'}">${group.jobs.map(j => renderJobRow(j, weekId)).join('')}</tbody>
+                </table>`;
+            }
+            container.innerHTML = html;
+        }
+
+        function toggleWeekCollapse(weekId) {
+            const cols = document.getElementById(weekId + '_cols');
+            const body = document.getElementById(weekId + '_body');
+            const toggle = document.getElementById(weekId + '_toggle');
+            if (!cols || !body || !toggle) return;
+            const willExpand = body.style.display === 'none';
+            cols.style.display = willExpand ? '' : 'none';
+            body.style.display = willExpand ? '' : 'none';
+            toggle.innerHTML = willExpand ? '&#9662;' : '&#9656;';
+        }
+
+        function toggleWeekSelection(weekId) {
+            const master = document.getElementById(weekId + '_all');
+            document.querySelectorAll(`.job-select-cb[data-week="${weekId}"]`).forEach(cb => { cb.checked = master.checked; });
+            onJobCheckboxChange();
+        }
+
+        function onJobCheckboxChange() {
+            const checked = document.querySelectorAll('.job-select-cb:checked');
+            const toolbar = document.getElementById('bulkToolbar');
+            const countEl = document.getElementById('bulkCount');
+            if (checked.length > 0) {
+                toolbar.style.display = 'flex';
+                countEl.textContent = `${checked.length} selected`;
+            } else {
+                toolbar.style.display = 'none';
+            }
+        }
+
+        function clearBulkSelection() {
+            document.querySelectorAll('.job-select-cb').forEach(cb => cb.checked = false);
+            document.querySelectorAll('[id$="_all"]').forEach(cb => cb.checked = false);
+            onJobCheckboxChange();
+        }
+
+        async function bulkDeleteSelected() {
+            const checked = [...document.querySelectorAll('.job-select-cb:checked')];
+            if (checked.length === 0) return;
+            if (!confirm(`Delete ${checked.length} job(s)?`)) return;
+            const ids = checked.map(cb => parseInt(cb.dataset.id));
+            const deleteLib = document.getElementById('bulkDeleteLib').checked;
+            try {
+                const res = await fetch(`${BASE}/api/jobs/bulk_delete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids, delete_library: deleteLib })
+                });
+                if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || 'Bulk delete failed'); return; }
+            } catch (e) { alert('Network error during bulk delete'); return; }
+            clearBulkSelection();
+            refreshJobs();
+            if (deleteLib) refreshLibrary();
+        }
+
+        function renderJobRow(job, weekId) {
             const status = job.status;
             const isOwner = isAuthenticated && userName && job.submitted_by === userName;
             const canCancel = (isAdmin || isOwner) && (status === 'queued' || status === 'uploading' || status === 'printing');
@@ -4752,6 +4852,7 @@
 
             return `
                 <tr>
+                    ${isAdmin ? `<td><input type="checkbox" class="job-select-cb" data-id="${job.id}" data-week="${weekId || ''}" onchange="onJobCheckboxChange()"></td>` : ''}
                     <td>${job.id}</td>
                     <td title="${job.original_name}">${job.original_name}</td>
                     <td><span class="job-status job-${status}">${status}</span></td>
@@ -5005,8 +5106,7 @@
                 // Don't re-render while a dropdown is open — it would clobber it mid-interaction
                 if (document.querySelector('.send-dropdown.open')) return;
 
-                document.getElementById('jobTableBody').innerHTML =
-                    data.jobs.map(renderJobRow).join('') || '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);">No jobs</td></tr>';
+                renderJobsGroupedByWeek(data.jobs);
             } catch (err) {
                 console.error('Failed to refresh jobs:', err);
             }

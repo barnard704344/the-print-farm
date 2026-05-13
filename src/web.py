@@ -1126,6 +1126,37 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     # ── File Library API ──────────────────────────────────
 
+        @app.route(prefix + "/api/jobs/bulk_delete", methods=["POST"])
+        @app.route("/api/jobs/bulk_delete", methods=["POST"])
+        @admin_required
+        def bulk_delete_jobs():
+            data = request.get_json(silent=True) or {}
+            ids = data.get("ids", [])
+            delete_lib = bool(data.get("delete_library", False))
+            if not ids or not isinstance(ids, list):
+                return jsonify({"ok": False, "error": "No ids provided"}), 400
+            deleted = 0
+            for job_id in ids:
+                try:
+                    job_id = int(job_id)
+                except (TypeError, ValueError):
+                    continue
+                job = job_queue.get_job(job_id)
+                if job and job["status"] == "printing" and job.get("printer_name"):
+                    printer = farm_manager.get_printer(job["printer_name"])
+                    if printer:
+                        printer.stop_print()
+                ok = job_queue.delete_job(job_id)
+                if ok:
+                    deleted += 1
+                    if delete_lib and file_library and job:
+                        file_path = job.get("file_path", "")
+                        if file_path:
+                            lib_file = file_library.find_by_path(file_path)
+                            if lib_file:
+                                file_library.delete_file(lib_file["id"])
+            return jsonify({"ok": True, "deleted": deleted})
+
     @app.route(prefix + "/api/library/files")
     @app.route("/api/library/files")
     @login_required
