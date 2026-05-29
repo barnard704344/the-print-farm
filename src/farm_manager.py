@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Union type for all supported printer clients
 PrinterClient = Union[BambuClient, KlipperClient]
+FAILED_STATUS_CLEAR_SECONDS = 5.0
 
 
 def create_printer_client(cfg: dict) -> PrinterClient:
@@ -62,6 +63,7 @@ class FarmManager:
         self._ams_tray_configs: Dict[str, Dict[int, int]] = {}
         self._ams_tray_saver = None   # callable(printer, tray_id, spool_id)
         self._ams_tray_deleter = None  # callable(printer, tray_id)
+        self._failed_since: Dict[str, float] = {}
 
         for cfg in (printer_configs or []):
             name = cfg["name"]
@@ -100,9 +102,53 @@ class FarmManager:
     def get_all_printers(self) -> Dict[str, PrinterClient]:
         return dict(self._printers)
 
+    def recheck_printer(self, name: str, timeout: float = 10.0) -> dict:
+        """Refresh or reconnect one printer, returning a user-facing result."""
+        client = self._printers.get(name)
+        if not client:
+            return {"ok": False, "connected": False, "message": "Printer not found"}
+
+        try:
+            if client.is_connected():
+                refresh = getattr(client, "refresh_status", None)
+                if refresh and refresh():
+                    return {
+                        "ok": True,
+                        "connected": client.is_connected(),
+                        "message": "Printer status refreshed",
+                    }
+
+            try:
+                client.disconnect()
+            except Exception as e:
+                logger.debug(f"[{name}] Disconnect before recheck failed: {e}")
+
+            connected = client.connect(timeout=timeout)
+            return {
+                "ok": connected,
+                "connected": connected,
+                "message": "Printer reconnected" if connected else "Printer did not respond",
+            }
+        except Exception as e:
+            logger.error(f"[{name}] Recheck failed: {e}")
+            return {"ok": False, "connected": False, "message": str(e)}
+
     def get_printer_type(self, name: str) -> str:
         """Return 'bambulab' or 'klipper' for a given printer name."""
         return self._printer_types.get(name, "bambulab")
+
+    def _effective_status(self, name: str, client: PrinterClient) -> PrintStatus:
+        """Return farm-facing status, clearing stale FAILED after a short delay."""
+        status = client.state.status
+        if status != PrintStatus.FAILED:
+            self._failed_since.pop(name, None)
+            return status
+
+        now = time.monotonic()
+        first_seen = self._failed_since.setdefault(name, now)
+        if now - first_seen >= FAILED_STATUS_CLEAR_SECONDS:
+            return PrintStatus.IDLE
+        return status
 
     def load_gate_configs(self, job_queue) -> None:
         """Load persisted MMU gate configs from the database into memory."""
@@ -171,13 +217,14 @@ class FarmManager:
         states = {}
         for name, client in self._printers.items():
             s = client.state
+            status = self._effective_status(name, client)
             printer_type = self._printer_types.get(name, "bambulab")
             state = {
                 "name": name,
                 "host": client.host,
                 "type": printer_type,
                 "connected": client.is_connected(),
-                "status": s.status.value,
+                "status": status.value,
                 "gcode_state": s.gcode_state,
                 "mc_percent": s.mc_percent,
                 "mc_remaining_time": s.mc_remaining_time,
@@ -257,7 +304,7 @@ class FarmManager:
         """Return names of printers that are idle and connected."""
         idle = []
         for name, client in self._printers.items():
-            if client.is_connected() and client.state.status in (
+            if client.is_connected() and self._effective_status(name, client) in (
                 PrintStatus.IDLE, PrintStatus.FINISH
             ):
                 idle.append(name)
@@ -268,13 +315,13 @@ class FarmManager:
         total = len(self._printers)
         connected = sum(1 for c in self._printers.values() if c.is_connected())
         printing = sum(
-            1 for c in self._printers.values()
-            if c.is_connected() and c.state.status == PrintStatus.RUNNING
+            1 for name, c in self._printers.items()
+            if c.is_connected() and self._effective_status(name, c) == PrintStatus.RUNNING
         )
         idle = len(self.get_idle_printers())
         errored = sum(
-            1 for c in self._printers.values()
-            if c.is_connected() and c.state.status in (PrintStatus.FAILED, PrintStatus.PAUSE_FILAMENT)
+            1 for name, c in self._printers.items()
+            if c.is_connected() and self._effective_status(name, c) in (PrintStatus.FAILED, PrintStatus.PAUSE_FILAMENT)
         )
         return {
             "total": total,

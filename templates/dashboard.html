@@ -191,6 +191,23 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 12px;
+            gap: 10px;
+        }
+
+        .printer-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+
+        .printer-card-action {
+            padding: 3px 8px;
+            min-height: 24px;
+            font-size: 11px;
+            line-height: 1.2;
+            border-radius: 5px;
         }
 
         .printer-remove-btn,
@@ -609,6 +626,52 @@
             background: none;
             border: none;
             padding: 2px 4px;
+        }
+
+        .printer-details-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+        }
+        .printer-details-section {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+        }
+        .printer-details-section.wide { grid-column: 1 / -1; }
+        .printer-details-section h3 {
+            margin: 0 0 10px;
+            font-size: 12px;
+            color: var(--accent);
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+        .printer-details-row {
+            display: grid;
+            grid-template-columns: minmax(86px, 0.42fr) 1fr;
+            gap: 10px;
+            padding: 4px 0;
+            font-size: 12px;
+            border-bottom: 1px solid rgba(128,128,128,0.12);
+        }
+        .printer-details-row:last-child { border-bottom: none; }
+        .printer-details-label { color: var(--text-muted); }
+        .printer-details-value {
+            color: var(--text);
+            word-break: break-word;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        }
+        .printer-details-pre {
+            max-height: 260px;
+            overflow: auto;
+            padding: 10px;
+            background: #0b0d12;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 11px;
+            line-height: 1.45;
+            white-space: pre-wrap;
         }
 
         /* Happy Hare Modal */
@@ -2199,6 +2262,17 @@
         </div>
     </div>
 
+    <!-- Printer Details Modal -->
+    <div class="modal-overlay" id="printerDetailsOverlay" style="display:none" onclick="if(event.target===this)closePrinterDetails()">
+        <div class="modal" style="max-width:900px; width:94vw; max-height:88vh; overflow:auto;">
+            <div class="modal-header">
+                <h2 style="font-size:18px;">Printer Details — <span id="printerDetailsName"></span></h2>
+                <button class="modal-close" onclick="closePrinterDetails()">&times;</button>
+            </div>
+            <div id="printerDetailsBody"></div>
+        </div>
+    </div>
+
     <!-- Happy Hare Modal -->
     <div class="hh-overlay" id="hhOverlay" style="display:none" onclick="if(event.target===this)closeHappyHareModal()">
         <div class="hh-modal" onclick="event.stopPropagation()">
@@ -3583,8 +3657,12 @@
                             <span class="conn-badge ${connClass}"></span>${name}${typeBadge}
                             ${isAdmin ? `<button class="printer-rename-btn" onclick="renamePrinter('${name}')" title="Rename printer">&#9998;</button>` : ''}
                         </span>
-                        <span class="printer-status ${statusBadge}" data-field="status">${statusLabel}</span>
-                        ${isAdmin ? `<button class="printer-remove-btn" onclick="removePrinter('${name}')" title="Remove printer">&times;</button>` : ''}
+                        <div class="printer-header-actions">
+                            <span class="printer-status ${statusBadge}" data-field="status">${statusLabel}</span>
+                            ${isAuthenticated ? `<button class="btn printer-card-action" onclick="openPrinterDetails('${name}')" title="View printer details">Details</button>` : ''}
+                            ${isAuthenticated ? `<button class="btn printer-card-action" data-recheck="${name}" onclick="recheckPrinter('${name}')" title="Recheck printer connection">Recheck</button>` : ''}
+                            ${isAdmin ? `<button class="printer-remove-btn" onclick="removePrinter('${name}')" title="Remove printer">&times;</button>` : ''}
+                        </div>
                     </div>
                     ${isAdmin ? `<div class="staff-only-toggle" style="display:flex;align-items:center;gap:6px;padding:2px 8px;font-size:11px;">
                         <label style="display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--text-muted);">
@@ -4044,6 +4122,155 @@
 
         async function printerCmd(name, cmd) {
             await apiPost(`${BASE}/api/printer/${encodeURIComponent(name)}/${cmd}`);
+        }
+
+        async function recheckPrinter(name) {
+            const btn = document.querySelector(`[data-recheck="${CSS.escape(name)}"]`);
+            const oldText = btn ? btn.textContent : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Checking...';
+            }
+            try {
+                const res = await fetch(`${BASE}/api/printer/${encodeURIComponent(name)}/recheck`, { method: 'POST' });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.ok) {
+                    alert(data.message || 'Printer did not respond');
+                }
+                await refreshPrinters();
+            } catch (err) {
+                alert('Recheck failed: ' + err.message);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = oldText || 'Recheck';
+                }
+            }
+        }
+
+        function htmlEscape(value) {
+            return String(value ?? '').replace(/[&<>"']/g, ch => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[ch]));
+        }
+
+        function detailValue(value) {
+            if (value === true) return 'Yes';
+            if (value === false) return 'No';
+            if (value === null || value === undefined || value === '') return '—';
+            if (Array.isArray(value)) return value.length ? value.join(', ') : '—';
+            if (typeof value === 'object') return JSON.stringify(value);
+            return value;
+        }
+
+        function detailRows(items) {
+            return items.map(([label, value]) => `
+                <div class="printer-details-row">
+                    <div class="printer-details-label">${htmlEscape(label)}</div>
+                    <div class="printer-details-value">${htmlEscape(detailValue(value))}</div>
+                </div>
+            `).join('');
+        }
+
+        function detailSection(title, rows, wide=false) {
+            return `
+                <div class="printer-details-section ${wide ? 'wide' : ''}">
+                    <h3>${htmlEscape(title)}</h3>
+                    ${detailRows(rows)}
+                </div>
+            `;
+        }
+
+        function openPrinterDetails(name) {
+            const p = (window._farmPrinters || {})[name];
+            if (!p) {
+                alert('Printer details are not loaded yet. Refresh the dashboard and try again.');
+                return;
+            }
+
+            const amsTrays = (p.ams_trays || []).map(t =>
+                `Tray ${Number(t.slot ?? t.id ?? 0) + 1}: ${t.loaded ? (t.type || 'loaded') : 'empty'}${t.color ? ' ' + t.color : ''}${t.active ? ' (active)' : ''}`
+            );
+            const mmuGates = p.mmu && p.mmu.gates ? p.mmu.gates.map(g =>
+                `T${g.gate}: ${g.status === 0 ? 'empty' : (g.material || g.filament_name || 'loaded')}${g.color ? ' ' + g.color : ''}${g.gate === p.mmu.gate ? ' (active)' : ''}`
+            ) : [];
+            const fans = (p.klipper_fans || []).map(f => `${f.name}: ${Math.round((f.speed || 0) * 100)}%`);
+            const leds = (p.klipper_leds || []).map(l => `${l.name}: ${l.on ? 'on' : 'off'}`);
+            const hms = (p.hms || []).map(h => h.msg || h.description || JSON.stringify(h));
+
+            const sections = [
+                detailSection('Connection', [
+                    ['Name', p.name || name],
+                    ['Status', p.connected ? p.status : 'OFFLINE'],
+                    ['Connected', p.connected],
+                    ['Type', p.type],
+                    ['IP / Host', p.host],
+                    ['OrcaSlicer Port', p.orca_port ? `${location.hostname}:${p.orca_port}` : ''],
+                    ['Virtual IP', p.virtual_ip],
+                    ['Staff Only', p.staff_only],
+                ]),
+                detailSection('Identity', [
+                    ['Serial Number', p.serial],
+                    ['Access Code', p.access_code],
+                    ['AMS Serial', p.ams_serial],
+                    ['Nozzle', [p.nozzle_diameter, p.nozzle_type].filter(Boolean).join(' ')],
+                    ['Wi-Fi Signal', p.wifi_signal],
+                    ['Chamber Light', p.chamber_light],
+                ]),
+                detailSection('Current Job', [
+                    ['File', p.subtask_name || 'No active job'],
+                    ['G-code State', p.gcode_state],
+                    ['Progress', p.mc_percent != null ? `${p.mc_percent}%` : ''],
+                    ['Layer', `${p.layer_num || 0}/${p.total_layers || 0}`],
+                    ['Remaining', p.mc_remaining_time ? formatTime(p.mc_remaining_time) : ''],
+                    ['Speed', p.spd_mag != null ? `${p.spd_mag}%` : ''],
+                ]),
+                detailSection('Temperatures', [
+                    ['Nozzle', `${Math.round(p.nozzle_temper || 0)} / ${Math.round(p.nozzle_target_temper || 0)} C`],
+                    ['Bed', `${Math.round(p.bed_temper || 0)} / ${Math.round(p.bed_target_temper || 0)} C`],
+                    ['Chamber', p.chamber_temper ? `${Math.round(p.chamber_temper)} C` : 'N/A'],
+                    ['Cooling Fan', p.cooling_fan_speed],
+                    ['Heatbreak Fan', p.heatbreak_fan_speed],
+                    ['Aux Fan 1', p.big_fan1_speed],
+                    ['Aux Fan 2', p.big_fan2_speed],
+                ]),
+                detailSection('Material Systems', [
+                    ['Has AMS', p.has_ams],
+                    ['AMS Tray Now', p.ams_tray_now],
+                    ['AMS Humidity', p.ams_humidity],
+                    ['AMS Trays', amsTrays],
+                    ['Has MMU', p.has_mmu],
+                    ['MMU Gates', mmuGates],
+                    ['MMU Filament', p.mmu ? p.mmu.filament : ''],
+                    ['MMU Tool', p.mmu ? p.mmu.tool : ''],
+                ], true),
+                detailSection('Klipper / Integrations', [
+                    ['Fans', fans],
+                    ['Lights', leds],
+                    ['Obico', p.obico && p.obico.connected ? `${p.obico.state || 'connected'} ${p.obico.watching ? '(watching)' : ''}` : ''],
+                    ['Adaptive Flow', p.adaptive_flow ? p.adaptive_flow.url : ''],
+                ], true),
+                detailSection('Errors', [
+                    ['Print Error', p.print_error && p.print_error !== 0 ? `0x${Number(p.print_error).toString(16).toUpperCase()}` : 'None'],
+                    ['HMS', hms],
+                ], true),
+            ];
+
+            document.getElementById('printerDetailsName').textContent = name;
+            document.getElementById('printerDetailsBody').innerHTML = `
+                <div class="printer-details-grid">
+                    ${sections.join('')}
+                    <div class="printer-details-section wide">
+                        <h3>Raw Status</h3>
+                        <pre class="printer-details-pre">${htmlEscape(JSON.stringify(p, null, 2))}</pre>
+                    </div>
+                </div>
+            `;
+            document.getElementById('printerDetailsOverlay').style.display = 'flex';
+        }
+
+        function closePrinterDetails() {
+            document.getElementById('printerDetailsOverlay').style.display = 'none';
         }
 
         // ── Temperature & Filament Controls ──────────────────

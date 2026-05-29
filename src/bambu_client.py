@@ -419,6 +419,10 @@ class BambuClient:
             }
         })
 
+    def refresh_status(self) -> bool:
+        """Ask the printer to publish a fresh full status report."""
+        return self.push_status_request()
+
     def upload_file(self, local_path: str, remote_filename: str) -> bool:
         """Upload a G-code file to the printer via implicit FTPS (port 990)."""
         logger.info(f"[{self.name}] Uploading {remote_filename} via FTPS...")

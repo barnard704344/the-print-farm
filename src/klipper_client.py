@@ -138,6 +138,10 @@ class KlipperClient:
 
             self._connected.set()
             self._stop_event.clear()
+            self._has_mmu = False
+            self._fan_objects = []
+            self._led_objects = []
+            self._output_pins = []
 
             # Detect Happy Hare MMU
             try:
@@ -181,10 +185,11 @@ class KlipperClient:
                 pass
 
             # Start background polling thread
-            self._poll_thread = threading.Thread(
-                target=self._poll_loop, daemon=True, name=f"klipper-poll-{self.name}"
-            )
-            self._poll_thread.start()
+            if not self._poll_thread or not self._poll_thread.is_alive():
+                self._poll_thread = threading.Thread(
+                    target=self._poll_loop, daemon=True, name=f"klipper-poll-{self.name}"
+                )
+                self._poll_thread.start()
 
             # Do an initial status fetch
             self._fetch_status()
@@ -207,6 +212,17 @@ class KlipperClient:
 
     def is_connected(self) -> bool:
         return self._connected.is_set()
+
+    def refresh_status(self) -> bool:
+        """Fetch printer status immediately and update the cached state."""
+        try:
+            self._fetch_status()
+            self._connected.set()
+            return True
+        except Exception as e:
+            logger.error(f"[{self.name}] Status refresh failed: {e}")
+            self._handle_connection_loss()
+            return False
 
     # ── Commands ──────────────────────────────────────────────
 
