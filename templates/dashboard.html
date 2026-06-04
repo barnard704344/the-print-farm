@@ -3660,7 +3660,6 @@
                         <div class="printer-header-actions">
                             <span class="printer-status ${statusBadge}" data-field="status">${statusLabel}</span>
                             ${isAuthenticated ? `<button class="btn printer-card-action" onclick="openPrinterDetails('${name}')" title="View printer details">Details</button>` : ''}
-                            ${isAuthenticated ? `<button class="btn printer-card-action" data-recheck="${name}" onclick="recheckPrinter('${name}')" title="Recheck printer connection">Recheck</button>` : ''}
                             ${isAdmin ? `<button class="printer-remove-btn" onclick="removePrinter('${name}')" title="Remove printer">&times;</button>` : ''}
                         </div>
                     </div>
@@ -4122,30 +4121,6 @@
 
         async function printerCmd(name, cmd) {
             await apiPost(`${BASE}/api/printer/${encodeURIComponent(name)}/${cmd}`);
-        }
-
-        async function recheckPrinter(name) {
-            const btn = document.querySelector(`[data-recheck="${CSS.escape(name)}"]`);
-            const oldText = btn ? btn.textContent : '';
-            if (btn) {
-                btn.disabled = true;
-                btn.textContent = 'Checking...';
-            }
-            try {
-                const res = await fetch(`${BASE}/api/printer/${encodeURIComponent(name)}/recheck`, { method: 'POST' });
-                const data = await res.json().catch(() => ({}));
-                if (!res.ok || !data.ok) {
-                    alert(data.message || 'Printer did not respond');
-                }
-                await refreshPrinters();
-            } catch (err) {
-                alert('Recheck failed: ' + err.message);
-            } finally {
-                if (btn) {
-                    btn.disabled = false;
-                    btn.textContent = oldText || 'Recheck';
-                }
-            }
         }
 
         function htmlEscape(value) {

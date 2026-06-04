@@ -102,37 +102,6 @@ class FarmManager:
     def get_all_printers(self) -> Dict[str, PrinterClient]:
         return dict(self._printers)
 
-    def recheck_printer(self, name: str, timeout: float = 10.0) -> dict:
-        """Refresh or reconnect one printer, returning a user-facing result."""
-        client = self._printers.get(name)
-        if not client:
-            return {"ok": False, "connected": False, "message": "Printer not found"}
-
-        try:
-            if client.is_connected():
-                refresh = getattr(client, "refresh_status", None)
-                if refresh and refresh():
-                    return {
-                        "ok": True,
-                        "connected": client.is_connected(),
-                        "message": "Printer status refreshed",
-                    }
-
-            try:
-                client.disconnect()
-            except Exception as e:
-                logger.debug(f"[{name}] Disconnect before recheck failed: {e}")
-
-            connected = client.connect(timeout=timeout)
-            return {
-                "ok": connected,
-                "connected": connected,
-                "message": "Printer reconnected" if connected else "Printer did not respond",
-            }
-        except Exception as e:
-            logger.error(f"[{name}] Recheck failed: {e}")
-            return {"ok": False, "connected": False, "message": str(e)}
-
     def get_printer_type(self, name: str) -> str:
         """Return 'bambulab' or 'klipper' for a given printer name."""
         return self._printer_types.get(name, "bambulab")

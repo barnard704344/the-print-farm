@@ -432,16 +432,6 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             return jsonify({"error": "Printer not found"}), 404
         return jsonify(states[name])
 
-    @app.route(prefix + "/api/printer/<name>/recheck", methods=["POST"])
-    @app.route("/api/printer/<name>/recheck", methods=["POST"])
-    @login_required
-    def printer_recheck(name):
-        result = farm_manager.recheck_printer(name)
-        status = 200 if result.get("ok") else 502
-        if result.get("message") == "Printer not found":
-            status = 404
-        return jsonify(result), status
-
     @app.route(prefix + "/api/printer/<name>/pause", methods=["POST"])
     @app.route("/api/printer/<name>/pause", methods=["POST"])
     @printer_owner_or_admin_required
