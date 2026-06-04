@@ -61,7 +61,8 @@ class JobQueue:
                 started_at TEXT,
                 completed_at TEXT,
                 notes TEXT,
-                submitted_by TEXT NOT NULL DEFAULT ''
+                submitted_by TEXT NOT NULL DEFAULT '',
+                print_time_seconds INTEGER
             );
 
             CREATE TABLE IF NOT EXISTS printer_gate_configs (
@@ -95,21 +96,61 @@ class JobQueue:
             conn.execute("ALTER TABLE jobs ADD COLUMN submitted_by TEXT NOT NULL DEFAULT ''")
             conn.commit()
             logger.info("Migrated jobs table: added submitted_by column")
+        try:
+            conn.execute("SELECT print_time_seconds FROM jobs LIMIT 1")
+        except sqlite3.OperationalError:
+            conn.execute("ALTER TABLE jobs ADD COLUMN print_time_seconds INTEGER")
+            conn.commit()
+            logger.info("Migrated jobs table: added print_time_seconds column")
         conn.close()
+        self._backfill_print_time_estimates()
+
+    def _backfill_print_time_estimates(self):
+        """Populate missing estimates for existing jobs from slicer metadata."""
+        try:
+            from .file_library import parse_gcode_metadata
+        except Exception:
+            return
+
+        conn = self._get_conn()
+        rows = conn.execute(
+            """SELECT id, file_path FROM jobs
+               WHERE print_time_seconds IS NULL OR print_time_seconds = 0"""
+        ).fetchall()
+        updated = 0
+        try:
+            for row in rows:
+                file_path = row["file_path"]
+                if not file_path or not os.path.exists(file_path):
+                    continue
+                meta = parse_gcode_metadata(file_path)
+                estimate = meta.get("print_time_seconds")
+                if estimate:
+                    conn.execute(
+                        "UPDATE jobs SET print_time_seconds = ? WHERE id = ?",
+                        (estimate, row["id"]),
+                    )
+                    updated += 1
+            if updated:
+                conn.commit()
+                logger.info(f"Backfilled print time estimates for {updated} job(s)")
+        finally:
+            conn.close()
 
     def add_job(self, filename: str, original_name: str, file_path: str,
                 copies: int = 1, priority: int = 0, notes: str = "",
-                submitted_by: str = "", printer_name: str = "") -> int:
+                submitted_by: str = "", printer_name: str = "",
+                print_time_seconds: Optional[int] = None) -> int:
         """Add a new job to the queue. Returns the job ID."""
         with self._lock:
             conn = self._get_conn()
             cursor = conn.execute(
                 """INSERT INTO jobs (filename, original_name, file_path, copies_total,
-                   priority, notes, created_at, submitted_by, printer_name)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   priority, notes, created_at, submitted_by, printer_name, print_time_seconds)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (filename, original_name, file_path, copies, priority, notes,
                  datetime.now(timezone.utc).isoformat(), submitted_by,
-                 printer_name or None),
+                 printer_name or None, print_time_seconds),
             )
             job_id = cursor.lastrowid
             conn.commit()
@@ -263,6 +304,7 @@ class JobQueue:
             notes=f"Reprint of job #{job_id}",
             submitted_by=job.get("submitted_by", ""),
             printer_name=job.get("printer_name", ""),
+            print_time_seconds=job.get("print_time_seconds"),
         )
 
     def clone_job_for_printer(self, job_id: int) -> Optional[int]:
@@ -279,6 +321,7 @@ class JobQueue:
             notes=job.get("notes", ""),
             submitted_by=job.get("submitted_by", ""),
             printer_name=job.get("printer_name", ""),
+            print_time_seconds=job.get("print_time_seconds"),
         )
 
     def delete_job(self, job_id: int) -> bool:

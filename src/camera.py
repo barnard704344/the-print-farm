@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 JPEG_START = b'\xff\xd8\xff\xe0'
 JPEG_END = b'\xff\xd9'
+STALE_FRAME_SECONDS = 15
 
 
 class BambuCamera:
@@ -38,6 +39,7 @@ class BambuCamera:
         self.port = port
 
         self._latest_frame: Optional[bytes] = None
+        self._last_frame_at = 0.0
         self._frame_lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
@@ -49,8 +51,27 @@ class BambuCamera:
             return self._latest_frame
 
     @property
+    def latest_frame_with_time(self) -> tuple[Optional[bytes], float]:
+        with self._frame_lock:
+            return self._latest_frame, self._last_frame_at
+
+    @property
+    def last_frame_age(self) -> Optional[float]:
+        with self._frame_lock:
+            if not self._last_frame_at:
+                return None
+            return max(0.0, time.monotonic() - self._last_frame_at)
+
+    @property
     def is_streaming(self) -> bool:
-        return self._thread is not None and self._thread.is_alive() and self._connected
+        age = self.last_frame_age
+        fresh = age is not None and age <= STALE_FRAME_SECONDS
+        return self._thread is not None and self._thread.is_alive() and self._connected and fresh
+
+    @property
+    def is_stale(self) -> bool:
+        age = self.last_frame_age
+        return self._connected and (age is None or age > STALE_FRAME_SECONDS)
 
     def start(self):
         """Start the camera receiver thread."""
@@ -114,11 +135,14 @@ class BambuCamera:
 
             logger.info(f"Camera connected to {self.host}:{self.port}")
             self._connected = True
+            stream_started = time.monotonic()
 
             img = None
             payload_size = 0
 
             while not self._stop_event.is_set():
+                if time.monotonic() - stream_started > STALE_FRAME_SECONDS and self.is_stale:
+                    raise RuntimeError("Camera stream stale")
                 try:
                     data = ssl_sock.recv(4096)
                 except ssl.SSLWantReadError:
@@ -140,6 +164,7 @@ class BambuCamera:
                         if img[:4] == JPEG_START and img[-2:] == JPEG_END:
                             with self._frame_lock:
                                 self._latest_frame = bytes(img)
+                                self._last_frame_at = time.monotonic()
                         else:
                             logger.warning(f"Camera {self.host}: invalid JPEG markers")
                         img = None
@@ -160,6 +185,7 @@ class HttpCamera:
     def __init__(self, url: str):
         self.url = url
         self._latest_frame: Optional[bytes] = None
+        self._last_frame_at = 0.0
         self._frame_lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
@@ -171,8 +197,27 @@ class HttpCamera:
             return self._latest_frame
 
     @property
+    def latest_frame_with_time(self) -> tuple[Optional[bytes], float]:
+        with self._frame_lock:
+            return self._latest_frame, self._last_frame_at
+
+    @property
+    def last_frame_age(self) -> Optional[float]:
+        with self._frame_lock:
+            if not self._last_frame_at:
+                return None
+            return max(0.0, time.monotonic() - self._last_frame_at)
+
+    @property
     def is_streaming(self) -> bool:
-        return self._thread is not None and self._thread.is_alive() and self._connected
+        age = self.last_frame_age
+        fresh = age is not None and age <= STALE_FRAME_SECONDS
+        return self._thread is not None and self._thread.is_alive() and self._connected and fresh
+
+    @property
+    def is_stale(self) -> bool:
+        age = self.last_frame_age
+        return self._connected and (age is None or age > STALE_FRAME_SECONDS)
 
     def start(self):
         if self._thread and self._thread.is_alive():
@@ -216,9 +261,12 @@ class HttpCamera:
         self._connected = True
         buf = b""
         max_buf = 10 * 1024 * 1024  # 10MB safety limit
+        stream_started = time.monotonic()
         for chunk in resp.iter_content(chunk_size=4096):
             if self._stop_event.is_set():
                 break
+            if time.monotonic() - stream_started > STALE_FRAME_SECONDS and self.is_stale:
+                raise RuntimeError("HTTP camera stream stale")
             buf += chunk
             if len(buf) > max_buf:
                 logger.warning(f"HTTP camera {self.url}: buffer exceeded {max_buf} bytes, resetting")
@@ -236,6 +284,7 @@ class HttpCamera:
                 frame = buf[start:end + 2]
                 with self._frame_lock:
                     self._latest_frame = frame
+                    self._last_frame_at = time.monotonic()
                 buf = buf[end + 2:]
 
     def _fetch_snapshot(self, resp):
@@ -252,6 +301,7 @@ class HttpCamera:
             if resp.status_code == 200 and data:
                 with self._frame_lock:
                     self._latest_frame = data
+                    self._last_frame_at = time.monotonic()
                 self._connected = True
         except Exception as e:
             logger.warning(f"HTTP camera snapshot error: {e}")
@@ -268,8 +318,11 @@ class CameraManager:
     def start_camera(self, name: str, host: str, access_code: str, port: int = 6000):
         """Start a BambuLab camera stream for a printer."""
         with self._lock:
-            if name in self._cameras:
-                self._cameras[name].stop()
+            existing = self._cameras.get(name)
+            if existing and existing.is_streaming:
+                return
+            if existing:
+                existing.stop()
             cam = BambuCamera(host=host, access_code=access_code, port=port)
             cam.start()
             self._cameras[name] = cam
@@ -277,8 +330,11 @@ class CameraManager:
     def start_http_camera(self, name: str, url: str):
         """Start an HTTP/MJPEG camera stream (e.g. Klipper webcam)."""
         with self._lock:
-            if name in self._cameras:
-                self._cameras[name].stop()
+            existing = self._cameras.get(name)
+            if existing and existing.is_streaming:
+                return
+            if existing:
+                existing.stop()
             cam = HttpCamera(url=url)
             cam.start()
             self._cameras[name] = cam
@@ -304,10 +360,33 @@ class CameraManager:
             return cam.latest_frame
         return None
 
+    def get_frame_after(self, name: str, after: float, timeout: float = 6.0) -> Optional[bytes]:
+        """Wait for a JPEG frame captured after the given monotonic timestamp."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            cam = self._cameras.get(name)
+            if cam:
+                frame, frame_at = cam.latest_frame_with_time
+                if frame and frame_at > after:
+                    return frame
+            time.sleep(0.2)
+        return None
+
     def is_streaming(self, name: str) -> bool:
         cam = self._cameras.get(name)
         return cam.is_streaming if cam else False
 
     def get_status(self) -> dict:
-        """Get streaming status for all cameras."""
+        """Get simple streaming status for all cameras."""
         return {name: cam.is_streaming for name, cam in self._cameras.items()}
+
+    def get_detailed_status(self) -> dict:
+        """Get streaming, stale, and frame age status for all cameras."""
+        return {
+            name: {
+                "streaming": cam.is_streaming,
+                "stale": cam.is_stale,
+                "last_frame_age": cam.last_frame_age,
+            }
+            for name, cam in self._cameras.items()
+        }

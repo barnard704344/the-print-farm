@@ -39,6 +39,17 @@ queue:
   db_path: ./data/farm.db
   auto_assign: false
 
+# ── Build Plate Detection ────────────────────────────────
+# Optional per-printer empty build plate detection. Configure from Settings.
+plate_detection: {}
+#  P1S-1:
+#    enabled: false
+#    threshold: 12
+#    roi: {x: 0, y: 0, w: 100, h: 100}
+#    prepare_before_check: true   # Bambu: check resting reference first, then move bed for raised inspection
+#    inspection_z: 0              # Bambu P/X: Z0 raises the bed to nozzle/camera inspection height
+#    settle_seconds: 2
+
 # ── Local Users ──────────────────────────────────────────
 # Works with or without Active Directory.
 # When AD is also enabled, local users are checked first.
@@ -50,6 +61,14 @@ local_users: []
 #  - username: student1
 #    password: CHANGE_ME
 #    role: student
+
+# ── Student Print Access ─────────────────────────────────
+# Staff can always print. Students must be on the allowlist and not on the
+# banlist before they can upload, send, or reprint jobs. Match by username
+# or display name; these lists can also be managed from Settings.
+student_access:
+  allowlist: []
+  banlist: []
 
 # ── Active Directory (optional) ──────────────────────────
 # Set enabled: true only if you have an AD/LDAP server.

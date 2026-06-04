@@ -1382,6 +1382,46 @@
         .btn-primary { border-color: var(--info); color: var(--info); }
         .btn-primary:hover { background: rgba(59,130,246,0.1); }
 
+        .plate-action-panel {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+        .plate-action-group {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 12px;
+            background: var(--bg);
+        }
+        .plate-action-group.full {
+            grid-column: 1 / -1;
+        }
+        .plate-action-title {
+            font-size: 11px;
+            line-height: 1;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 8px;
+        }
+        .plate-action-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .plate-action-row .btn {
+            min-height: 32px;
+        }
+        .plate-jog-step {
+            width: 92px;
+        }
+        @media (max-width: 760px) {
+            .plate-action-panel {
+                grid-template-columns: 1fr;
+            }
+        }
+
         /* Job Queue */
         .queue-header {
             display: flex;
@@ -1760,6 +1800,7 @@
                 <p>Drag &amp; drop files here or click to browse</p>
                 <input type="file" id="fileInput" accept=".gcode,.3mf" style="display:none" multiple>
             </div>
+            <div id="printAccessNotice" style="display:none; margin:12px 0; padding:12px; border:1px solid var(--border); border-radius:8px; background:var(--card); color:var(--text-muted); font-size:13px;"></div>
 
             <div style="margin:16px 0 8px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
                 <span id="queueStats" style="font-size:12px; color:var(--text-muted);"></span>
@@ -2003,6 +2044,28 @@
                 </div>
             </div>
 
+            <div class="setup-section" style="max-width:700px; margin-top:32px;">
+                <h3 style="margin-bottom:16px;">Student Print Access</h3>
+                <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
+                    Students can sign in, but only approved students can upload jobs, send jobs to printers, or print from the library.
+                    Put one username or display name per line.
+                </p>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                    <div>
+                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Allowlist</label>
+                        <textarea id="studentAllowlist" class="ad-input" rows="8" placeholder="student.username&#10;Student Display Name" style="resize:vertical; min-height:150px;"></textarea>
+                    </div>
+                    <div>
+                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Ban List</label>
+                        <textarea id="studentBanlist" class="ad-input" rows="8" placeholder="removed.student&#10;Student Display Name" style="resize:vertical; min-height:150px;"></textarea>
+                    </div>
+                </div>
+                <div style="display:flex; gap:8px; margin-top:12px;">
+                    <button class="btn btn-success" onclick="saveStudentAccessConfig()">Save Lists</button>
+                </div>
+                <div id="studentAccessResult" style="font-size:13px; margin-top:6px;"></div>
+            </div>
+
             <!-- Obico AI Configuration -->
             <div class="setup-section" style="max-width:700px; margin-top:32px;">
                 <h3 style="margin-bottom:16px;">Obico AI Failure Detection</h3>
@@ -2108,6 +2171,129 @@
                 </div>
             </div>
 
+            <!-- Build Plate Detection -->
+            <div class="setup-section" style="max-width:700px; margin-top:32px;">
+                <h3 style="margin-bottom:16px;">Build Plate Detection</h3>
+                <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
+                    Compare the live camera image with empty-plate references before sending a job. Capture references with the plate empty and set the ROI to the build surface area.
+                </p>
+                <div style="display:flex; flex-direction:column; gap:14px;">
+                    <div>
+                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Printer</label>
+                        <select id="platePrinter" class="ad-input" onchange="loadPlateDetectionConfig()">
+                            <option value="">— Select a printer —</option>
+                        </select>
+                    </div>
+                    <div id="plateDetectionFields" style="display:none; flex-direction:column; gap:14px;">
+                        <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                            <input type="checkbox" id="plateEnabled" style="width:18px; height:18px;">
+                            <span>Enable build plate detection for this printer</span>
+                        </label>
+
+                        <div style="border:1px solid var(--border); border-radius:8px; padding:12px; background:var(--bg);">
+                            <div style="display:grid; grid-template-columns:1.2fr 1fr; gap:12px; align-items:end;">
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Easy setup</label>
+                                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                        <button class="btn btn-primary" type="button" onclick="applyPlatePreset('bambu')">Bambu Default</button>
+                                        <button class="btn" type="button" onclick="applyPlatePreset('centre')">Centre Bed</button>
+                                        <button class="btn" type="button" onclick="applyPlatePreset('full')">Full Camera</button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Detection strictness</label>
+                                    <select id="plateSensitivity" class="ad-input" onchange="applyPlateSensitivity(this.value)">
+                                        <option value="strict">Strict</option>
+                                        <option value="normal" selected>Normal</option>
+                                        <option value="forgiving">Forgiving</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="platePresetSummary" style="font-size:12px; color:var(--text-muted); margin-top:10px;"></div>
+                            <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-top:12px;">
+                                <input type="checkbox" id="platePrepareBeforeCheck" style="width:16px; height:16px;" onchange="updatePlatePresetSummary();">
+                                <span style="font-size:13px;">Move Bambu bed to camera inspection height before checking</span>
+                            </label>
+                        </div>
+
+                        <details style="border:1px solid var(--border); border-radius:8px; padding:10px 12px;">
+                            <summary style="cursor:pointer; font-size:13px; color:var(--text-muted);">Advanced crop and sensitivity numbers</summary>
+                            <div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:10px; margin-top:12px;">
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">ROI X %</label>
+                                    <input type="number" id="plateRoiX" class="ad-input" min="0" max="100" value="0" onchange="updatePlatePresetSummary(); syncPlateSensitivityFromThreshold();">
+                                </div>
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">ROI Y %</label>
+                                    <input type="number" id="plateRoiY" class="ad-input" min="0" max="100" value="0" onchange="updatePlatePresetSummary(); syncPlateSensitivityFromThreshold();">
+                                </div>
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">ROI W %</label>
+                                    <input type="number" id="plateRoiW" class="ad-input" min="1" max="100" value="100" onchange="updatePlatePresetSummary(); syncPlateSensitivityFromThreshold();">
+                                </div>
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">ROI H %</label>
+                                    <input type="number" id="plateRoiH" class="ad-input" min="1" max="100" value="100" onchange="updatePlatePresetSummary(); syncPlateSensitivityFromThreshold();">
+                                </div>
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Threshold</label>
+                                    <input type="number" id="plateThreshold" class="ad-input" min="1" max="80" value="12" onchange="syncPlateSensitivityFromThreshold(); updatePlatePresetSummary();">
+                                </div>
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Inspect Z</label>
+                                    <input type="number" id="plateInspectionZ" class="ad-input" min="0" max="250" value="0" onchange="updatePlatePresetSummary();">
+                                </div>
+                                <div>
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Settle sec</label>
+                                    <input type="number" id="plateSettleSeconds" class="ad-input" min="0" max="10" step="0.5" value="2" onchange="updatePlatePresetSummary();">
+                                </div>
+                            </div>
+                        </details>
+                        <div class="plate-action-panel">
+                            <div class="plate-action-group">
+                                <div class="plate-action-title">Capture</div>
+                                <div class="plate-action-row">
+                                    <button class="btn btn-primary" onclick="capturePlateReference('rest')">Empty At Rest</button>
+                                    <button class="btn btn-primary" onclick="capturePlateReference('inspection')">Empty Raised</button>
+                                </div>
+                            </div>
+                            <div class="plate-action-group">
+                                <div class="plate-action-title">Check</div>
+                                <div class="plate-action-row">
+                                    <button class="btn" onclick="testPlateDetection()">Live Plate</button>
+                                    <button class="btn" onclick="testPlateReferenceImages()">Saved References</button>
+                                </div>
+                            </div>
+                            <div class="plate-action-group">
+                                <div class="plate-action-title">Tune</div>
+                                <div class="plate-action-row">
+                                    <button class="btn" onclick="useCurrentEmptyAsBaseline()">Use Current Empty Baseline</button>
+                                    <button class="btn btn-success" onclick="savePlateDetectionConfig()">Save Configuration</button>
+                                </div>
+                            </div>
+                            <div class="plate-action-group">
+                                <div class="plate-action-title">Bambu Bed Jog</div>
+                                <div class="plate-action-row">
+                                    <input type="number" id="plateJogStep" class="ad-input plate-jog-step" min="1" max="50" value="10" aria-label="Jog step in millimetres">
+                                    <button class="btn" onclick="jogPlateBed('home')">Home Z</button>
+                                    <button class="btn" onclick="jogPlateBed('up')">Plate Up</button>
+                                    <button class="btn" onclick="jogPlateBed('down')">Plate Down</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">Resting-bed references</div>
+                            <div id="plateRestReferenceList" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:10px;"></div>
+                        </div>
+                        <div>
+                            <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">Raised inspection references</div>
+                            <div id="plateReferenceList" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:10px;"></div>
+                        </div>
+                        <div id="plateDetectionResult" style="font-size:13px; margin-top:2px;"></div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Notifications -->
             <div class="setup-section" style="max-width:700px; margin-top:32px;">
                 <h3 style="margin-bottom:16px;">Notifications</h3>
@@ -2140,6 +2326,10 @@
                                 <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
                                     <input type="checkbox" id="notifEvtFailed" style="width:16px; height:16px;">
                                     <span style="font-size:13px;">Print Failed</span>
+                                </label>
+                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                    <input type="checkbox" id="notifEvtPlateBlocked" style="width:16px; height:16px;">
+                                    <span style="font-size:13px;">Plate Blocked</span>
                                 </label>
                             </div>
                         </div>
@@ -2766,6 +2956,8 @@
         let userRole = null;
         let displayName = '';
         let userName = '';
+        let printAllowed = false;
+        let printDeniedReason = '';
         let adEnabled = false;
         let hasLocalUsers = false;
         let myActivePrinters = new Set();  // printers with the current user's active jobs
@@ -2782,12 +2974,16 @@
                 userRole = data.role || null;
                 displayName = data.display_name || '';
                 userName = data.username || '';
+                printAllowed = data.print_allowed === true;
+                printDeniedReason = data.print_denied_reason || '';
                 adEnabled = data.ad_enabled === true;
                 hasLocalUsers = data.has_local_users === true;
             } catch (e) {
                 isAdmin = false;
                 isAuthenticated = false;
                 userRole = null;
+                printAllowed = false;
+                printDeniedReason = '';
             }
             updateAuthUI();
         }
@@ -2822,6 +3018,7 @@
                 if (s) s.style.display = 'none';
             }
             // Re-render printers and jobs to show/hide controls
+            updatePrintAccessUI();
             lastPrinterNames = [];  // Force full rebuild
             await refreshPrinters();
             // Fetch spool assignments after the card rebuild so the cache
@@ -2880,10 +3077,12 @@
                     userRole = data.role || 'staff';
                     isAdmin = (userRole === 'staff');
                     isAuthenticated = true;
+                    printAllowed = (userRole === 'staff');
+                    printDeniedReason = '';
                     displayName = data.display_name || '';
                     userName = body.username || '';
                     closeLoginModal();
-                    updateAuthUI();
+                    checkAuth();
                 } else {
                     errEl.textContent = data.error || 'Login failed';
                     errEl.style.display = 'block';
@@ -2903,6 +3102,8 @@
             userRole = null;
             displayName = '';
             userName = '';
+            printAllowed = false;
+            printDeniedReason = '';
             updateAuthUI();
         }
 
@@ -2917,6 +3118,27 @@
                 msg.style.display = '';
                 setTimeout(() => msg.style.display = 'none', 2000);
             });
+        }
+
+        function updatePrintAccessUI() {
+            const upload = document.getElementById('uploadArea');
+            const notice = document.getElementById('printAccessNotice');
+            if (!upload || !notice) return;
+
+            if (printAllowed) {
+                upload.style.display = '';
+                notice.style.display = 'none';
+                notice.textContent = '';
+                return;
+            }
+
+            upload.style.display = 'none';
+            notice.style.display = '';
+            if (!isAuthenticated) {
+                notice.textContent = 'Log in to upload and print jobs.';
+            } else {
+                notice.textContent = printDeniedReason || 'Student print access has not been approved.';
+            }
         }
 
         // ── AD Settings ──────────────────────────────────────
@@ -2989,6 +3211,45 @@
                     resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; Connection successful</span>';
                 } else {
                     resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                }
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+            }
+        }
+
+        // ── Student Print Access ────────────────────────────
+        function parseAccessList(value) {
+            return value.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+        }
+
+        async function loadStudentAccessConfig() {
+            try {
+                const res = await fetch(BASE + '/api/student-access/config');
+                if (!res.ok) return;
+                const data = await res.json();
+                document.getElementById('studentAllowlist').value = (data.allowlist || []).join('\n');
+                document.getElementById('studentBanlist').value = (data.banlist || []).join('\n');
+            } catch (e) {}
+        }
+
+        async function saveStudentAccessConfig() {
+            const resultEl = document.getElementById('studentAccessResult');
+            const payload = {
+                allowlist: parseAccessList(document.getElementById('studentAllowlist').value),
+                banlist: parseAccessList(document.getElementById('studentBanlist').value),
+            };
+            try {
+                const res = await fetch(BASE + '/api/student-access/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; Student access lists saved</span>';
+                    await checkAuth();
+                } else {
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message || 'Save failed'}</span>`;
                 }
             } catch (e) {
                 resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
@@ -3225,6 +3486,366 @@
             }
         }
 
+        // ── Build Plate Detection Settings ──────────────────
+        const PLATE_PRESETS = {
+            bambu: {
+                label: 'Bambu default',
+                roi: { x: 7, y: 18, w: 86, h: 72 },
+                threshold: 12,
+                inspectionZ: 0,
+            },
+            centre: {
+                label: 'Centre bed',
+                roi: { x: 15, y: 25, w: 70, h: 60 },
+                threshold: 12,
+                inspectionZ: 0,
+            },
+            full: {
+                label: 'Full camera',
+                roi: { x: 0, y: 0, w: 100, h: 100 },
+                threshold: 14,
+                inspectionZ: 0,
+            },
+        };
+
+        const PLATE_SENSITIVITY_THRESHOLDS = {
+            strict: 8,
+            normal: 12,
+            forgiving: 20,
+        };
+
+        async function populatePlatePrinterDropdown() {
+            const select = document.getElementById('platePrinter');
+            if (!select) return;
+            const current = select.value;
+            select.innerHTML = '<option value="">— Select a printer —</option>';
+            try {
+                const res = await fetch(BASE + '/api/farm/status');
+                if (!res.ok) return;
+                const data = await res.json();
+                window._platePrinterTypes = {};
+                for (const [name, printer] of Object.entries(data.printers || {}).sort(([a], [b]) => a.localeCompare(b))) {
+                    const opt = document.createElement('option');
+                    opt.value = name;
+                    const type = printer.type || 'bambulab';
+                    window._platePrinterTypes[name] = type;
+                    opt.textContent = type === 'klipper' ? `${name} (Klipper)` : `${name} (Bambu)`;
+                    select.appendChild(opt);
+                }
+                if (current) select.value = current;
+            } catch (e) {}
+        }
+
+        function setPlateRoi(roi) {
+            document.getElementById('plateRoiX').value = roi.x;
+            document.getElementById('plateRoiY').value = roi.y;
+            document.getElementById('plateRoiW').value = roi.w;
+            document.getElementById('plateRoiH').value = roi.h;
+        }
+
+        function applyPlatePreset(key) {
+            const preset = PLATE_PRESETS[key];
+            if (!preset) return;
+            setPlateRoi(preset.roi);
+            document.getElementById('plateThreshold').value = preset.threshold;
+            document.getElementById('plateInspectionZ').value = preset.inspectionZ;
+            document.getElementById('platePrepareBeforeCheck').checked = true;
+            syncPlateSensitivityFromThreshold();
+            updatePlatePresetSummary();
+        }
+
+        function applyPlateSensitivity(mode) {
+            const threshold = PLATE_SENSITIVITY_THRESHOLDS[mode];
+            if (!threshold) return;
+            document.getElementById('plateThreshold').value = threshold;
+            updatePlatePresetSummary();
+        }
+
+        function currentPlateRoi() {
+            return {
+                x: parseFloat(document.getElementById('plateRoiX').value) || 0,
+                y: parseFloat(document.getElementById('plateRoiY').value) || 0,
+                w: parseFloat(document.getElementById('plateRoiW').value) || 100,
+                h: parseFloat(document.getElementById('plateRoiH').value) || 100,
+            };
+        }
+
+        function samePlateRoi(a, b) {
+            return ['x', 'y', 'w', 'h'].every(k => Math.round(Number(a[k]) || 0) === Math.round(Number(b[k]) || 0));
+        }
+
+        function bambuNeedsRaisedBedCheck(printerName) {
+            const name = String(printerName || '').toUpperCase();
+            if (/\bA1(?:\b|[-_\s])/.test(name)) return false;
+            return /\b(?:P1|X1)[A-Z0-9-]*\b/.test(name);
+        }
+
+        function platePresetLabel(roi) {
+            for (const preset of Object.values(PLATE_PRESETS)) {
+                if (samePlateRoi(roi, preset.roi)) return preset.label;
+            }
+            return 'Custom crop';
+        }
+
+        function syncPlateSensitivityFromThreshold() {
+            const select = document.getElementById('plateSensitivity');
+            const threshold = Math.round(parseFloat(document.getElementById('plateThreshold').value) || 12);
+            if (!select) return;
+            const match = Object.entries(PLATE_SENSITIVITY_THRESHOLDS).find(([, value]) => value === threshold);
+            select.value = match ? match[0] : 'normal';
+        }
+
+        function updatePlatePresetSummary() {
+            const summary = document.getElementById('platePresetSummary');
+            if (!summary) return;
+            const roi = currentPlateRoi();
+            const threshold = parseFloat(document.getElementById('plateThreshold').value) || 12;
+            const mode = Object.entries(PLATE_SENSITIVITY_THRESHOLDS).find(([, value]) => value === Math.round(threshold));
+            const strictness = mode ? mode[0][0].toUpperCase() + mode[0].slice(1) : `Custom (${threshold})`;
+            const prepare = document.getElementById('platePrepareBeforeCheck').checked;
+            const z = parseFloat(document.getElementById('plateInspectionZ').value);
+            const displayZ = Number.isFinite(z) ? z : 0;
+            const bedMove = prepare ? ` · Bambu bed inspection Z ${displayZ}` : '';
+            summary.textContent = `${platePresetLabel(roi)} crop · ${strictness} detection${bedMove}`;
+        }
+
+        function platePayload() {
+            return {
+                enabled: document.getElementById('plateEnabled').checked,
+                threshold: parseFloat(document.getElementById('plateThreshold').value) || 12,
+                roi: currentPlateRoi(),
+                prepare_before_check: document.getElementById('platePrepareBeforeCheck').checked,
+                inspection_z: parseFloat(document.getElementById('plateInspectionZ').value) || 0,
+                settle_seconds: parseFloat(document.getElementById('plateSettleSeconds').value) || 2,
+            };
+        }
+
+        async function loadPlateDetectionConfig() {
+            const name = document.getElementById('platePrinter').value;
+            const fields = document.getElementById('plateDetectionFields');
+            const resultEl = document.getElementById('plateDetectionResult');
+            resultEl.innerHTML = '';
+            if (!name) { fields.style.display = 'none'; return; }
+            fields.style.display = 'flex';
+            try {
+                const res = await fetch(BASE + '/api/plate-detection/config/' + encodeURIComponent(name));
+                if (!res.ok) return;
+                const data = await res.json();
+                document.getElementById('plateEnabled').checked = data.enabled || false;
+                document.getElementById('plateThreshold').value = data.threshold || 12;
+                document.getElementById('platePrepareBeforeCheck').checked = data.prepare_before_check !== false;
+                document.getElementById('plateInspectionZ').value = data.inspection_z ?? 0;
+                document.getElementById('plateSettleSeconds').value = data.settle_seconds ?? 2;
+                const roi = data.roi || {};
+                setPlateRoi({
+                    x: roi.x ?? 0,
+                    y: roi.y ?? 0,
+                    w: roi.w ?? 100,
+                    h: roi.h ?? 100,
+                });
+                const printerType = (window._platePrinterTypes || {})[name] || 'bambulab';
+                if (printerType === 'klipper') {
+                    document.getElementById('platePrepareBeforeCheck').checked = false;
+                }
+                const raisedBedRequired = data.raised_bed_required === true || document.getElementById('platePrepareBeforeCheck').checked;
+                const references = data.references || [];
+                if (!data.enabled && !references.length && printerType !== 'klipper' && samePlateRoi(currentPlateRoi(), PLATE_PRESETS.full.roi)) {
+                    applyPlatePreset(raisedBedRequired ? 'bambu' : 'full');
+                    document.getElementById('platePrepareBeforeCheck').checked = raisedBedRequired;
+                    updatePlatePresetSummary();
+                } else {
+                    if (printerType === 'klipper') {
+                        document.getElementById('platePrepareBeforeCheck').checked = false;
+                    }
+                    syncPlateSensitivityFromThreshold();
+                    updatePlatePresetSummary();
+                }
+                renderPlateReferences(name, data.rest_references || [], 'rest');
+                renderPlateReferences(name, references, 'inspection');
+            } catch (e) {}
+        }
+
+        function renderPlateReferences(printerName, refs, phase = 'inspection') {
+            const list = document.getElementById(phase === 'rest' ? 'plateRestReferenceList' : 'plateReferenceList');
+            if (!list) return;
+            if (!refs.length) {
+                const label = phase === 'rest' ? 'resting-bed' : 'raised inspection';
+                list.innerHTML = `<div style="grid-column:1/-1;color:var(--text-muted);font-size:12px;">No ${label} references captured yet.</div>`;
+                return;
+            }
+            list.innerHTML = refs.map(ref => `
+                <div style="border:1px solid var(--border);border-radius:8px;padding:6px;background:var(--card);">
+                    <img src="${BASE}/api/plate-detection/reference/${encodeURIComponent(printerName)}/${encodeURIComponent(ref)}?t=${Date.now()}" alt="${ref}" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;margin-bottom:6px;">
+                    <button class="btn btn-danger" style="font-size:11px;padding:3px 8px;width:100%;" onclick="deletePlateReference('${printerName.replace(/'/g, "\\'")}', '${ref.replace(/'/g, "\\'")}')">Delete</button>
+                </div>
+            `).join('');
+        }
+
+        async function savePlateDetectionConfig() {
+            const name = document.getElementById('platePrinter').value;
+            const resultEl = document.getElementById('plateDetectionResult');
+            if (!name) { resultEl.innerHTML = '<span style="color:var(--danger);">Select a printer first</span>'; return; }
+            try {
+                const res = await fetch(BASE + '/api/plate-detection/config/' + encodeURIComponent(name), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(platePayload()),
+                });
+                const data = await res.json();
+                resultEl.innerHTML = data.ok
+                    ? '<span style="color:var(--accent);">&#10003; Build plate detection saved</span>'
+                    : `<span style="color:var(--danger);">&#10007; ${data.message || data.error || 'Save failed'}</span>`;
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+            }
+        }
+
+        async function capturePlateReference(phase = 'inspection') {
+            const name = document.getElementById('platePrinter').value;
+            const resultEl = document.getElementById('plateDetectionResult');
+            if (!name) { resultEl.innerHTML = '<span style="color:var(--danger);">Select a printer first</span>'; return; }
+            await savePlateDetectionConfig();
+            try {
+                const res = await fetch(BASE + '/api/plate-detection/capture/' + encodeURIComponent(name), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phase }),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    renderPlateReferences(name, data.rest_references || [], 'rest');
+                    renderPlateReferences(name, data.inspection_references || data.references || [], 'inspection');
+                    const label = phase === 'rest' ? 'resting-bed' : 'raised inspection';
+                    resultEl.innerHTML = `<span style="color:var(--accent);">&#10003; Empty ${label} reference captured</span>`;
+                } else {
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message || 'Capture failed'}</span>`;
+                }
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+            }
+        }
+
+        async function jogPlateBed(action) {
+            const name = document.getElementById('platePrinter').value;
+            const resultEl = document.getElementById('plateDetectionResult');
+            if (!name) { resultEl.innerHTML = '<span style="color:var(--danger);">Select a printer first</span>'; return; }
+            const step = Math.max(1, Math.min(50, parseFloat(document.getElementById('plateJogStep').value) || 10));
+            const payload = action === 'home'
+                ? { action: 'home' }
+                : { action: 'jog', delta_z: action === 'up' ? -step : step };
+            const label = action === 'home' ? 'Homing Bambu Z...' : `Moving plate ${action} ${step} mm...`;
+            resultEl.innerHTML = `<span style="color:var(--text-muted);">${label}</span>`;
+            try {
+                const res = await fetch(BASE + '/api/plate-detection/jog/' + encodeURIComponent(name), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await res.json();
+                resultEl.innerHTML = data.ok
+                    ? `<span style="color:var(--accent);">&#10003; ${data.message || 'Bed moved'}</span>`
+                    : `<span style="color:var(--danger);">&#10007; ${data.message || data.error || 'Could not move bed'}</span>`;
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+            }
+        }
+
+        async function deletePlateReference(printerName, refName) {
+            if (!confirm('Delete this reference image?')) return;
+            const res = await fetch(BASE + `/api/plate-detection/reference/${encodeURIComponent(printerName)}/${encodeURIComponent(refName)}`, { method: 'DELETE' });
+            const data = await res.json().catch(() => ({}));
+            if (data.ok) loadPlateDetectionConfig();
+        }
+
+        async function testPlateDetection() {
+            const name = document.getElementById('platePrinter').value;
+            const resultEl = document.getElementById('plateDetectionResult');
+            if (!name) { resultEl.innerHTML = '<span style="color:var(--danger);">Select a printer first</span>'; return; }
+            await savePlateDetectionConfig();
+            resultEl.innerHTML = '<span style="color:var(--text-muted);">Testing current camera frame...</span>';
+            try {
+                const res = await fetch(BASE + '/api/plate-detection/test/' + encodeURIComponent(name), { method: 'POST' });
+                const data = await res.json();
+                const color = data.ok ? 'var(--accent)' : 'var(--danger)';
+                const prefix = data.ok ? '&#10003;' : '&#10007;';
+                const checks = Array.isArray(data.checks) ? data.checks : [];
+                if (checks.length) {
+                    const details = checks.map(check => {
+                        const nonMatchingPosition = data.ok && !check.ok;
+                        const ok = check.ok ? '&#10003;' : (nonMatchingPosition ? '&ndash;' : '&#10007;');
+                        const phase = check.phase === 'rest' ? 'Rest' : 'Raised';
+                        const score = check.score != null ? `${check.score.toFixed(1)} / ${check.threshold}` : 'no score';
+                        const lineColor = check.ok ? 'var(--accent)' : (nonMatchingPosition ? 'var(--text-muted)' : 'var(--danger)');
+                        const message = nonMatchingPosition ? 'Does not match current bed position' : (check.message || 'Test complete');
+                        return `<div style="color:${lineColor};">${ok} ${phase}: ${message} (${score})</div>`;
+                    }).join('');
+                    resultEl.innerHTML = `<div style="color:${color};">${prefix} ${data.message || data.error || 'Test complete'}</div>${details}`;
+                } else {
+                    const score = data.score != null ? ` Difference ${data.score.toFixed(1)} / limit ${data.threshold}` : '';
+                    const phase = data.phase ? ` ${data.phase.charAt(0).toUpperCase() + data.phase.slice(1)} check.` : '';
+                    resultEl.innerHTML = `<span style="color:${color};">${prefix} ${phase} ${data.message || data.error || 'Test complete'}.${score}</span>`;
+                }
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+            }
+        }
+
+        async function testPlateReferenceImages() {
+            const name = document.getElementById('platePrinter').value;
+            const resultEl = document.getElementById('plateDetectionResult');
+            if (!name) { resultEl.innerHTML = '<span style="color:var(--danger);">Select a printer first</span>'; return; }
+            await savePlateDetectionConfig();
+            resultEl.innerHTML = '<span style="color:var(--text-muted);">Testing saved reference images...</span>';
+            try {
+                const res = await fetch(BASE + '/api/plate-detection/test-references/' + encodeURIComponent(name), { method: 'POST' });
+                const data = await res.json();
+                const checks = Array.isArray(data.checks) ? data.checks : [];
+                const color = data.ok ? 'var(--accent)' : 'var(--danger)';
+                const prefix = data.ok ? '&#10003;' : '&#10007;';
+                const details = checks.map(check => {
+                    const ok = check.ok ? '&#10003;' : '&#10007;';
+                    const phase = check.phase === 'rest' ? 'Rest' : 'Raised';
+                    const count = check.count != null ? `${check.count} image${check.count === 1 ? '' : 's'}` : '';
+                    const score = check.score != null ? ` (${check.score.toFixed(1)} / ${check.threshold})` : '';
+                    const lineColor = check.ok ? 'var(--accent)' : 'var(--danger)';
+                    return `<div style="color:${lineColor};">${ok} ${phase}: ${check.message || 'Reference check complete'} ${count}${score}</div>`;
+                }).join('');
+                resultEl.innerHTML = `<div style="color:${color};">${prefix} ${data.message || data.error || 'Reference check complete'}</div>${details}`;
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+            }
+        }
+
+        async function useCurrentEmptyAsBaseline() {
+            const name = document.getElementById('platePrinter').value;
+            const resultEl = document.getElementById('plateDetectionResult');
+            if (!name) { resultEl.innerHTML = '<span style="color:var(--danger);">Select a printer first</span>'; return; }
+            if (!confirm('Only continue if the plate is definitely empty. This will tune the detection limit from the current camera view.')) return;
+            await savePlateDetectionConfig();
+            resultEl.innerHTML = '<span style="color:var(--text-muted);">Testing empty plate baseline...</span>';
+            try {
+                const res = await fetch(BASE + '/api/plate-detection/test/' + encodeURIComponent(name), { method: 'POST' });
+                const data = await res.json();
+                const checks = Array.isArray(data.checks) ? data.checks : [];
+                const scores = checks
+                    .map(check => check.score)
+                    .filter(score => score != null);
+                const baselineScore = scores.length ? Math.min(...scores) : data.score;
+                if (baselineScore == null) {
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message || data.error || 'Could not tune baseline'}</span>`;
+                    return;
+                }
+                const tuned = Math.max(8, Math.min(80, Math.ceil(baselineScore + 6)));
+                document.getElementById('plateThreshold').value = tuned;
+                syncPlateSensitivityFromThreshold();
+                updatePlatePresetSummary();
+                await savePlateDetectionConfig();
+                resultEl.innerHTML = `<span style="color:var(--accent);">&#10003; Tuned empty baseline. Limit set to ${tuned} from best matching difference ${baselineScore.toFixed(1)}.</span>`;
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+            }
+        }
+
         // ── UI Preferences ───────────────────────────────────
         (function populateTimezoneDropdown() {
             const sel = document.getElementById('uiTimezone');
@@ -3290,6 +3911,7 @@
                 document.getElementById('notifEvtCompleted').checked = (data.events || {}).print_completed !== false;
                 document.getElementById('notifEvtPaused').checked = (data.events || {}).print_paused !== false;
                 document.getElementById('notifEvtFailed').checked = (data.events || {}).print_failed !== false;
+                document.getElementById('notifEvtPlateBlocked').checked = (data.events || {}).plate_blocked !== false;
                 const email = data.email || {};
                 document.getElementById('notifEmailEnabled').checked = email.enabled || false;
                 document.getElementById('notifSmtpHost').value = email.smtp_host || '';
@@ -3315,6 +3937,7 @@
                     print_completed: document.getElementById('notifEvtCompleted').checked,
                     print_paused: document.getElementById('notifEvtPaused').checked,
                     print_failed: document.getElementById('notifEvtFailed').checked,
+                    plate_blocked: document.getElementById('notifEvtPlateBlocked').checked,
                 },
                 email: {
                     enabled: document.getElementById('notifEmailEnabled').checked,
@@ -3570,7 +4193,7 @@
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 tab.classList.add('active');
                 document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
-                if (tab.dataset.tab === 'settings') { loadApiKey(); loadADConfig(); populateObicoPrinterDropdown(); loadSpoolmanConfig(); loadPoolConfig(); loadNotificationConfig(); loadUiConfig(); }
+                if (tab.dataset.tab === 'settings') { loadApiKey(); loadADConfig(); loadStudentAccessConfig(); populateObicoPrinterDropdown(); populatePlatePrinterDropdown(); loadSpoolmanConfig(); loadPoolConfig(); loadNotificationConfig(); loadUiConfig(); }
                 if (tab.dataset.tab === 'library') refreshLibrary();
             });
         });
@@ -3579,12 +4202,22 @@
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
 
-        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('click', () => {
+            if (!printAllowed) {
+                alert(printDeniedReason || 'Print access is not available for this account');
+                return;
+            }
+            fileInput.click();
+        });
         uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
         uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
         uploadArea.addEventListener('drop', e => {
             e.preventDefault();
             uploadArea.classList.remove('dragover');
+            if (!printAllowed) {
+                alert(printDeniedReason || 'Print access is not available for this account');
+                return;
+            }
             if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
         });
         fileInput.addEventListener('change', () => {
@@ -3592,6 +4225,10 @@
         });
 
         async function uploadFiles(files) {
+            if (!printAllowed) {
+                alert(printDeniedReason || 'Print access is not available for this account');
+                return;
+            }
             for (const file of files) {
                 const form = new FormData();
                 form.append('file', file);
@@ -4859,9 +5496,11 @@
             try {
                 const res = await fetch(BASE + '/api/camera/status');
                 const data = await res.json();
-                cameraStreaming = data;
+                cameraStreaming = {};
                 // Ensure refresh timers and DOM match actual camera state
-                for (const [name, streaming] of Object.entries(data)) {
+                for (const [name, state] of Object.entries(data)) {
+                    const streaming = typeof state === 'boolean' ? state : state.streaming === true;
+                    cameraStreaming[name] = streaming;
                     const section = document.getElementById(`cam-${name}`);
                     const hasImg = section && section.querySelector('.camera-feed');
                     if (streaming && !hasImg) {
@@ -4923,7 +5562,7 @@
                 if (!groupMap[label]) { groupMap[label] = []; groups.push({ label, jobs: groupMap[label] }); }
                 groupMap[label].push(job);
             }
-            const colCount = isAdmin ? 10 : 9;
+            const colCount = isAdmin ? 11 : 10;
             let html = '';
             for (const group of groups) {
                 const weekId = 'week_' + group.label.replace(/[^a-z0-9]/gi, '_');
@@ -4941,7 +5580,7 @@
                         <tr id="${weekId}_cols" style="${isExpanded ? '' : 'display:none;'}">
                             ${isAdmin ? '<th style="width:32px;"></th>' : ''}
                             <th>#</th><th>File</th><th>Status</th><th>Printer</th>
-                            <th>Submitted By</th><th>Copies</th><th>Priority</th><th>Created</th><th>Actions</th>
+                            <th>Submitted By</th><th>Copies</th><th>Est. Time</th><th>Priority</th><th>Created</th><th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="${weekId}_body" style="${isExpanded ? '' : 'display:none;'}">${group.jobs.map(j => renderJobRow(j, weekId)).join('')}</tbody>
@@ -5007,11 +5646,11 @@
         function renderJobRow(job, weekId) {
             const status = job.status;
             const isOwner = isAuthenticated && userName && job.submitted_by === userName;
-            const canCancel = (isAdmin || isOwner) && (status === 'queued' || status === 'uploading' || status === 'printing');
-            const canRequeue = isAdmin && (status === 'failed' || status === 'cancelled' || status === 'completed');
+            const canUseJobActions = isAdmin || (isOwner && printAllowed);
+            const canCancel = canUseJobActions && (status === 'queued' || status === 'uploading' || status === 'printing');
             const canDelete = isAdmin;
-            const canAssign = (isAdmin || isOwner) && status === 'queued';
-            const canReprint = isAdmin || isOwner;
+            const canAssign = canUseJobActions && status === 'queued';
+            const canReprint = canUseJobActions;
 
             let assignBtn = '';
             if (canAssign && job.printer_name) {
@@ -5061,13 +5700,13 @@
                     <td>${job.printer_name || '--'}</td>
                     <td>${job.submitted_by || '--'}</td>
                     <td>${job.copies_done}/${job.copies_total}</td>
+                    <td>${formatDuration(job.print_time_seconds)}</td>
                     <td>${priorityLabels[job.priority] || job.priority}</td>
                     <td>${formatDate(job.created_at)}</td>
                     <td class="job-actions">
                         ${assignBtn}
                         ${reprintBtn}
                         ${canCancel ? `<button class="btn" onclick="jobAction(${job.id},'cancel')">Cancel</button>` : ''}
-                        ${canRequeue ? `<button class="btn btn-primary" onclick="jobAction(${job.id},'requeue')">Requeue</button>` : ''}
                         ${canDelete ? `<button class="btn btn-danger" onclick="jobAction(${job.id},'delete')">Delete</button>` : ''}
                     </td>
                 </tr>
@@ -5489,7 +6128,7 @@
             if (file.file_size) meta.push(formatFileSize(file.file_size));
             if (file.print_count) meta.push('Printed ' + file.print_count + 'x');
             const safeName = escapeHtml(file.original_name).replace(/'/g, "\\'");
-            const actions = `<button class="btn btn-sm" onclick="printFromLibrary(${file.id})">Print</button>`
+            const actions = (printAllowed ? `<button class="btn btn-sm" onclick="printFromLibrary(${file.id})">Print</button>` : '')
                 + ` <button class="btn btn-sm" onclick="open3DViewer(${file.id})" title="Interactive 3D toolpath view">Toolpath</button>`
                 + (isAdmin ? ` <button class="btn btn-sm" onclick="showMoveDialog(${file.id}, '${safeName}')">Move</button>
                     <button class="btn btn-sm btn-danger" onclick="deleteLibraryFile(${file.id})">Delete</button>` : '');
@@ -5746,6 +6385,10 @@
         }
 
         async function printFromLibrary(fileId) {
+            if (!printAllowed) {
+                alert(printDeniedReason || 'Print access is not available for this account');
+                return;
+            }
             try {
                 const statusRes = await fetch(BASE + '/api/farm/status');
                 const statusData = await statusRes.json();

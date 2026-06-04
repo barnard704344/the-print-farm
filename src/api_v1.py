@@ -443,6 +443,11 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         notes = request.form.get("notes", "")
         printer_name = request.form.get("printer", "")
         submitted_by = session.get("username", "api")
+        try:
+            meta = parse_metadata_fn(file_path) if parse_metadata_fn else {}
+        except Exception as e:
+            logger.warning(f"Failed to parse upload metadata: {e}")
+            meta = {}
 
         job_id = job_queue.add_job(
             filename=unique_name,
@@ -452,12 +457,12 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
             priority=priority,
             notes=notes,
             submitted_by=submitted_by,
+            print_time_seconds=meta.get("print_time_seconds"),
         )
 
         # Add to file library
         if file_library and parse_metadata_fn:
             try:
-                meta = parse_metadata_fn(file_path)
                 file_library.add_file(
                     original_name=original_name,
                     stored_name=unique_name,
@@ -691,6 +696,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
             priority=0,
             notes=f"Printed from library (file #{file_id})",
             submitted_by=session.get("username", "api"),
+            print_time_seconds=lib_file.get("print_time_seconds"),
         )
         file_library.increment_print_count(file_id)
         job = job_queue.get_job(new_job_id)

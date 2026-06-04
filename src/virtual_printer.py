@@ -839,10 +839,17 @@ class VirtualFTPServer:
         logger.info(f"[{self.name}] Received upload: {filename} ({len(data)} bytes) → {dest}")
         # Queue the job (unassigned — staff assigns via web UI)
         try:
+            try:
+                from .file_library import parse_gcode_metadata
+                meta = parse_gcode_metadata(dest)
+            except Exception:
+                meta = {}
             self.job_queue.add_job(
+                filename=os.path.basename(dest),
+                original_name=filename,
                 file_path=dest,
-                original_filename=filename,
-                uploaded_by=f"orca_virtual/{self.printer_name}",
+                submitted_by=f"orca_virtual/{self.printer_name}",
+                print_time_seconds=meta.get("print_time_seconds"),
             )
             logger.info(f"[{self.name}] Queued job from Orca upload: {filename}")
         except Exception as e:

@@ -344,6 +344,34 @@ class BambuClient:
             }
         })
 
+    def send_gcode_line(self, gcode: str) -> bool:
+        """Send one or more raw G-code lines to the printer."""
+        if not gcode.endswith("\n"):
+            gcode += "\n"
+        return self._send_command({
+            "print": {
+                "command": "gcode_line",
+                "sequence_id": str(int(time.time())),
+                "param": gcode,
+            }
+        })
+
+    def prepare_build_plate_inspection(self, z_height: float = 0.0, home: bool = False) -> bool:
+        """Move the Bambu build plate to a camera-friendly inspection height."""
+        z_height = max(0.0, min(250.0, float(z_height)))
+        home_line = "G28 Z\n" if home else ""
+        return self.send_gcode_line(f"G90\n{home_line}G1 Z{z_height:.1f} F600\nM400\n")
+
+    def home_build_plate_z(self) -> bool:
+        """Home the Bambu Z axis/build plate."""
+        return self.send_gcode_line("G28 Z\nM400\n")
+
+    def jog_build_plate(self, delta_z: float, feedrate: int = 600) -> bool:
+        """Move the Bambu build plate by a relative Z amount."""
+        delta_z = max(-50.0, min(50.0, float(delta_z)))
+        feedrate = max(60, min(3000, int(feedrate)))
+        return self.send_gcode_line(f"G91\nG1 Z{delta_z:.1f} F{feedrate}\nG90\nM400\n")
+
     def unload_filament(self) -> bool:
         """Unload filament (retract and cool nozzle)."""
         return self._send_command({

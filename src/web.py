@@ -26,6 +26,7 @@ from .gcode_to_3mf import wrap_gcode_as_3mf, parse_gcode_filaments, parse_gcode_
 from .ldap_auth import authenticate_user, test_ad_connection, lookup_user
 from .file_library import parse_gcode_metadata
 from .api_v1 import create_api_v1
+from .plate_detection import analyse_plate
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,336 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     def _ad_enabled():
         return _get_ad_config().get("enabled", False)
+
+    def _get_student_access_config():
+        return app_config.get("student_access", {})
+
+    def _bambu_uses_raised_bed(printer_name):
+        if farm_manager.get_printer_type(printer_name) != "bambulab":
+            return False
+        cfg = next((p for p in app_config.get("printers", []) if p.get("name") == printer_name), {})
+        text = " ".join(str(cfg.get(k, "")) for k in ("name", "model", "printer_model", "product")).upper()
+        if re.search(r"\bA1(?:\b|[-_\s])", text):
+            return False
+        if re.search(r"\b(?:P1|X1)[A-Z0-9-]*\b", text):
+            return True
+        return False
+
+    def _plate_detection_root():
+        root = os.path.join(os.path.dirname(__file__), "..", "data", "plate_detection")
+        os.makedirs(root, exist_ok=True)
+        return root
+
+    def _safe_printer_dir_name(printer_name):
+        return re.sub(r"[^a-zA-Z0-9_.-]", "_", printer_name)
+
+    def _plate_detection_dir(printer_name):
+        path = os.path.join(_plate_detection_root(), _safe_printer_dir_name(printer_name))
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    def _get_plate_detection_config(printer_name):
+        cfg = app_config.get("plate_detection", {}).get(printer_name, {})
+        needs_raised_check = _bambu_uses_raised_bed(printer_name)
+        return {
+            "enabled": bool(cfg.get("enabled", False)),
+            "threshold": float(cfg.get("threshold", 12.0)),
+            "roi": {
+                "x": float((cfg.get("roi") or {}).get("x", 0)),
+                "y": float((cfg.get("roi") or {}).get("y", 0)),
+                "w": float((cfg.get("roi") or {}).get("w", 100)),
+                "h": float((cfg.get("roi") or {}).get("h", 100)),
+            },
+            "prepare_before_check": bool(cfg.get("prepare_before_check", needs_raised_check)),
+            "raised_bed_required": needs_raised_check,
+            "inspection_z": max(0.0, min(250.0, float(cfg.get("inspection_z", 0.0)))),
+            "settle_seconds": max(0.0, min(10.0, float(cfg.get("settle_seconds", 2.0)))),
+        }
+
+    def _plate_reference_prefix(phase):
+        if phase == "rest":
+            return "rest_reference_"
+        if phase == "inspection":
+            return "inspection_reference_"
+        return "reference_"
+
+    def _list_plate_references(printer_name, phase=None):
+        ref_dir = _plate_detection_dir(printer_name)
+        names = []
+        for f in os.listdir(ref_dir):
+            if not f.lower().endswith((".jpg", ".jpeg")):
+                continue
+            if phase == "rest" and f.startswith(_plate_reference_prefix("rest")):
+                names.append(f)
+            elif phase == "inspection" and (
+                f.startswith(_plate_reference_prefix("inspection")) or f.startswith(_plate_reference_prefix(None))
+            ):
+                names.append(f)
+            elif phase is None and (
+                f.startswith(_plate_reference_prefix("rest"))
+                or f.startswith(_plate_reference_prefix("inspection"))
+                or f.startswith(_plate_reference_prefix(None))
+            ):
+                names.append(f)
+        return sorted(names)
+
+    def _load_plate_reference_bytes(printer_name, phase=None):
+        ref_dir = _plate_detection_dir(printer_name)
+        refs = []
+        for name in _list_plate_references(printer_name, phase):
+            with open(os.path.join(ref_dir, name), "rb") as f:
+                refs.append(f.read())
+        return refs
+
+    def _current_camera_frame(printer_name, wait_seconds=0.0, after=None):
+        if not camera_manager:
+            return None
+        if wait_seconds:
+            time.sleep(wait_seconds)
+        if after is not None:
+            frame = camera_manager.get_frame_after(printer_name, after, timeout=0.5)
+        else:
+            frame = camera_manager.get_frame(printer_name)
+        if frame:
+            return frame
+
+        printer = farm_manager.get_printer(printer_name)
+        if not printer:
+            return None
+        try:
+            if farm_manager.get_printer_type(printer_name) == "klipper":
+                camera_url = getattr(printer, "camera_url", "") or _detect_klipper_webcam(printer)
+                if not camera_url:
+                    return None
+                camera_manager.start_http_camera(printer_name, camera_url)
+            else:
+                camera_manager.start_camera(
+                    printer_name,
+                    printer.host,
+                    printer.access_code,
+                    getattr(printer, "camera_port", 6000),
+                )
+            if after is not None:
+                return camera_manager.get_frame_after(printer_name, after, timeout=6.0)
+            for _ in range(10):
+                time.sleep(0.5)
+                frame = camera_manager.get_frame(printer_name)
+                if frame:
+                    return frame
+        except Exception as e:
+            logger.warning(f"Could not start camera for plate detection on {printer_name}: {e}")
+        return None
+
+    def _prepare_plate_detection_view(printer_name, cfg, home=False):
+        if not cfg.get("prepare_before_check"):
+            return {"ok": True, "skipped": True}
+        if farm_manager.get_printer_type(printer_name) != "bambulab":
+            return {"ok": True, "skipped": True}
+
+        printer = farm_manager.get_printer(printer_name)
+        if not printer:
+            return {"ok": False, "message": f"Printer '{printer_name}' not found"}
+        if not printer.is_connected():
+            return {"ok": False, "message": f"Printer '{printer_name}' not connected"}
+        if not hasattr(printer, "prepare_build_plate_inspection"):
+            return {"ok": True, "skipped": True}
+
+        move_started = time.monotonic()
+        ok = printer.prepare_build_plate_inspection(cfg.get("inspection_z", 0.0), home=home)
+        if not ok:
+            return {"ok": False, "message": "Could not move Bambu build plate to inspection height"}
+        time.sleep(cfg.get("settle_seconds", 2.0))
+        return {"ok": True, "after": move_started}
+
+    def _check_build_plate_clear(printer_name):
+        cfg = _get_plate_detection_config(printer_name)
+        if not cfg.get("enabled"):
+            return {"ok": True, "skipped": True, "message": "Build plate detection disabled"}
+
+        is_bambu = farm_manager.get_printer_type(printer_name) == "bambulab"
+        should_prepare = is_bambu and cfg.get("prepare_before_check")
+
+        frame = _current_camera_frame(printer_name)
+        if not frame:
+            return {"ok": False, "occupied": False, "message": "No camera snapshot available for build plate detection"}
+
+        if should_prepare:
+            rest_refs = _load_plate_reference_bytes(printer_name, "rest")
+            if not rest_refs:
+                return {
+                    "ok": False,
+                    "occupied": False,
+                    "message": "Capture a Bambu resting-bed reference before enabling raised plate inspection",
+                }
+            rest_result = analyse_plate(frame, rest_refs, cfg["roi"], cfg["threshold"])
+            if not rest_result.ok or rest_result.occupied:
+                return {
+                    "ok": rest_result.ok and not rest_result.occupied,
+                    "occupied": rest_result.occupied,
+                    "score": rest_result.score,
+                    "threshold": rest_result.threshold,
+                    "phase": "rest",
+                    "message": rest_result.message,
+                }
+
+            prep = _prepare_plate_detection_view(printer_name, cfg)
+            if not prep.get("ok"):
+                return {"ok": False, "occupied": False, "message": prep.get("message", "Build plate inspection setup failed")}
+
+            frame = _current_camera_frame(printer_name, wait_seconds=0.5, after=prep.get("after"))
+            if not frame:
+                return {"ok": False, "occupied": False, "message": "No camera snapshot available after moving bed"}
+            refs = _load_plate_reference_bytes(printer_name, "inspection")
+        else:
+            refs = _load_plate_reference_bytes(printer_name, "inspection")
+
+        result = analyse_plate(frame, refs, cfg["roi"], cfg["threshold"])
+        return {
+            "ok": result.ok and not result.occupied,
+            "occupied": result.occupied,
+            "score": result.score,
+            "threshold": result.threshold,
+            "phase": "inspection" if should_prepare else "single",
+            "message": result.message,
+        }
+
+    def _test_current_plate_view(printer_name):
+        cfg = _get_plate_detection_config(printer_name)
+        if not cfg.get("enabled"):
+            return {"ok": True, "skipped": True, "message": "Build plate detection disabled"}
+        frame = _current_camera_frame(printer_name)
+        if not frame:
+            return {"ok": False, "occupied": False, "message": "No camera snapshot available for build plate detection"}
+
+        checks = []
+        phases = ["inspection"]
+        if cfg.get("prepare_before_check"):
+            phases = ["rest", "inspection"]
+
+        for phase in phases:
+            refs = _load_plate_reference_bytes(printer_name, phase)
+            result = analyse_plate(frame, refs, cfg["roi"], cfg["threshold"])
+            checks.append({
+                "phase": phase,
+                "ok": result.ok and not result.occupied,
+                "occupied": result.occupied,
+                "score": result.score,
+                "threshold": result.threshold,
+                "message": result.message,
+            })
+
+        ok_checks = [c for c in checks if c["ok"]]
+        ok = bool(ok_checks)
+        occupied = not ok
+        if ok_checks:
+            primary = min(ok_checks, key=lambda c: c["score"])
+            message = f"Current camera view matches the {primary.get('phase')} empty reference"
+        else:
+            primary = max(checks, key=lambda c: c["score"]) if checks else {}
+            message = primary.get("message", "Build plate check failed")
+        return {
+            "ok": ok,
+            "occupied": occupied,
+            "score": primary.get("score"),
+            "threshold": primary.get("threshold", cfg["threshold"]),
+            "phase": primary.get("phase"),
+            "checks": checks,
+            "motion": False,
+            "message": message,
+        }
+
+    def _test_plate_reference_images(printer_name):
+        cfg = _get_plate_detection_config(printer_name)
+        phases = ["rest", "inspection"] if cfg.get("prepare_before_check") else ["inspection"]
+        checks = []
+
+        for phase in phases:
+            refs = _load_plate_reference_bytes(printer_name, phase)
+            if not refs:
+                checks.append({
+                    "phase": phase,
+                    "ok": False,
+                    "score": None,
+                    "threshold": cfg["threshold"],
+                    "count": 0,
+                    "message": f"No {phase} reference image captured",
+                })
+                continue
+
+            scores = []
+            for idx, ref in enumerate(refs):
+                others = refs[:idx] + refs[idx + 1:]
+                compare_to = others or [ref]
+                result = analyse_plate(ref, compare_to, cfg["roi"], cfg["threshold"])
+                scores.append(result.score)
+
+            score = max(scores) if scores else 0.0
+            ok = score <= cfg["threshold"]
+            checks.append({
+                "phase": phase,
+                "ok": ok,
+                "score": score,
+                "threshold": cfg["threshold"],
+                "count": len(refs),
+                "message": f"{phase.capitalize()} reference image ready" if ok else f"{phase.capitalize()} reference images differ too much",
+            })
+
+        ok = all(c["ok"] for c in checks)
+        return {
+            "ok": ok,
+            "checks": checks,
+            "motion": False,
+            "message": "Reference images are ready" if ok else "Reference image check needs attention",
+        }
+
+    def _notify_plate_blocked(printer_name, job_id, message):
+        from .notifications import NotificationManager
+        NotificationManager(app_config).notify(
+            "plate_blocked",
+            f"Build plate check blocked job #{job_id}",
+            f"Job #{job_id} was not sent to {printer_name}.\n{message}",
+        )
+
+    def _normalise_access_name(value):
+        return re.sub(r"\s+", " ", str(value or "").strip()).lower()
+
+    def _access_entries(values):
+        if not isinstance(values, list):
+            return set()
+        return {_normalise_access_name(v) for v in values if _normalise_access_name(v)}
+
+    def _current_access_names():
+        names = {
+            _normalise_access_name(session.get("username", "")),
+            _normalise_access_name(session.get("display_name", "")),
+        }
+        return {n for n in names if n}
+
+    def _current_user_in_entries(values):
+        entries = _access_entries(values)
+        return bool(entries and _current_access_names().intersection(entries))
+
+    def _is_student_banned():
+        if is_admin():
+            return False
+        return _current_user_in_entries(_get_student_access_config().get("banlist", []))
+
+    def has_print_access():
+        if is_admin() or _check_api_key():
+            return True
+        if not is_authenticated() or session.get("role") != "student":
+            return False
+        access = _get_student_access_config()
+        if _current_user_in_entries(access.get("banlist", [])):
+            return False
+        return _current_user_in_entries(access.get("allowlist", []))
+
+    def _print_access_denied_response():
+        if not is_authenticated() and not _check_api_key():
+            return jsonify({"error": "Login required"}), 401
+        if _is_student_banned():
+            return jsonify({"error": "Print access has been removed for this student"}), 403
+        return jsonify({"error": "Student print access has not been approved"}), 403
 
     def _is_staff_only_printer(printer_name):
         """Check if a printer is restricted to staff only."""
@@ -222,6 +553,15 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             return f(*args, **kwargs)
         return decorated
 
+    def print_access_required(f):
+        """Require staff/admin/API key or an approved student account."""
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if not has_print_access():
+                return _print_access_denied_response()
+            return f(*args, **kwargs)
+        return decorated
+
     def _is_job_owner(job):
         """True when the current user submitted this job."""
         uname = session.get("username", "")
@@ -235,6 +575,8 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 return f(*args, **kwargs)
             if not is_authenticated():
                 return jsonify({"error": "Login required"}), 401
+            if not has_print_access():
+                return _print_access_denied_response()
             job_id = kwargs.get("job_id")
             if job_id:
                 job = job_queue.get_job(job_id)
@@ -277,6 +619,14 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     @app.route("/api/auth/status")
     def auth_status():
         role = session.get("role")
+        print_allowed = has_print_access()
+        print_denied_reason = ""
+        if is_authenticated() and not print_allowed and role == "student":
+            print_denied_reason = (
+                "Print access has been removed for this student"
+                if _is_student_banned()
+                else "Student print access has not been approved"
+            )
         return jsonify({
             "admin": is_admin(),
             "authenticated": is_authenticated(),
@@ -285,6 +635,8 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             "username": session.get("username", ""),
             "ad_enabled": _ad_enabled(),
             "has_local_users": bool(app_config.get("local_users")),
+            "print_allowed": print_allowed,
+            "print_denied_reason": print_denied_reason,
         })
 
     @app.route(prefix + "/api/auth/login", methods=["POST"])
@@ -653,6 +1005,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     @app.route(prefix + "/api/jobs/upload", methods=["POST"])
     @app.route("/api/jobs/upload", methods=["POST"])
     @login_required
+    @print_access_required
     def upload_job():
         """Upload a G-code/3MF file and add it to the queue."""
         if "file" not in request.files:
@@ -678,6 +1031,9 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         priority = int(request.form.get("priority", 0))
         notes = request.form.get("notes", "")
         printer = request.form.get("printer", "")
+        if printer and not (is_admin() or _check_api_key()) and _is_staff_only_printer(printer):
+            return jsonify({"error": f"Printer '{printer}' is restricted to staff"}), 403
+        meta = parse_gcode_metadata(file_path)
 
         job_id = job_queue.add_job(
             filename=unique_name,
@@ -687,6 +1043,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             priority=priority,
             notes=notes,
             submitted_by=session.get("username", ""),
+            print_time_seconds=meta.get("print_time_seconds"),
         )
 
         # Notify
@@ -710,7 +1067,6 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
         if file_library:
             try:
-                meta = parse_gcode_metadata(file_path)
                 file_library.add_file(
                     original_name=original_name,
                     stored_name=unique_name,
@@ -725,6 +1081,13 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
         # If a specific printer was requested, assign and send immediately
         if printer:
+            plate_check = _check_build_plate_clear(printer)
+            if not plate_check.get("ok"):
+                _notify_plate_blocked(printer, job_id, plate_check.get("message", "Build plate check failed"))
+                return jsonify({
+                    "error": plate_check.get("message", "Build plate check failed"),
+                    "plate_detection": plate_check,
+                }), 409
             ok = job_queue.assign_job(job_id, printer)
             if ok:
                 t = threading.Thread(target=_send_job_to_printer, args=(job_id, printer), daemon=True)
@@ -982,6 +1345,13 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 return jsonify({"error": f"Printer '{pname}' not connected"}), 400
             if not (is_admin() or _check_api_key()) and _is_staff_only_printer(pname):
                 return jsonify({"error": f"Printer '{pname}' is restricted to staff"}), 403
+            plate_check = _check_build_plate_clear(pname)
+            if not plate_check.get("ok"):
+                _notify_plate_blocked(pname, job_id, plate_check.get("message", "Build plate check failed"))
+                return jsonify({
+                    "error": plate_check.get("message", "Build plate check failed"),
+                    "plate_detection": plate_check,
+                }), 409
 
         results = []
         # First printer gets the original job
@@ -1040,6 +1410,13 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 return jsonify({"error": f"Printer '{pname}' not connected"}), 400
             if not (is_admin() or _check_api_key()) and _is_staff_only_printer(pname):
                 return jsonify({"error": f"Printer '{pname}' is restricted to staff"}), 403
+            plate_check = _check_build_plate_clear(pname)
+            if not plate_check.get("ok"):
+                _notify_plate_blocked(pname, job_id, plate_check.get("message", "Build plate check failed"))
+                return jsonify({
+                    "error": plate_check.get("message", "Build plate check failed"),
+                    "plate_detection": plate_check,
+                }), 409
 
         new_id = job_queue.reprint_job(job_id)
         if new_id is None:
@@ -1243,6 +1620,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     @app.route(prefix + "/api/library/files/<int:file_id>/print", methods=["POST"])
     @app.route("/api/library/files/<int:file_id>/print", methods=["POST"])
     @login_required
+    @print_access_required
     def library_print_file(file_id):
         """Create a new job from a library file."""
         if not file_library:
@@ -1261,6 +1639,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             priority=0,
             notes=f"Reprinted from library (file #{file_id})",
             submitted_by=session.get("username", ""),
+            print_time_seconds=lib_file.get("print_time_seconds"),
         )
         file_library.increment_print_count(file_id)
 
@@ -1713,6 +2092,55 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         result = test_ad_connection(ad)
         return jsonify(result)
 
+    # ── Student Print Access Config API ───────────────────
+
+    @app.route(prefix + "/api/student-access/config", methods=["GET"])
+    @app.route("/api/student-access/config", methods=["GET"])
+    @admin_required
+    def student_access_get_config():
+        access = _get_student_access_config()
+        return jsonify({
+            "allowlist": access.get("allowlist", []),
+            "banlist": access.get("banlist", []),
+        })
+
+    @app.route(prefix + "/api/student-access/config", methods=["POST"])
+    @app.route("/api/student-access/config", methods=["POST"])
+    @admin_required
+    def student_access_save_config():
+        data = request.get_json(silent=True) or {}
+
+        def clean_list(values):
+            if not isinstance(values, list):
+                return []
+            seen = set()
+            cleaned = []
+            for value in values:
+                name = re.sub(r"\s+", " ", str(value or "").strip())
+                key = _normalise_access_name(name)
+                if name and key not in seen:
+                    seen.add(key)
+                    cleaned.append(name)
+            return cleaned
+
+        access = {
+            "allowlist": clean_list(data.get("allowlist", [])),
+            "banlist": clean_list(data.get("banlist", [])),
+        }
+
+        config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
+        try:
+            with open(config_path) as f:
+                file_config = yaml.safe_load(f) or {}
+            file_config["student_access"] = access
+            with open(config_path, "w") as f:
+                yaml.dump(file_config, f, default_flow_style=False, sort_keys=False)
+            app_config["student_access"] = access
+            return jsonify({"ok": True, "message": "Student access lists saved"})
+        except Exception as e:
+            logger.error(f"Failed to save student access config: {e}")
+            return jsonify({"ok": False, "message": str(e)}), 500
+
     # ── Obico Configuration ───────────────────────────────
 
     def _get_obico_config_for_printer(printer_name):
@@ -1913,6 +2341,198 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         except Exception as e:
             return jsonify({"ok": False, "message": str(e)}), 500
 
+    # ── Build Plate Detection Config API ──────────────────
+
+    @app.route(prefix + "/api/plate-detection/config/<name>", methods=["GET"])
+    @app.route("/api/plate-detection/config/<name>", methods=["GET"])
+    @admin_required
+    def plate_detection_get_config(name):
+        if not farm_manager.get_printer(name):
+            return jsonify({"error": "Printer not found"}), 404
+        cfg = _get_plate_detection_config(name)
+        refs = _list_plate_references(name, "inspection")
+        rest_refs = _list_plate_references(name, "rest")
+        return jsonify({
+            **cfg,
+            "references": refs,
+            "rest_references": rest_refs,
+            "inspection_references": refs,
+            "max_references": 5,
+        })
+
+    @app.route(prefix + "/api/plate-detection/config/<name>", methods=["POST"])
+    @app.route("/api/plate-detection/config/<name>", methods=["POST"])
+    @admin_required
+    def plate_detection_save_config(name):
+        if not farm_manager.get_printer(name):
+            return jsonify({"ok": False, "message": "Printer not found"}), 404
+        data = request.get_json(silent=True) or {}
+        roi = data.get("roi") or {}
+        cfg = {
+            "enabled": bool(data.get("enabled", False)),
+            "threshold": max(1.0, min(80.0, float(data.get("threshold", 12.0)))),
+            "roi": {
+                "x": max(0.0, min(100.0, float(roi.get("x", 0)))),
+                "y": max(0.0, min(100.0, float(roi.get("y", 0)))),
+                "w": max(1.0, min(100.0, float(roi.get("w", 100)))),
+                "h": max(1.0, min(100.0, float(roi.get("h", 100)))),
+            },
+            "prepare_before_check": bool(data.get("prepare_before_check", _bambu_uses_raised_bed(name))),
+            "inspection_z": max(0.0, min(250.0, float(data.get("inspection_z", 0.0)))),
+            "settle_seconds": max(0.0, min(10.0, float(data.get("settle_seconds", 2.0)))),
+        }
+        try:
+            with open(os.environ.get("FARM_CONFIG", "config/config.yaml")) as f:
+                file_config = yaml.safe_load(f) or {}
+            plate_cfg = file_config.get("plate_detection", {})
+            plate_cfg[name] = cfg
+            file_config["plate_detection"] = plate_cfg
+            with open(os.environ.get("FARM_CONFIG", "config/config.yaml"), "w") as f:
+                yaml.dump(file_config, f, default_flow_style=False, sort_keys=False)
+            app_config["plate_detection"] = plate_cfg
+            return jsonify({"ok": True, "message": "Build plate detection saved"})
+        except Exception as e:
+            logger.error(f"Failed to save plate detection config: {e}")
+            return jsonify({"ok": False, "message": str(e)}), 500
+
+    @app.route(prefix + "/api/plate-detection/capture/<name>", methods=["POST"])
+    @app.route("/api/plate-detection/capture/<name>", methods=["POST"])
+    @admin_required
+    def plate_detection_capture_reference(name):
+        if not farm_manager.get_printer(name):
+            return jsonify({"ok": False, "message": "Printer not found"}), 404
+        data = request.get_json(silent=True) or {}
+        phase = (data.get("phase") or request.args.get("phase") or "inspection").strip().lower()
+        if phase not in {"rest", "inspection"}:
+            return jsonify({"ok": False, "message": "Reference phase must be rest or inspection"}), 400
+
+        refs = _list_plate_references(name, phase)
+        if len(refs) >= 5:
+            return jsonify({"ok": False, "message": f"Maximum of 5 {phase} reference images reached"}), 400
+        cfg = _get_plate_detection_config(name)
+        frame_after = None
+        if phase == "inspection":
+            prep = _prepare_plate_detection_view(name, cfg)
+            if not prep.get("ok"):
+                return jsonify({"ok": False, "message": prep.get("message", "Build plate inspection setup failed")}), 400
+            frame_after = prep.get("after")
+        frame = _current_camera_frame(name, wait_seconds=0.5 if frame_after else 0.0, after=frame_after)
+        if not frame:
+            return jsonify({"ok": False, "message": "No camera snapshot available"}), 400
+        idx = 1
+        existing = set(refs)
+        prefix = _plate_reference_prefix(phase)
+        while f"{prefix}{idx}.jpg" in existing:
+            idx += 1
+        ref_name = f"{prefix}{idx}.jpg"
+        with open(os.path.join(_plate_detection_dir(name), ref_name), "wb") as f:
+            f.write(frame)
+        return jsonify({
+            "ok": True,
+            "phase": phase,
+            "reference": ref_name,
+            "references": _list_plate_references(name, "inspection"),
+            "rest_references": _list_plate_references(name, "rest"),
+            "inspection_references": _list_plate_references(name, "inspection"),
+        })
+
+    @app.route(prefix + "/api/plate-detection/prepare/<name>", methods=["POST"])
+    @app.route("/api/plate-detection/prepare/<name>", methods=["POST"])
+    @admin_required
+    def plate_detection_prepare_view(name):
+        if not farm_manager.get_printer(name):
+            return jsonify({"ok": False, "message": "Printer not found"}), 404
+        if farm_manager.get_printer_type(name) != "bambulab":
+            return jsonify({"ok": False, "message": "Raised inspection positioning is only available for Bambu printers"}), 400
+        data = request.get_json(silent=True) or {}
+        cfg = _get_plate_detection_config(name)
+        cfg["prepare_before_check"] = True
+        prep = _prepare_plate_detection_view(name, cfg, home=bool(data.get("home", False)))
+        if not prep.get("ok"):
+            return jsonify({"ok": False, "message": prep.get("message", "Build plate inspection setup failed")}), 400
+        return jsonify({
+            "ok": True,
+            "message": "Build plate moved to raised inspection position",
+            "inspection_z": cfg.get("inspection_z", 0.0),
+        })
+
+    @app.route(prefix + "/api/plate-detection/jog/<name>", methods=["POST"])
+    @app.route("/api/plate-detection/jog/<name>", methods=["POST"])
+    @admin_required
+    def plate_detection_jog_bed(name):
+        printer = farm_manager.get_printer(name)
+        if not printer:
+            return jsonify({"ok": False, "message": "Printer not found"}), 404
+        if farm_manager.get_printer_type(name) != "bambulab":
+            return jsonify({"ok": False, "message": "Bed jog is only available for Bambu printers"}), 400
+        if not printer.is_connected():
+            return jsonify({"ok": False, "message": f"Printer '{name}' not connected"}), 400
+
+        data = request.get_json(silent=True) or {}
+        action = str(data.get("action", "jog")).strip().lower()
+        if action == "home":
+            if not hasattr(printer, "home_build_plate_z"):
+                return jsonify({"ok": False, "message": "Printer does not support Z home"}), 400
+            ok = printer.home_build_plate_z()
+            return jsonify({"ok": ok, "message": "Bambu bed homed" if ok else "Could not home Bambu bed"}), (200 if ok else 500)
+
+        try:
+            delta = float(data.get("delta_z", 0))
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "message": "delta_z must be a number"}), 400
+        delta = max(-50.0, min(50.0, delta))
+        if not delta:
+            return jsonify({"ok": False, "message": "delta_z is required"}), 400
+        if not hasattr(printer, "jog_build_plate"):
+            return jsonify({"ok": False, "message": "Printer does not support bed jog"}), 400
+        ok = printer.jog_build_plate(delta)
+        direction = "up" if delta < 0 else "down"
+        return jsonify({
+            "ok": ok,
+            "message": f"Moved Bambu bed {direction} {abs(delta):g} mm" if ok else "Could not jog Bambu bed",
+            "delta_z": delta,
+        }), (200 if ok else 500)
+
+    @app.route(prefix + "/api/plate-detection/reference/<name>/<ref_name>", methods=["DELETE", "POST"])
+    @app.route("/api/plate-detection/reference/<name>/<ref_name>", methods=["DELETE", "POST"])
+    @admin_required
+    def plate_detection_delete_reference(name, ref_name):
+        if not farm_manager.get_printer(name):
+            return jsonify({"ok": False, "message": "Printer not found"}), 404
+        if ref_name not in _list_plate_references(name):
+            return jsonify({"ok": False, "message": "Reference not found"}), 404
+        os.remove(os.path.join(_plate_detection_dir(name), ref_name))
+        return jsonify({"ok": True, "references": _list_plate_references(name)})
+
+    @app.route(prefix + "/api/plate-detection/reference/<name>/<ref_name>")
+    @app.route("/api/plate-detection/reference/<name>/<ref_name>")
+    @admin_required
+    def plate_detection_reference_image(name, ref_name):
+        if ref_name not in _list_plate_references(name):
+            return Response(status=404)
+        return send_from_directory(_plate_detection_dir(name), ref_name, mimetype="image/jpeg")
+
+    @app.route(prefix + "/api/plate-detection/test/<name>", methods=["POST"])
+    @app.route("/api/plate-detection/test/<name>", methods=["POST"])
+    @admin_required
+    def plate_detection_test(name):
+        if not farm_manager.get_printer(name):
+            return jsonify({"ok": False, "message": "Printer not found"}), 404
+        data = request.get_json(silent=True) or {}
+        if data.get("full_check"):
+            result = _check_build_plate_clear(name)
+        else:
+            result = _test_current_plate_view(name)
+        return jsonify(result)
+
+    @app.route(prefix + "/api/plate-detection/test-references/<name>", methods=["POST"])
+    @app.route("/api/plate-detection/test-references/<name>", methods=["POST"])
+    @admin_required
+    def plate_detection_test_references(name):
+        if not farm_manager.get_printer(name):
+            return jsonify({"ok": False, "message": "Printer not found"}), 404
+        return jsonify(_test_plate_reference_images(name))
+
     # ── Camera helpers ────────────────────────────────────
 
     def _detect_klipper_webcam(printer):
@@ -2008,6 +2628,14 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             return jsonify({})
         return jsonify(camera_manager.get_status())
 
+    @app.route(prefix + "/api/camera/status/details")
+    @app.route("/api/camera/status/details")
+    def camera_status_details():
+        """Get detailed streaming/stale status for all cameras."""
+        if not camera_manager:
+            return jsonify({})
+        return jsonify(camera_manager.get_detailed_status())
+
     # ── OctoPrint-Compatible API (for OrcaSlicer) ─────────
 
     def _check_octoprint_api_key():
@@ -2102,6 +2730,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
         # Check if OrcaSlicer wants to print immediately
         print_flag = request.form.get("print", "false").lower() == "true"
+        meta = parse_gcode_metadata(file_path)
 
         job_id = job_queue.add_job(
             filename=unique_name,
@@ -2110,6 +2739,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             copies=1,
             priority=10 if print_flag else 0,
             notes="Uploaded from OrcaSlicer",
+            print_time_seconds=meta.get("print_time_seconds"),
         )
 
         # Notify
@@ -2137,7 +2767,6 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         # Add to file library (metadata parsing can be slow on large gcode files)
         if file_library:
             try:
-                meta = parse_gcode_metadata(file_path)
                 file_library.add_file(
                     original_name=original_name,
                     stored_name=unique_name,

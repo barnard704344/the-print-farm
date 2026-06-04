@@ -45,7 +45,7 @@ Session-based authentication via login. Roles:
 | Role | Access |
 |------|--------|
 | `staff` | Full admin access to all endpoints |
-| `student` | Can upload jobs, view status, manage own jobs |
+| `student` | Can view status. Uploading, sending, and reprinting require the student to be on the Student Print Access allowlist and not on the ban list. |
 
 Login sources (checked in order):
 1. **Local users** — defined in `config.yaml` under `local_users`
@@ -67,7 +67,9 @@ Returns current session status. No auth required.
   "display_name": "Admin User",
   "username": "admin",
   "ad_enabled": false,
-  "has_local_users": true
+  "has_local_users": true,
+  "print_allowed": true,
+  "print_denied_reason": ""
 }
 ```
 
@@ -273,6 +275,8 @@ Restrict printer to staff only.
 | `GET /api/jobs/queued` | Queued jobs only |
 | `GET /api/jobs/active` | Active/printing jobs |
 | `GET /api/jobs/<job_id>` | Single job details |
+
+Job objects include `print_time_seconds` when the slicer provided an estimated print time in the uploaded G-code/3MF metadata. The dashboard shows this as **Est. Time** in the Job Queue.
 
 ### Upload & Create Job
 
@@ -513,6 +517,62 @@ Admin only.
   "staff_ou": "OU=Staff"
 }
 ```
+
+---
+
+## Student Print Access
+
+Admin only. Staff can always print. Students must match the allowlist by username or display name, and the ban list wins if a name appears in both lists.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/student-access/config` | Get student allowlist and ban list |
+| POST | `/api/student-access/config` | Save student allowlist and ban list |
+
+**Save Body:**
+```json
+{
+  "allowlist": ["student.username", "Student Display Name"],
+  "banlist": ["removed.student"]
+}
+```
+
+---
+
+## Build Plate Detection
+
+Admin only. Per-printer empty build plate detection compares the current camera snapshot against empty-plate reference images inside a configurable ROI. BambuLab printers can use a two-stage check: compare the resting-bed view first, then move the bed to a raised inspection height and compare again only if the resting view looks clear. When enabled, jobs are blocked before upload/start if the plate appears occupied.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/plate-detection/config/<name>` | Get detection settings and references |
+| POST | `/api/plate-detection/config/<name>` | Save enabled flag, threshold, and ROI |
+| POST | `/api/plate-detection/capture/<name>` | Capture current camera frame as an empty reference. Body may include `phase: "rest"` or `phase: "inspection"` |
+| POST | `/api/plate-detection/prepare/<name>` | Bambu only. Optionally home Z, then move bed to raised inspection position |
+| POST | `/api/plate-detection/jog/<name>` | Bambu only. Home Z or manually jog the bed up/down during calibration |
+| GET | `/api/plate-detection/reference/<name>/<ref>` | View a reference image |
+| DELETE | `/api/plate-detection/reference/<name>/<ref>` | Delete a reference image |
+| POST | `/api/plate-detection/test/<name>` | Test the current camera frame against rest and raised references without moving the bed. Send `{"full_check": true}` to run the full pre-print motion check |
+| POST | `/api/plate-detection/test-references/<name>` | Test the saved Rest/Raised reference images without using the live camera |
+
+**Save Body:**
+```json
+{
+  "enabled": true,
+  "threshold": 12,
+  "roi": { "x": 8, "y": 12, "w": 84, "h": 70 },
+  "prepare_before_check": true,
+  "inspection_z": 0,
+  "settle_seconds": 2
+}
+```
+
+For BambuLab printers, `prepare_before_check` moves the bed to `inspection_z`
+before capturing the raised inspection frame so the plate is visible from the
+built-in camera. The resting-bed reference is checked first; if that view looks
+occupied, the bed is not moved. On P/X-series Bambu printers, `inspection_z: 0`
+raises the bed to nozzle/camera inspection height. A1-style printers default to
+the normal single-stage camera check.
 
 ---
 

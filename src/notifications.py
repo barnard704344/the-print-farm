@@ -32,6 +32,8 @@ class NotificationManager:
 
     def _event_enabled(self, event: str) -> bool:
         events = self._notif_cfg.get("events", {})
+        if event == "plate_blocked":
+            return events.get(event, True)
         return events.get(event, False)
 
     def notify(self, event: str, subject: str, message: str):
