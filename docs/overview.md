@@ -1,6 +1,7 @@
 # Overview
 
-The Print Farm is a web-based print farm manager for BambuLab and Klipper printers.
+The Print Farm is a web-based 3D printer management system designed for schools using BambuLab and Klipper printers.
+
 
 ## BambuLab Support
 
@@ -66,6 +67,20 @@ No Klipper plugin or extra component is required beyond a standard Moonraker ins
 - **Notifications** — Email (SMTP) and Discord webhook alerts for job submission, print completion, pause, and failure
 - **Obico integration** — Pulls AI failure detection data from a local Obico server when present
 - **Spoolman integration** - Add in your local instance of spoolman and track your filament usage. https://github.com/Donkie/Spoolman
+
+- ## Student Print Access
+
+The Print Farm includes a student access control system designed for school environments.
+
+Staff and admin users can always print. Student accounts can sign in and view the dashboard, but they must be added to the **Student Print Access allowlist** before they can upload jobs, send jobs to printers, reprint jobs, or print from the file library.
+
+A separate **ban list** is also available. This is useful for keeping a record of students whose print access has been removed. If a student appears on both lists, the ban list takes priority.
+
+Student access is managed from:
+
+**Settings → Student Print Access**
+
+Add one username or display name per line.
 
 ## UI Screenshots
 
