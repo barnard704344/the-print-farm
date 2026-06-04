@@ -1,8 +1,10 @@
 # The Print Farm
 
-A web-based print farm manager for BambuLab and Klipper printers.
+A lightweight, web-based print farm manager for BambuLab and Klipper printers.
 
-This README is now a documentation index. Full content is split into modular docs pages.
+Built primarily for primary and secondary schools, The Print Farm keeps things simple: no unnecessary plugins, extensions, or heavy dependencies.
+
+This README acts as a documentation index. Detailed information is split across the docs pages below.
 
 ## Documentation Menu
 
@@ -19,11 +21,11 @@ This README is now a documentation index. Full content is split into modular doc
 ## Requirements
 
 - Python 3.9+
-- Apache 2 with mod_proxy
+- Apache 2 with `mod_proxy`
 - Debian 11+ / Ubuntu 22.04+ / Raspberry Pi OS
-- `isc-dhcp-client` and `openssl` — installed automatically by `setup.sh` (required for virtual printers)
-- Spoolman (optional)
-- Happy Hare (optional)
+- `isc-dhcp-client` and `openssl`, installed automatically by `setup.sh` and required for virtual printers
+- Spoolman optional
+- Happy Hare optional
 
 ## License
 
