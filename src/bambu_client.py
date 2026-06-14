@@ -144,6 +144,7 @@ class PrintState:
     has_mmu: bool = False
     mmu: dict = field(default_factory=dict)
     # Klipper fans and LEDs (auto-discovered)
+    klipper_tools: list = field(default_factory=list)
     klipper_fans: list = field(default_factory=list)
     klipper_leds: list = field(default_factory=list)
     # Obico failure detection (Klipper)

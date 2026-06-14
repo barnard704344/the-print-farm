@@ -354,7 +354,7 @@
 
         .printer-temps {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
             gap: 8px;
             margin-bottom: 12px;
         }
@@ -4375,6 +4375,74 @@
             return h > 0 ? `${h}h ${m}m` : `${m}m`;
         }
 
+        function formatTemp(value) {
+            const n = Number(value);
+            return Number.isFinite(n) ? `${n.toFixed(0)}°` : '0°';
+        }
+
+        function klipperToolsForDisplay(p) {
+            const tools = Array.isArray(p.klipper_tools) ? p.klipper_tools : [];
+            if (tools.length) return tools;
+            return [{
+                name: 'T0',
+                temperature: p.nozzle_temper || 0,
+                target: p.nozzle_target_temper || 0,
+            }];
+        }
+
+        function renderTemperatureTiles(name, p, isAdmin, isBambu, isKlipper) {
+            if (isKlipper) {
+                const toolTiles = klipperToolsForDisplay(p).map((tool, idx) => `
+                    <div class="temp-item klipper-tool-temp" data-tool-index="${idx}">
+                        <div class="temp-label">${tool.name || `T${idx}`}</div>
+                        <div class="temp-value" data-field="tool-temp">${formatTemp(tool.temperature)}</div>
+                        <div class="temp-target" data-field="tool-target">/ ${formatTemp(tool.target)}</div>
+                    </div>
+                `).join('');
+                return `
+                    ${toolTiles}
+                    <div class="temp-item">
+                        <div class="temp-label">Bed</div>
+                        <div class="temp-value" data-field="bed-temp">${formatTemp(p.bed_temper)}</div>
+                        <div class="temp-target" data-field="bed-target">/ ${formatTemp(p.bed_target_temper)}</div>
+                        ${isAdmin ? `<div class="temp-control">
+                            <input type="number" class="temp-input" id="bed-${name}" placeholder="°C" min="0" max="120">
+                            <button class="temp-set-btn" onclick="setBedTemp('${name}')">Set</button>
+                            <button class="temp-off-btn" onclick="setTemp('${name}','bed_temp',0)">Off</button>
+                        </div>` : ''}
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="temp-item">
+                    <div class="temp-label">Nozzle</div>
+                    <div class="temp-value" data-field="nozzle-temp">${formatTemp(p.nozzle_temper)}</div>
+                    <div class="temp-target" data-field="nozzle-target">/ ${formatTemp(p.nozzle_target_temper)}</div>
+                    ${isAdmin ? `<div class="temp-control">
+                        <input type="number" class="temp-input" id="nozzle-${name}" placeholder="°C" min="0" max="300">
+                        <button class="temp-set-btn" onclick="setNozzleTemp('${name}')">Set</button>
+                        <button class="temp-off-btn" onclick="setTemp('${name}','nozzle_temp',0)">Off</button>
+                    </div>` : ''}
+                </div>
+                <div class="temp-item">
+                    <div class="temp-label">Bed</div>
+                    <div class="temp-value" data-field="bed-temp">${formatTemp(p.bed_temper)}</div>
+                    <div class="temp-target" data-field="bed-target">/ ${formatTemp(p.bed_target_temper)}</div>
+                    ${isAdmin ? `<div class="temp-control">
+                        <input type="number" class="temp-input" id="bed-${name}" placeholder="°C" min="0" max="120">
+                        <button class="temp-set-btn" onclick="setBedTemp('${name}')">Set</button>
+                        <button class="temp-off-btn" onclick="setTemp('${name}','bed_temp',0)">Off</button>
+                    </div>` : ''}
+                </div>
+                <div class="temp-item">
+                    <div class="temp-label">Chamber</div>
+                    <div class="temp-value" data-field="chamber-temp">${isBambu ? (p.chamber_temper > 5 ? formatTemp(p.chamber_temper) : 'N/A') : 'N/A'}</div>
+                    <div class="temp-target">&nbsp;</div>
+                </div>
+            `;
+        }
+
         let lastPrinterNames = [];  // Track which printers are in the grid
         let availablePrinters = [];  // Track available printers for manual assign
 
@@ -4429,32 +4497,8 @@
                         <span data-field="eta">ETA: ${isRunning ? formatTime(p.mc_remaining_time) : '--'}</span>
                         <span data-field="speed">Speed: ${p.spd_mag}%</span>
                     </div>
-                    <div class="printer-temps">
-                        <div class="temp-item">
-                            <div class="temp-label">Nozzle</div>
-                            <div class="temp-value" data-field="nozzle-temp">${p.nozzle_temper?.toFixed(0) || 0}°</div>
-                            <div class="temp-target" data-field="nozzle-target">/ ${p.nozzle_target_temper?.toFixed(0) || 0}°</div>
-                            ${isAdmin ? `<div class="temp-control">
-                                <input type="number" class="temp-input" id="nozzle-${name}" placeholder="°C" min="0" max="300">
-                                <button class="temp-set-btn" onclick="setNozzleTemp('${name}')">Set</button>
-                                <button class="temp-off-btn" onclick="setTemp('${name}','nozzle_temp',0)">Off</button>
-                            </div>` : ''}
-                        </div>
-                        <div class="temp-item">
-                            <div class="temp-label">Bed</div>
-                            <div class="temp-value" data-field="bed-temp">${p.bed_temper?.toFixed(0) || 0}°</div>
-                            <div class="temp-target" data-field="bed-target">/ ${p.bed_target_temper?.toFixed(0) || 0}°</div>
-                            ${isAdmin ? `<div class="temp-control">
-                                <input type="number" class="temp-input" id="bed-${name}" placeholder="°C" min="0" max="120">
-                                <button class="temp-set-btn" onclick="setBedTemp('${name}')">Set</button>
-                                <button class="temp-off-btn" onclick="setTemp('${name}','bed_temp',0)">Off</button>
-                            </div>` : ''}
-                        </div>
-                        <div class="temp-item">
-                            <div class="temp-label">Chamber</div>
-                            <div class="temp-value" data-field="chamber-temp">${isBambu ? (p.chamber_temper > 5 ? p.chamber_temper.toFixed(0) + '°' : 'N/A') : 'N/A'}</div>
-                            <div class="temp-target">&nbsp;</div>
-                        </div>
+                    <div class="printer-temps" data-field="temps">
+                        ${renderTemperatureTiles(name, p, isAdmin, isBambu, isKlipper)}
                     </div>
                     ${(isAdmin || myActivePrinters.has(name)) ? `<div class="printer-controls" data-field="controls">
                         ${isPaused ? `<button class="btn btn-success" onclick="printerCmd('${name}','resume')">Resume</button>` : ''}
@@ -4772,27 +4816,43 @@
             const spdEl = card.querySelector('[data-field="speed"]');
             if (spdEl) spdEl.textContent = `Speed: ${p.spd_mag}%`;
 
+            const pType = p.type || 'bambulab';
+            const isBambu = pType === 'bambulab';
+            const isKlipper = pType === 'klipper';
+
             // Temperatures (only update display, not input fields)
+            const tempsEl = card.querySelector('[data-field="temps"]');
+            if (tempsEl && isKlipper) {
+                const tools = klipperToolsForDisplay(p);
+                const existingTools = tempsEl.querySelectorAll('.klipper-tool-temp');
+                if (existingTools.length !== tools.length) {
+                    tempsEl.innerHTML = renderTemperatureTiles(name, p, isAdmin, isBambu, isKlipper);
+                } else {
+                    tools.forEach((tool, idx) => {
+                        const item = tempsEl.querySelector(`.klipper-tool-temp[data-tool-index="${idx}"]`);
+                        const tempEl = item?.querySelector('[data-field="tool-temp"]');
+                        const targetEl = item?.querySelector('[data-field="tool-target"]');
+                        if (tempEl) tempEl.textContent = formatTemp(tool.temperature);
+                        if (targetEl) targetEl.textContent = '/ ' + formatTemp(tool.target);
+                    });
+                }
+            }
             const nt = card.querySelector('[data-field="nozzle-temp"]');
-            if (nt) nt.textContent = (p.nozzle_temper?.toFixed(0) || 0) + '°';
+            if (nt) nt.textContent = formatTemp(p.nozzle_temper);
             const ntt = card.querySelector('[data-field="nozzle-target"]');
-            if (ntt) ntt.textContent = '/ ' + (p.nozzle_target_temper?.toFixed(0) || 0) + '°';
+            if (ntt) ntt.textContent = '/ ' + formatTemp(p.nozzle_target_temper);
             const bt = card.querySelector('[data-field="bed-temp"]');
-            if (bt) bt.textContent = (p.bed_temper?.toFixed(0) || 0) + '°';
+            if (bt) bt.textContent = formatTemp(p.bed_temper);
             const btt = card.querySelector('[data-field="bed-target"]');
-            if (btt) btt.textContent = '/ ' + (p.bed_target_temper?.toFixed(0) || 0) + '°';
+            if (btt) btt.textContent = '/ ' + formatTemp(p.bed_target_temper);
             const ct = card.querySelector('[data-field="chamber-temp"]');
             if (ct) {
-                const pType = p.type || 'bambulab';
-                ct.textContent = pType === 'bambulab' ? (p.chamber_temper > 5 ? p.chamber_temper.toFixed(0) + '°' : 'N/A') : 'N/A';
+                ct.textContent = isBambu ? (p.chamber_temper > 5 ? formatTemp(p.chamber_temper) : 'N/A') : 'N/A';
             }
 
             // Controls (need rebuild since buttons change with status)
             const ctrlEl = card.querySelector('[data-field="controls"]');
             if (ctrlEl && isAdmin) {
-                const pType = p.type || 'bambulab';
-                const isBambu = pType === 'bambulab';
-                const isKlipper = pType === 'klipper';
                 ctrlEl.innerHTML = `
                     ${isPaused ? `<button class="btn btn-success" onclick="printerCmd('${name}','resume')">Resume</button>` : ''}
                     ${isRunning ? `<button class="btn btn-warning" onclick="printerCmd('${name}','pause')">Pause</button>` : ''}

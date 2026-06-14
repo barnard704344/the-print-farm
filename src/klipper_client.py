@@ -64,6 +64,18 @@ def _number(value, default=0.0) -> float:
         return default
 
 
+def _is_extruder_object(name: str) -> bool:
+    suffix = name[len("extruder"):]
+    return name == "extruder" or (name.startswith("extruder") and suffix.isdigit())
+
+
+def _extruder_sort_key(name: str) -> int:
+    if name == "extruder":
+        return 0
+    suffix = name[len("extruder"):]
+    return int(suffix) if suffix.isdigit() else 999
+
+
 class KlipperClient:
     """
     HTTP client for a single Klipper printer via Moonraker API.
@@ -101,6 +113,7 @@ class KlipperClient:
 
         # Detected capabilities (set during connect)
         self._has_mmu = False
+        self._extruder_objects = ["extruder"]
         self._fan_objects = []   # e.g. ["fan_generic exhaust_fan", "heater_fan hotend_fan"]
         self._led_objects = []   # e.g. ["neopixel chamber_light", "led sb_leds"]
         self._output_pins = []   # e.g. ["output_pin caselight"]
@@ -149,6 +162,7 @@ class KlipperClient:
             self._connected.set()
             self._stop_event.clear()
             self._has_mmu = False
+            self._extruder_objects = ["extruder"]
             self._fan_objects = []
             self._led_objects = []
             self._output_pins = []
@@ -163,6 +177,11 @@ class KlipperClient:
                         self._has_mmu = True
                         logger.info(f"[{self.name}] Happy Hare MMU detected")
 
+                    self._extruder_objects = sorted(
+                        [obj_name for obj_name in objects if _is_extruder_object(obj_name)],
+                        key=_extruder_sort_key,
+                    ) or ["extruder"]
+
                     # Auto-discover fan objects
                     for obj_name in objects:
                         for prefix in _FAN_PREFIXES:
@@ -174,6 +193,8 @@ class KlipperClient:
                         if obj_name.startswith(_OUTPUT_PIN_PREFIX + " "):
                             self._output_pins.append(obj_name)
 
+                    if len(self._extruder_objects) > 1:
+                        logger.info(f"[{self.name}] Extruders detected: {self._extruder_objects}")
                     if self._fan_objects:
                         logger.info(f"[{self.name}] Fans detected: {self._fan_objects}")
                     if self._led_objects:
@@ -406,13 +427,15 @@ class KlipperClient:
         """Query Moonraker for current printer state and update self._state."""
         params = {
             "heater_bed": "temperature,target",
-            "extruder": "temperature,target,pressure_advance",
             "print_stats": "state,filename,total_duration,print_duration,filament_used,message,info",
             "display_status": "progress,message",
             "virtual_sdcard": "progress,file_position,file_path",
             "fan": "speed",
             "gcode_move": "speed_factor",
         }
+
+        for extruder_obj in getattr(self, "_extruder_objects", ["extruder"]):
+            params[extruder_obj] = "temperature,target,pressure_advance"
 
         # Include Happy Hare MMU objects if detected
         if self._has_mmu:
@@ -505,6 +528,18 @@ class KlipperClient:
             ext = result.get("extruder", {})
             self._state.nozzle_temper = _number(ext.get("temperature"), 0.0)
             self._state.nozzle_target_temper = _number(ext.get("target"), 0.0)
+
+            tools = []
+            for idx, extruder_obj in enumerate(getattr(self, "_extruder_objects", ["extruder"])):
+                tool_data = result.get(extruder_obj, {})
+                tools.append({
+                    "object": extruder_obj,
+                    "name": f"T{idx}",
+                    "temperature": _number(tool_data.get("temperature"), 0.0),
+                    "target": _number(tool_data.get("target"), 0.0),
+                    "pressure_advance": _number(tool_data.get("pressure_advance"), 0.0),
+                })
+            self._state.klipper_tools = tools
 
             # Klipper doesn't typically have a chamber temp sensor by default
             # but if configured, it would be a custom heater — leave as 0

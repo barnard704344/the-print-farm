@@ -226,6 +226,7 @@ class FarmManager:
                 "vt_tray": s.vt_tray,
                 "has_mmu": s.has_mmu,
                 "mmu": s.mmu,  # will be overlaid below if gate configs are persisted
+                "klipper_tools": s.klipper_tools,
                 "klipper_fans": s.klipper_fans,
                 "klipper_leds": s.klipper_leds,
                 "obico": s.obico,
