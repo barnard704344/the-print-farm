@@ -1235,6 +1235,8 @@
             justify-content: flex-end;
         }
         .toolhead-control .temp-input { width: 54px; }
+        .toolhead-group .fanled-row { padding: 3px 0; }
+        .toolhead-group .spool-assign-row { margin-top: 6px; }
 
         /* Camera Feed */
         .camera-section {
@@ -4592,41 +4594,26 @@
 
         function renderFanLedSection(name, p) {
             if (p.type !== 'klipper') return '';
-            const fans = p.klipper_fans || [];
+            const isToolchanger = isKlipperToolchanger(p);
+            const assignedFanObjects = isToolchanger ? toolFanObjects(p) : new Set();
+            const fans = (p.klipper_fans || []).filter(fan => !assignedFanObjects.has(fan.object));
             const leds = p.klipper_leds || [];
 
             let html = `<div class="fanled-section" data-field="fanled">`;
             html += `<div class="fanled-header">Fans & Lights</div>`;
 
-            // Part cooling fan (always present from 'fan' object)
-            const partFanPct = Math.round((parseInt(p.cooling_fan_speed) || 0) / 255 * 100);
-            html += `<div class="fanled-row">
-                <span class="fanled-name">🌬️ Part Fan</span>
-                <div class="fanled-bar-wrap"><div class="fanled-bar" style="width:${partFanPct}%"></div></div>
-                <span class="fanled-pct">${partFanPct}%</span>
-            </div>`;
+            if (!isToolchanger || assignedFanObjects.size === 0) {
+                // Part cooling fan (always present from 'fan' object)
+                const partFanPct = Math.round((parseInt(p.cooling_fan_speed) || 0) / 255 * 100);
+                html += `<div class="fanled-row">
+                    <span class="fanled-name">🌬️ Part Fan</span>
+                    <div class="fanled-bar-wrap"><div class="fanled-bar" style="width:${partFanPct}%"></div></div>
+                    <span class="fanled-pct">${partFanPct}%</span>
+                </div>`;
+            }
 
             // Discovered fans
-            for (const fan of fans) {
-                const pct = Math.round(fan.speed * 100);
-                const icon = fan.type === 'heater_fan' ? '🔥' : '🌀';
-                const displayName = fan.name.replace(/_/g, ' ');
-                if (fan.controllable && isAdmin) {
-                    html += `<div class="fanled-row">
-                        <span class="fanled-name">${icon} ${displayName}</span>
-                        <input type="range" class="fanled-slider" min="0" max="100" value="${pct}"
-                            onchange="setKlipperFan('${name}','${fan.object}',this.value/100)"
-                            title="${pct}%">
-                        <span class="fanled-pct">${pct}%</span>
-                    </div>`;
-                } else {
-                    html += `<div class="fanled-row">
-                        <span class="fanled-name">${icon} ${displayName}</span>
-                        <div class="fanled-bar-wrap"><div class="fanled-bar" style="width:${pct}%"></div></div>
-                        <span class="fanled-pct">${pct}%</span>
-                    </div>`;
-                }
-            }
+            html += renderFanRows(name, fans);
 
             // LEDs & output pins
             for (const led of leds) {
@@ -4783,7 +4770,62 @@
                 </div>`;
         }
 
-        function renderToolheadGroup(name, tool, idx, spoolData) {
+        function fanMatchesTool(fan, tool) {
+            const haystack = `${fan.name || ''} ${fan.object || ''}`.toLowerCase();
+            const compact = haystack.replace(/[^a-z0-9]/g, '');
+            const toolNum = tool.tool_number;
+            const tokens = [];
+            if (tool.name) tokens.push(String(tool.name).toLowerCase());
+            if (tool.tool_object) tokens.push(String(tool.tool_object).toLowerCase());
+            if (tool.object) tokens.push(String(tool.object).toLowerCase());
+            if (toolNum !== null && toolNum !== undefined) {
+                tokens.push(`tool${toolNum}`, `tool_${toolNum}`, `tool ${toolNum}`, `t${toolNum}`);
+            }
+            return tokens.some(token => {
+                const lower = token.toLowerCase();
+                return haystack.includes(lower) || compact.includes(lower.replace(/[^a-z0-9]/g, ''));
+            });
+        }
+
+        function fansForTool(p, tool) {
+            return (p.klipper_fans || []).filter(fan => fanMatchesTool(fan, tool));
+        }
+
+        function toolFanObjects(p) {
+            const objects = new Set();
+            for (const tool of klipperToolchangerTools(p)) {
+                for (const fan of fansForTool(p, tool)) {
+                    if (fan.object) objects.add(fan.object);
+                }
+            }
+            return objects;
+        }
+
+        function renderFanRows(name, fans) {
+            return fans.map(fan => {
+                const pct = Math.round(fan.speed * 100);
+                const icon = fan.type === 'heater_fan' ? '🔥' : '🌀';
+                const displayName = fan.name.replace(/_/g, ' ');
+                const safeName = String(name).replace(/'/g, "\\'");
+                const safeObject = String(fan.object).replace(/'/g, "\\'");
+                if (fan.controllable && isAdmin) {
+                    return `<div class="fanled-row">
+                        <span class="fanled-name">${icon} ${displayName}</span>
+                        <input type="range" class="fanled-slider" min="0" max="100" value="${pct}"
+                            onchange="setKlipperFan('${safeName}','${safeObject}',this.value/100)"
+                            title="${pct}%">
+                        <span class="fanled-pct">${pct}%</span>
+                    </div>`;
+                }
+                return `<div class="fanled-row">
+                    <span class="fanled-name">${icon} ${displayName}</span>
+                    <div class="fanled-bar-wrap"><div class="fanled-bar" style="width:${pct}%"></div></div>
+                    <span class="fanled-pct">${pct}%</span>
+                </div>`;
+            }).join('');
+        }
+
+        function renderToolheadGroup(name, p, tool, idx, spoolData) {
             const toolName = tool.name || `T${idx}`;
             const docked = !!tool.docked;
             const stateLabel = docked ? 'Docked' : tool.active ? 'Active' : 'Ready';
@@ -4792,6 +4834,7 @@
             const safeName = String(name).replace(/'/g, "\\'");
             const safeTool = String(toolName).replace(/'/g, "\\'");
             const safeHeater = String(heater).replace(/'/g, "\\'");
+            const fanHtml = renderFanRows(name, fansForTool(p, tool));
             return `
                 <div class="toolhead-group ${tool.active ? 'active' : ''} ${docked ? 'docked' : ''}" data-tool-index="${idx}" data-tool-name="${safeTool}">
                     <div class="toolhead-header">
@@ -4809,6 +4852,7 @@
                             <button class="temp-off-btn" onclick="setTemp('${safeName}','nozzle_temp',0,{heater:'${safeHeater}'})">Off</button>
                         </div>` : ''}
                     </div>
+                    ${fanHtml}
                     ${renderSpoolAssignmentRow({
                         printerName: name,
                         label: 'Spool',
@@ -4882,6 +4926,7 @@
                     const cachedTools = _toolSpoolCache[name] || {};
                     spoolHtml = `<div class="toolhead-groups">${toolSpools.map((tool, idx) => renderToolheadGroup(
                         name,
+                        p,
                         tool,
                         idx,
                         cachedTools[tool.name],
