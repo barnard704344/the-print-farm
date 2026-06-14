@@ -105,6 +105,79 @@
         [data-theme="dark"] .theme-icon-light,
         :root:not([data-theme]) .theme-icon-light { display: none; }
 
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stealth-toggle {
+            background: none;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1;
+            min-width: 34px;
+            padding: 7px 9px;
+            transition: border-color 0.2s, color 0.2s, background 0.2s;
+        }
+        .stealth-toggle:hover { border-color: var(--text-muted); color: var(--text); }
+        .stealth-toggle.active {
+            background: var(--warning-dim);
+            border-color: var(--warning);
+            color: var(--warning);
+        }
+
+        [data-stealth="on"] .header-subtitle,
+        [data-stealth="on"] .farm-stats,
+        [data-stealth="on"] .printer-job,
+        [data-stealth="on"] .progress-bar-container,
+        [data-stealth="on"] .camera-section,
+        [data-stealth="on"] .printer-meta,
+        [data-stealth="on"] .staff-only-toggle,
+        [data-stealth="on"] .printer-orca-port,
+        [data-stealth="on"] .printer-type-badge,
+        [data-stealth="on"] #authArea,
+        [data-stealth="on"] #uploadArea,
+        [data-stealth="on"] #bulkActions,
+        [data-stealth="on"] .library-grid {
+            display: none !important;
+        }
+
+        [data-stealth="on"] .printer-display-name {
+            display: none;
+        }
+
+        [data-stealth="on"] .printer-name::after {
+            content: "Printer";
+        }
+
+        [data-stealth="on"] .printer-status {
+            background: rgba(107,114,128,0.15);
+            color: var(--text-muted);
+        }
+
+        [data-stealth="on"] .job-table td,
+        [data-stealth="on"] .job-table th {
+            color: transparent;
+            text-shadow: 0 0 8px var(--text-muted);
+        }
+
+        [data-stealth="on"] .job-status,
+        [data-stealth="on"] .job-actions,
+        [data-stealth="on"] .assign-select {
+            visibility: hidden;
+        }
+
         .farm-stats {
             display: flex;
             gap: 20px;
@@ -1555,6 +1628,7 @@
             .main { padding: 12px; }
             .header { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
             .header h1 { font-size: 17px; }
+            .header-actions { gap: 10px; margin-left: auto; }
 
             /* Tabs: horizontal scroll */
             .tabs {
@@ -1613,6 +1687,7 @@
             .temp-set-btn { padding: 6px 10px; font-size: 12px; min-height: 36px; }
             .temp-off-btn { padding: 6px 8px; font-size: 12px; min-height: 36px; }
             .theme-toggle { padding: 8px 10px; min-height: 44px; }
+            .stealth-toggle { min-height: 44px; min-width: 44px; }
 
             /* Font size bumps for legibility */
             .ams-tray-type, .mmu-gate-label { font-size: 11px; }
@@ -1748,6 +1823,9 @@
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         const theme = saved || (prefersDark ? 'dark' : 'light');
         document.documentElement.setAttribute('data-theme', theme);
+        if (localStorage.getItem('stealthMode') === 'on') {
+            document.documentElement.setAttribute('data-stealth', 'on');
+        }
     })();
 </script>
 <body>
@@ -1757,17 +1835,20 @@
             The Print Farm
         </h1>
         <span class="header-subtitle" style="font-size:11px;color:var(--text-muted);margin-left:-6px;">BambuLab &amp; Klipper</span>
-        <div style="display:flex; align-items:center; gap:20px;">
+        <div class="header-actions">
             <div class="farm-stats" id="farmStats">
                 <div class="farm-stat"><span class="dot dot-connected"></span> <span id="statConnected">0</span> Connected</div>
                 <div class="farm-stat"><span class="dot dot-printing"></span> <span id="statPrinting">0</span> Printing</div>
                 <div class="farm-stat"><span class="dot dot-idle"></span> <span id="statIdle">0</span> Idle</div>
                 <div class="farm-stat"><span class="dot dot-error"></span> <span id="statErrored">0</span> Error</div>
             </div>
-            <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark theme">
-                <span class="theme-icon-dark">🌛</span>
-                <span class="theme-icon-light">🔆</span>
-            </button>
+            <div class="header-controls">
+                <button class="stealth-toggle" id="stealthToggle" onclick="toggleStealthMode()" title="Toggle stealth mode" aria-pressed="false">S</button>
+                <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark theme">
+                    <span class="theme-icon-dark">🌛</span>
+                    <span class="theme-icon-light">🔆</span>
+                </button>
+            </div>
             <div id="authArea">
                 <button class="btn" id="loginBtn" onclick="showLoginModal()" style="font-size:12px; padding:4px 12px;">Login</button>
             </div>
@@ -2951,6 +3032,27 @@
             localStorage.setItem('theme', next);
         }
 
+        function setStealthMode(enabled) {
+            const toggle = document.getElementById('stealthToggle');
+            if (enabled) {
+                document.documentElement.setAttribute('data-stealth', 'on');
+                localStorage.setItem('stealthMode', 'on');
+                closeCameraModal();
+            } else {
+                document.documentElement.removeAttribute('data-stealth');
+                localStorage.removeItem('stealthMode');
+            }
+            if (toggle) {
+                toggle.classList.toggle('active', enabled);
+                toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+                toggle.title = enabled ? 'Disable stealth mode' : 'Enable stealth mode';
+            }
+        }
+
+        function toggleStealthMode() {
+            setStealthMode(document.documentElement.getAttribute('data-stealth') !== 'on');
+        }
+
         let isAdmin = false;
         let isAuthenticated = false;
         let userRole = null;
@@ -2963,6 +3065,10 @@
         let myActivePrinters = new Set();  // printers with the current user's active jobs
         let cameraStreaming = {};   // {printerName: true/false}
         let cameraRefreshTimers = {};  // per-printer snapshot refresh intervals
+
+        document.addEventListener('DOMContentLoaded', () => {
+            setStealthMode(localStorage.getItem('stealthMode') === 'on');
+        });
 
         // ── Auth ─────────────────────────────────────────────
         async function checkAuth() {
@@ -4282,7 +4388,7 @@
             const pType = p.type || 'bambulab';
             const isBambu = pType === 'bambulab';
             const isKlipper = pType === 'klipper';
-            const typeBadge = isKlipper ? '<span style="font-size:9px;background:#ff6600;color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;vertical-align:middle;">Klipper</span>' : '';
+            const typeBadge = isKlipper ? '<span class="printer-type-badge" style="font-size:9px;background:#ff6600;color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;vertical-align:middle;">Klipper</span>' : '';
 
             const isRunning = status === 'running';
             const isPaused = status === 'paused' || status === 'pause_filament';
@@ -4291,7 +4397,7 @@
                 <div class="printer-card ${cardClass}" data-printer="${name}" data-type="${pType}">
                     <div class="printer-header">
                         <span class="printer-name">
-                            <span class="conn-badge ${connClass}"></span>${name}${typeBadge}
+                            <span class="conn-badge ${connClass}"></span><span class="printer-display-name">${name}</span>${typeBadge}
                             ${isAdmin ? `<button class="printer-rename-btn" onclick="renamePrinter('${name}')" title="Rename printer">&#9998;</button>` : ''}
                         </span>
                         <div class="printer-header-actions">
@@ -4305,7 +4411,7 @@
                             <input type="checkbox" ${p.staff_only ? 'checked' : ''} onchange="toggleStaffOnly('${name}', this.checked)"> Staff only
                         </label>
                     </div>` : ''}
-                    ${p.orca_port ? `<div style="padding:2px 8px;font-size:10px;color:var(--text-muted);">OrcaSlicer: <span style="color:var(--accent);user-select:all;cursor:text;">${location.hostname}:${p.orca_port}</span></div>` : ''}
+                    ${p.orca_port ? `<div class="printer-orca-port" style="padding:2px 8px;font-size:10px;color:var(--text-muted);">OrcaSlicer: <span style="color:var(--accent);user-select:all;cursor:text;">${location.hostname}:${p.orca_port}</span></div>` : ''}
                     <div class="printer-job" data-field="job">${p.subtask_name || 'No active job'}</div>
                     <div class="progress-bar-container">
                         <div class="progress-bar" data-field="progress" style="width:${isRunning || isPaused ? p.mc_percent : 0}%"></div>

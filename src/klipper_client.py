@@ -54,6 +54,16 @@ def _hex_color(val: str) -> str:
     return ""
 
 
+def _number(value, default=0.0) -> float:
+    """Return a float for optional Moonraker numeric fields."""
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 class KlipperClient:
     """
     HTTP client for a single Klipper printer via Moonraker API.
@@ -468,7 +478,7 @@ class KlipperClient:
             # Progress
             ds = result.get("display_status", {})
             vs = result.get("virtual_sdcard", {})
-            progress = ds.get("progress", vs.get("progress", 0))
+            progress = _number(ds.get("progress", vs.get("progress", 0)), 0.0)
             self._state.mc_percent = int(progress * 100)
 
             # Estimate current layer from progress when the slicer does not
@@ -480,7 +490,7 @@ class KlipperClient:
             self._state.total_layers = total_layers
 
             # Estimate remaining time from total_duration and progress
-            total_dur = ps.get("total_duration", 0)
+            total_dur = _number(ps.get("total_duration", 0), 0.0)
             if progress > 0.01 and total_dur > 0:
                 estimated_total = total_dur / progress
                 self._state.mc_remaining_time = int((estimated_total - total_dur) / 60)
@@ -489,12 +499,12 @@ class KlipperClient:
 
             # Temperatures
             bed = result.get("heater_bed", {})
-            self._state.bed_temper = bed.get("temperature", 0.0)
-            self._state.bed_target_temper = bed.get("target", 0.0)
+            self._state.bed_temper = _number(bed.get("temperature"), 0.0)
+            self._state.bed_target_temper = _number(bed.get("target"), 0.0)
 
             ext = result.get("extruder", {})
-            self._state.nozzle_temper = ext.get("temperature", 0.0)
-            self._state.nozzle_target_temper = ext.get("target", 0.0)
+            self._state.nozzle_temper = _number(ext.get("temperature"), 0.0)
+            self._state.nozzle_target_temper = _number(ext.get("target"), 0.0)
 
             # Klipper doesn't typically have a chamber temp sensor by default
             # but if configured, it would be a custom heater — leave as 0
@@ -502,19 +512,19 @@ class KlipperClient:
 
             # Fan speed (0-1 float → percentage string)
             fan = result.get("fan", {})
-            fan_speed = fan.get("speed", 0)
+            fan_speed = _number(fan.get("speed"), 0.0)
             self._state.cooling_fan_speed = str(int(fan_speed * 255))
 
             # Speed factor
             gm = result.get("gcode_move", {})
-            spd_factor = gm.get("speed_factor", 1.0)
+            spd_factor = _number(gm.get("speed_factor"), 1.0)
             self._state.spd_mag = int(spd_factor * 100)
 
             # Discovered fans (fan_generic, heater_fan, controller_fan)
             fans = []
             for fan_obj in self._fan_objects:
                 fan_data = result.get(fan_obj, {})
-                speed = fan_data.get("speed", 0)
+                speed = _number(fan_data.get("speed"), 0.0)
                 # Extract display name: "fan_generic exhaust_fan" → "exhaust_fan"
                 parts = fan_obj.split(" ", 1)
                 display_name = parts[1] if len(parts) > 1 else parts[0]
@@ -535,7 +545,7 @@ class KlipperClient:
                 color_data = led_data.get("color_data", [])
                 # Consider LED "on" if any channel in any pixel is > 0
                 is_on = any(
-                    any(v > 0 for v in pixel)
+                    any(_number(v, 0.0) > 0 for v in pixel)
                     for pixel in color_data
                 ) if color_data else False
                 parts = led_obj.split(" ", 1)
@@ -550,7 +560,7 @@ class KlipperClient:
             # Discovered output pins (often used for lights)
             for pin_obj in self._output_pins:
                 pin_data = result.get(pin_obj, {})
-                value = pin_data.get("value", 0)
+                value = _number(pin_data.get("value"), 0.0)
                 parts = pin_obj.split(" ", 1)
                 display_name = parts[1] if len(parts) > 1 else parts[0]
                 leds.append({
