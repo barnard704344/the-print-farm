@@ -122,6 +122,7 @@ def _deduct_filament_usage(spoolman, job, farm):
 
         # Check if this is a Klipper/MMU printer with per-gate Spoolman spool IDs
         mmu_gate_map = {}  # gate_index -> spool_id
+        tool_spool_map = {}  # tool_number -> spool
         printer = farm.get_printer(printer_name)
         if printer:
             state = printer.state
@@ -139,6 +140,15 @@ def _deduct_filament_usage(spoolman, job, farm):
                 for gate_idx, cfg in (farm._gate_configs.get(printer_name) or {}).items():
                     if gate_idx not in mmu_gate_map and cfg.get("spool_id", -1) > 0:
                         mmu_gate_map[gate_idx] = cfg["spool_id"]
+
+            for tool in getattr(state, "klipper_tools", []) or []:
+                tool_number = tool.get("tool_number")
+                tool_name = tool.get("name")
+                if tool_number is None or not tool_name:
+                    continue
+                spools = spoolman.get_spools_by_location(f"{printer_name}:{tool_name}") or []
+                if spools:
+                    tool_spool_map[int(tool_number)] = spools[0]
 
         if mmu_gate_map:
             # MMU printer: deduct from the specific spool assigned to each gate
@@ -166,6 +176,33 @@ def _deduct_filament_usage(spoolman, job, farm):
                         logger.warning(f"Spoolman: failed to deduct usage from spool #{spool_id} (MMU gate {slot})")
                 else:
                     logger.debug(f"MMU gate {slot} has no Spoolman spool ID, skipping deduction")
+        elif tool_spool_map:
+            # Klipper toolchanger: Orca tool slots map to T numbers.
+            for filament_info in used_filaments:
+                slot = filament_info.get("slot", -1)
+
+                if per_weights and 0 <= slot < len(per_weights):
+                    weight_g = per_weights[slot]
+                else:
+                    weight_g = total_weight_g / num_used
+
+                if weight_g <= 0:
+                    continue
+
+                spool = tool_spool_map.get(slot)
+                if not spool:
+                    logger.debug(f"Tool T{slot} has no Spoolman spool assignment, skipping deduction")
+                    continue
+
+                result = spoolman.use_spool(spool["id"], use_weight=weight_g)
+                if result:
+                    remaining = result.get("remaining_weight", "?")
+                    logger.info(
+                        f"Spoolman: deducted {weight_g:.1f}g from spool #{spool['id']} "
+                        f"(tool T{slot}), {remaining}g remaining"
+                    )
+                else:
+                    logger.warning(f"Spoolman: failed to deduct usage from spool #{spool['id']} (tool T{slot})")
         else:
             # Non-MMU path: try AMS per-tray assignment first, then location fallback
             ams_tray_map = farm._ams_tray_configs.get(printer_name) or {}

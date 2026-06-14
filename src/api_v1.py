@@ -942,6 +942,56 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
             return _error("Failed to fetch spools from Spoolman", 502)
         return _ok(spools)
 
+    def _tool_spool_location(printer_name: str, tool_name: str) -> str:
+        return f"{printer_name}:{tool_name}"
+
+    def _known_tool_names(printer_name: str) -> set:
+        states = farm_manager.get_all_states()
+        printer = states.get(printer_name) or {}
+        return {t.get("name") for t in printer.get("klipper_tools", []) if t.get("name")}
+
+    @bp.route("/spoolman/printers/<name>/tools/<tool_name>/spools", methods=["GET"])
+    @_spoolman_required
+    def spoolman_tool_spools(name, tool_name):
+        """Get spools assigned to a specific Klipper toolhead."""
+        if not farm_manager.get_printer(name):
+            return _error("Printer not found", 404, "PRINTER_NOT_FOUND")
+        if tool_name not in _known_tool_names(name):
+            return _error("Tool not found", 404, "TOOL_NOT_FOUND")
+        spools = spoolman_client.get_spools_by_location(_tool_spool_location(name, tool_name))
+        if spools is None:
+            return _error("Failed to fetch spools from Spoolman", 502)
+        return _ok(spools)
+
+    @bp.route("/spoolman/printers/<name>/tools/<tool_name>/spools/<int:spool_id>", methods=["PUT"])
+    @_spoolman_required
+    def spoolman_assign_spool_to_tool(name, tool_name, spool_id):
+        """Assign a spool to a specific Klipper toolhead."""
+        if not farm_manager.get_printer(name):
+            return _error("Printer not found", 404, "PRINTER_NOT_FOUND")
+        if tool_name not in _known_tool_names(name):
+            return _error("Tool not found", 404, "TOOL_NOT_FOUND")
+        result = spoolman_client.update_spool(
+            spool_id,
+            {"location": _tool_spool_location(name, tool_name)},
+        )
+        if result is None:
+            return _error("Failed to update spool location", 502)
+        return _ok(result)
+
+    @bp.route("/spoolman/printers/<name>/tools/<tool_name>/spools/<int:spool_id>", methods=["DELETE"])
+    @_spoolman_required
+    def spoolman_remove_spool_from_tool(name, tool_name, spool_id):
+        """Remove a spool assignment from a specific Klipper toolhead."""
+        if not farm_manager.get_printer(name):
+            return _error("Printer not found", 404, "PRINTER_NOT_FOUND")
+        if tool_name not in _known_tool_names(name):
+            return _error("Tool not found", 404, "TOOL_NOT_FOUND")
+        result = spoolman_client.update_spool(spool_id, {"location": ""})
+        if result is None:
+            return _error("Failed to update spool location", 502)
+        return _ok(result)
+
     @bp.route("/spoolman/printers/<name>/spools/<int:spool_id>", methods=["PUT"])
     @_spoolman_required
     def spoolman_assign_spool_to_printer(name, spool_id):

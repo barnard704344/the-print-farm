@@ -1191,6 +1191,50 @@
         }
         .spool-assign-btn:hover { border-color: var(--accent); }
         .spool-assign-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+        .toolhead-groups {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .toolhead-group {
+            padding: 8px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+        }
+        .toolhead-group.active { border-color: var(--accent); }
+        .toolhead-group.docked { border-color: rgba(255, 193, 7, 0.5); }
+        .toolhead-header {
+            display: grid;
+            grid-template-columns: minmax(54px, 0.8fr) minmax(62px, 0.8fr) minmax(0, 1.8fr);
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .toolhead-name {
+            font-size: 12px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .toolhead-temp {
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .toolhead-temp span {
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+        .toolhead-state {
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+        .toolhead-state.warn { color: var(--warning); font-weight: 600; }
+        .toolhead-control {
+            display: flex;
+            gap: 4px;
+            justify-content: flex-end;
+        }
+        .toolhead-control .temp-input { width: 54px; }
 
         /* Camera Feed */
         .camera-section {
@@ -4403,9 +4447,19 @@
             }];
         }
 
+        function klipperToolchangerTools(p) {
+            if (p.type !== 'klipper' || !Array.isArray(p.klipper_tools)) return [];
+            return p.klipper_tools.filter(t => t.name && t.tool_number !== null && t.tool_number !== undefined);
+        }
+
+        function isKlipperToolchanger(p) {
+            return klipperToolchangerTools(p).length > 1;
+        }
+
         function renderTemperatureTiles(name, p, isAdmin, isBambu, isKlipper) {
             if (isKlipper) {
-                const toolTiles = klipperToolsForDisplay(p).map((tool, idx) => `
+                const hasToolchanger = isKlipperToolchanger(p);
+                const toolTiles = hasToolchanger ? '' : klipperToolsForDisplay(p).map((tool, idx) => `
                     <div class="temp-item klipper-tool-temp" data-tool-index="${idx}">
                         <div class="temp-label">${tool.name || `T${idx}`}</div>
                         <div class="temp-value" data-field="tool-temp">${formatTemp(tool.temperature)}</div>
@@ -4696,6 +4750,74 @@
 
         // ── Spoolman spool cache for non-AMS printers ────────
         const _printerSpoolCache = {};   // { printerName: {id, filament, remaining_weight, ...} | null }
+        const _toolSpoolCache = {};      // { printerName: { toolName: spool | null } }
+
+        function _spoolSummary(spoolData) {
+            const fil = spoolData.filament || {};
+            const vendor = fil.vendor ? fil.vendor.name : '';
+            const mat = fil.material || '?';
+            const fName = fil.name || mat;
+            const colorHex = fil.color_hex ? '#' + fil.color_hex : '#888';
+            const remaining = spoolData.remaining_weight != null ? Math.round(spoolData.remaining_weight) + 'g' : '';
+            return {vendor, mat, fName, colorHex, remaining};
+        }
+
+        function renderSpoolAssignmentRow({printerName, label, spoolData, assignArgs, unassignArgs}) {
+            if (spoolData && spoolData.id) {
+                const s = _spoolSummary(spoolData);
+                return `
+                    <div class="spool-assign-row has-spool">
+                        <div class="spool-assign-swatch" style="background:${s.colorHex}"></div>
+                        <div class="spool-assign-info">
+                            <div class="spool-name">${label}: ${s.vendor ? s.vendor + ' ' : ''}${s.fName}</div>
+                            <div class="spool-meta">${s.mat}${s.remaining ? ' · ' + s.remaining + ' left' : ''} · Spool #${spoolData.id}</div>
+                        </div>
+                        <button class="spool-assign-btn" onclick="event.stopPropagation();openSpoolPicker(${assignArgs})">Change</button>
+                        <button class="spool-assign-btn danger" onclick="event.stopPropagation();unassignSpool(${unassignArgs},${spoolData.id})">✕</button>
+                    </div>`;
+            }
+            return `
+                <div class="spool-assign-row">
+                    <span style="color:var(--text-muted)">${label}: No spool assigned</span>
+                    <button class="spool-assign-btn" onclick="event.stopPropagation();openSpoolPicker(${assignArgs})" style="margin-left:auto;">Assign Spool</button>
+                </div>`;
+        }
+
+        function renderToolheadGroup(name, tool, idx, spoolData) {
+            const toolName = tool.name || `T${idx}`;
+            const docked = !!tool.docked;
+            const stateLabel = docked ? 'Docked' : tool.active ? 'Active' : 'Ready';
+            const stateClass = docked ? 'warn' : '';
+            const heater = tool.object || 'extruder';
+            const safeName = String(name).replace(/'/g, "\\'");
+            const safeTool = String(toolName).replace(/'/g, "\\'");
+            const safeHeater = String(heater).replace(/'/g, "\\'");
+            return `
+                <div class="toolhead-group ${tool.active ? 'active' : ''} ${docked ? 'docked' : ''}" data-tool-index="${idx}" data-tool-name="${safeTool}">
+                    <div class="toolhead-header">
+                        <div>
+                            <div class="toolhead-name">${toolName}</div>
+                            <div class="toolhead-state ${stateClass}" data-field="tool-warning">${stateLabel}</div>
+                        </div>
+                        <div class="toolhead-temp">
+                            <span data-field="tool-temp">${formatTemp(tool.temperature)}</span>
+                            <span data-field="tool-target">/ ${formatTemp(tool.target)}</span>
+                        </div>
+                        ${isAdmin ? `<div class="toolhead-control">
+                            <input type="number" class="temp-input" id="tool-${idx}-${name}" placeholder="°C" min="0" max="300" ${docked ? 'disabled' : ''}>
+                            <button class="temp-set-btn" onclick="setKlipperToolTemp('${safeName}', ${idx}, '${safeHeater}')" ${docked ? 'disabled title="Tool is docked"' : ''}>Set</button>
+                            <button class="temp-off-btn" onclick="setTemp('${safeName}','nozzle_temp',0,{heater:'${safeHeater}'})">Off</button>
+                        </div>` : ''}
+                    </div>
+                    ${renderSpoolAssignmentRow({
+                        printerName: name,
+                        label: 'Spool',
+                        spoolData,
+                        assignArgs: `'${safeName}','${safeTool}'`,
+                        unassignArgs: `'${safeName}','${safeTool}'`,
+                    })}
+                </div>`;
+        }
 
         function renderAmsSection(name, p) {
             if (p.has_ams && p.ams_trays && p.ams_trays.length > 0) {
@@ -4749,36 +4871,38 @@
                     </div>
                 `;
             } else {
-                // No AMS — show simple filament controls + Spoolman spool assignment
+                // No AMS — show filament controls + Spoolman assignment
                 // MMU printers manage spools per-gate, so skip the single-spool picker
                 const hasMmu = p.has_mmu && p.mmu && p.mmu.enabled;
+                const toolSpools = klipperToolchangerTools(p);
 
                 const spoolData = _printerSpoolCache[name];
                 let spoolHtml = '';
-                if (!hasMmu) {
+                if (!hasMmu && toolSpools.length > 1) {
+                    const cachedTools = _toolSpoolCache[name] || {};
+                    spoolHtml = `<div class="toolhead-groups">${toolSpools.map((tool, idx) => renderToolheadGroup(
+                        name,
+                        tool,
+                        idx,
+                        cachedTools[tool.name],
+                    )).join('')}</div>`;
+                } else if (!hasMmu) {
                     if (spoolData && spoolData.id) {
-                        const fil = spoolData.filament || {};
-                        const vendor = fil.vendor ? fil.vendor.name : '';
-                        const mat = fil.material || '?';
-                        const fName = fil.name || mat;
-                        const colorHex = fil.color_hex ? '#' + fil.color_hex : '#888';
-                        const remaining = spoolData.remaining_weight != null ? Math.round(spoolData.remaining_weight) + 'g' : '';
-                        spoolHtml = `
-                            <div class="spool-assign-row has-spool">
-                                <div class="spool-assign-swatch" style="background:${colorHex}"></div>
-                                <div class="spool-assign-info">
-                                    <div class="spool-name">${vendor ? vendor + ' ' : ''}${fName}</div>
-                                    <div class="spool-meta">${mat}${remaining ? ' · ' + remaining + ' left' : ''} · Spool #${spoolData.id}</div>
-                                </div>
-                                <button class="spool-assign-btn" onclick="event.stopPropagation();openSpoolPicker('${name}')">Change</button>
-                                <button class="spool-assign-btn danger" onclick="event.stopPropagation();unassignSpoolFromPrinter('${name}',${spoolData.id})">✕</button>
-                            </div>`;
+                        spoolHtml = renderSpoolAssignmentRow({
+                            printerName: name,
+                            label: 'Spool',
+                            spoolData,
+                            assignArgs: `'${name}'`,
+                            unassignArgs: `'${name}',''`,
+                        });
                     } else {
-                        spoolHtml = `
-                            <div class="spool-assign-row">
-                                <span style="color:var(--text-muted)">No spool assigned</span>
-                                <button class="spool-assign-btn" onclick="event.stopPropagation();openSpoolPicker('${name}')" style="margin-left:auto;">Assign Spool</button>
-                            </div>`;
+                        spoolHtml = renderSpoolAssignmentRow({
+                            printerName: name,
+                            label: 'Spool',
+                            spoolData: null,
+                            assignArgs: `'${name}'`,
+                            unassignArgs: `'${name}',''`,
+                        });
                     }
                 }
 
@@ -4844,7 +4968,11 @@
             if (tempsEl && isKlipper) {
                 const tools = klipperToolsForDisplay(p);
                 const existingTools = tempsEl.querySelectorAll('.klipper-tool-temp');
-                if (existingTools.length !== tools.length) {
+                if (isKlipperToolchanger(p)) {
+                    if (existingTools.length) {
+                        tempsEl.innerHTML = renderTemperatureTiles(name, p, isAdmin, isBambu, isKlipper);
+                    }
+                } else if (existingTools.length !== tools.length) {
                     tempsEl.innerHTML = renderTemperatureTiles(name, p, isAdmin, isBambu, isKlipper);
                 } else {
                     tools.forEach((tool, idx) => {
@@ -5108,9 +5236,23 @@
         // ── Spoolman Spool Assignment (non-AMS printers) ─────
         let _allSpoolsCache = [];
         let _spoolPickerPrinter = '';
+        let _spoolPickerTool = '';
 
         async function refreshPrinterSpool(printerName) {
             try {
+                const printer = (window._farmPrinters || {})[printerName];
+                const toolSpools = klipperToolchangerTools(printer || {});
+                if (toolSpools.length > 1) {
+                    _toolSpoolCache[printerName] = _toolSpoolCache[printerName] || {};
+                    await Promise.all(toolSpools.map(async tool => {
+                        const data = await hhFetch(`/api/v1/spoolman/printers/${encodeURIComponent(printerName)}/tools/${encodeURIComponent(tool.name)}/spools`);
+                        const spools = data.data || [];
+                        _toolSpoolCache[printerName][tool.name] = spools.length > 0 ? spools[0] : null;
+                    }));
+                    _printerSpoolCache[printerName] = null;
+                    return;
+                }
+
                 const data = await hhFetch(`/api/v1/spoolman/printers/${encodeURIComponent(printerName)}/spools`);
                 const spools = data.data || [];
                 _printerSpoolCache[printerName] = spools.length > 0 ? spools[0] : null;
@@ -5139,9 +5281,10 @@
         // Periodic refresh every 30s (initial load is triggered from refreshPrinters)
         setInterval(refreshAllPrinterSpools, 30000);
 
-        async function openSpoolPicker(printerName) {
+        async function openSpoolPicker(printerName, toolName = '') {
             _spoolPickerPrinter = printerName;
-            document.getElementById('spoolPickerPrinter').textContent = printerName;
+            _spoolPickerTool = toolName || '';
+            document.getElementById('spoolPickerPrinter').textContent = toolName ? `${printerName} ${toolName}` : printerName;
             document.getElementById('spoolPickerSearch').value = '';
             document.getElementById('spoolPickerResult').innerHTML = '';
             document.getElementById('spoolPickerList').innerHTML = '<p style="color:var(--text-muted)">Loading spools…</p>';
@@ -5177,7 +5320,9 @@
                 container.innerHTML = '<p style="color:var(--text-muted)">No spools found.</p>';
                 return;
             }
-            const currentId = _printerSpoolCache[_spoolPickerPrinter]?.id;
+            const currentId = _spoolPickerTool
+                ? _toolSpoolCache[_spoolPickerPrinter]?.[_spoolPickerTool]?.id
+                : _printerSpoolCache[_spoolPickerPrinter]?.id;
             container.innerHTML = spools.map(s => {
                 const fil = s.filament || {};
                 const vendor = fil.vendor ? fil.vendor.name + ' ' : '';
@@ -5208,15 +5353,14 @@
             resultEl.innerHTML = '<span class="spinner"></span> Assigning…';
             try {
                 // Unassign existing spool first (if any)
-                const current = _printerSpoolCache[_spoolPickerPrinter];
+                const current = _spoolPickerTool
+                    ? _toolSpoolCache[_spoolPickerPrinter]?.[_spoolPickerTool]
+                    : _printerSpoolCache[_spoolPickerPrinter];
                 if (current && current.id && current.id !== spoolId) {
-                    await hhFetch(`/api/v1/spoolman/printers/${encodeURIComponent(_spoolPickerPrinter)}/spools/${current.id}`, { method: 'DELETE' });
+                    await _unassignSpoolRequest(_spoolPickerPrinter, _spoolPickerTool, current.id);
                 }
                 // Assign new spool
-                await hhFetch(`/api/v1/spoolman/printers/${encodeURIComponent(_spoolPickerPrinter)}/spools/${spoolId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                });
+                await _assignSpoolRequest(_spoolPickerPrinter, _spoolPickerTool, spoolId);
                 await refreshPrinterSpool(_spoolPickerPrinter);
                 closeSpoolPicker();
                 refreshPrinters();
@@ -5225,11 +5369,34 @@
             }
         }
 
-        async function unassignSpoolFromPrinter(printerName, spoolId) {
-            if (!confirm(`Remove spool #${spoolId} from ${printerName}?`)) return;
+        async function _assignSpoolRequest(printerName, toolName, spoolId) {
+            const path = toolName
+                ? `/api/v1/spoolman/printers/${encodeURIComponent(printerName)}/tools/${encodeURIComponent(toolName)}/spools/${spoolId}`
+                : `/api/v1/spoolman/printers/${encodeURIComponent(printerName)}/spools/${spoolId}`;
+            await hhFetch(path, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+            });
+        }
+
+        async function _unassignSpoolRequest(printerName, toolName, spoolId) {
+            const path = toolName
+                ? `/api/v1/spoolman/printers/${encodeURIComponent(printerName)}/tools/${encodeURIComponent(toolName)}/spools/${spoolId}`
+                : `/api/v1/spoolman/printers/${encodeURIComponent(printerName)}/spools/${spoolId}`;
+            await hhFetch(path, { method: 'DELETE' });
+        }
+
+        async function unassignSpool(printerName, toolName, spoolId) {
+            const target = toolName ? `${printerName} ${toolName}` : printerName;
+            if (!confirm(`Remove spool #${spoolId} from ${target}?`)) return;
             try {
-                await hhFetch(`/api/v1/spoolman/printers/${encodeURIComponent(printerName)}/spools/${spoolId}`, { method: 'DELETE' });
-                _printerSpoolCache[printerName] = null;
+                await _unassignSpoolRequest(printerName, toolName || '', spoolId);
+                if (toolName) {
+                    _toolSpoolCache[printerName] = _toolSpoolCache[printerName] || {};
+                    _toolSpoolCache[printerName][toolName] = null;
+                } else {
+                    _printerSpoolCache[printerName] = null;
+                }
                 refreshPrinters();
             } catch (e) {
                 alert(`Failed: ${e.message}`);
