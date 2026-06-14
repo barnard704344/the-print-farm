@@ -4397,6 +4397,11 @@
                         <div class="temp-label">${tool.name || `T${idx}`}</div>
                         <div class="temp-value" data-field="tool-temp">${formatTemp(tool.temperature)}</div>
                         <div class="temp-target" data-field="tool-target">/ ${formatTemp(tool.target)}</div>
+                        ${isAdmin ? `<div class="temp-control">
+                            <input type="number" class="temp-input" id="tool-${idx}-${name}" placeholder="°C" min="0" max="300">
+                            <button class="temp-set-btn" onclick="setKlipperToolTemp('${name}', ${idx}, '${tool.object || 'extruder'}')">Set</button>
+                            <button class="temp-off-btn" onclick="setTemp('${name}','nozzle_temp',0,{heater:'${tool.object || 'extruder'}'})">Off</button>
+                        </div>` : ''}
                     </div>
                 `).join('');
                 return `
@@ -5052,8 +5057,8 @@
         }
 
         // ── Temperature & Filament Controls ──────────────────
-        async function setTemp(name, endpoint, temp) {
-            await apiPost(`${BASE}/api/printer/${encodeURIComponent(name)}/${endpoint}`, { temp });
+        async function setTemp(name, endpoint, temp, extra = {}) {
+            await apiPost(`${BASE}/api/printer/${encodeURIComponent(name)}/${endpoint}`, { temp, ...extra });
         }
 
         function setNozzleTemp(name) {
@@ -5061,6 +5066,13 @@
             const temp = parseInt(input?.value) || 0;
             if (temp > 300) { alert('Max nozzle temp is 300°C'); return; }
             setTemp(name, 'nozzle_temp', temp);
+        }
+
+        function setKlipperToolTemp(name, toolIndex, heater) {
+            const input = document.getElementById(`tool-${toolIndex}-${name}`);
+            const temp = parseInt(input?.value) || 0;
+            if (temp > 300) { alert('Max hotend temp is 300°C'); return; }
+            setTemp(name, 'nozzle_temp', temp, { heater });
         }
 
         function setBedTemp(name) {

@@ -296,9 +296,14 @@ class KlipperClient:
         temp = max(0, min(temp, 120))
         return self._gcode(f"M140 S{temp}")
 
-    def set_nozzle_temperature(self, temp: int) -> bool:
+    def set_nozzle_temperature(self, temp: int, heater: str = "") -> bool:
         temp = max(0, min(temp, 300))
-        return self._gcode(f"M104 S{temp}")
+        heater = (heater or "extruder").strip()
+        allowed = set(getattr(self, "_extruder_objects", ["extruder"]))
+        if heater not in allowed:
+            logger.warning(f"[{self.name}] Cannot set unknown heater: {heater}")
+            return False
+        return self._gcode(f"SET_HEATER_TEMPERATURE HEATER={heater} TARGET={temp}")
 
     def set_chamber_light(self, on: bool) -> bool:
         """Toggle chamber light. Tries discovered LEDs/pins first, falls back to macro."""
