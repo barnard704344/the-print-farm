@@ -385,6 +385,14 @@
             color: var(--text-muted);
         }
 
+        .temp-warning {
+            min-height: 13px;
+            margin-top: 3px;
+            font-size: 9px;
+            color: var(--warning);
+            line-height: 1.2;
+        }
+
         .printer-meta {
             display: flex;
             justify-content: space-between;
@@ -434,6 +442,11 @@
         }
 
         .temp-set-btn:hover { border-color: var(--info); color: var(--info); }
+        .temp-set-btn:disabled,
+        .temp-input:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
 
         .temp-off-btn {
             padding: 3px 6px;
@@ -4397,9 +4410,10 @@
                         <div class="temp-label">${tool.name || `T${idx}`}</div>
                         <div class="temp-value" data-field="tool-temp">${formatTemp(tool.temperature)}</div>
                         <div class="temp-target" data-field="tool-target">/ ${formatTemp(tool.target)}</div>
+                        <div class="temp-warning" data-field="tool-warning">${tool.docked ? 'Docked' : '&nbsp;'}</div>
                         ${isAdmin ? `<div class="temp-control">
-                            <input type="number" class="temp-input" id="tool-${idx}-${name}" placeholder="°C" min="0" max="300">
-                            <button class="temp-set-btn" onclick="setKlipperToolTemp('${name}', ${idx}, '${tool.object || 'extruder'}')">Set</button>
+                            <input type="number" class="temp-input" id="tool-${idx}-${name}" placeholder="°C" min="0" max="300" ${tool.docked ? 'disabled' : ''}>
+                            <button class="temp-set-btn" onclick="setKlipperToolTemp('${name}', ${idx}, '${tool.object || 'extruder'}')" ${tool.docked ? 'disabled title="Tool is docked"' : ''}>Set</button>
                             <button class="temp-off-btn" onclick="setTemp('${name}','nozzle_temp',0,{heater:'${tool.object || 'extruder'}'})">Off</button>
                         </div>` : ''}
                     </div>
@@ -4837,8 +4851,17 @@
                         const item = tempsEl.querySelector(`.klipper-tool-temp[data-tool-index="${idx}"]`);
                         const tempEl = item?.querySelector('[data-field="tool-temp"]');
                         const targetEl = item?.querySelector('[data-field="tool-target"]');
+                        const warningEl = item?.querySelector('[data-field="tool-warning"]');
+                        const inputEl = item?.querySelector('.temp-input');
+                        const setBtn = item?.querySelector('.temp-set-btn');
                         if (tempEl) tempEl.textContent = formatTemp(tool.temperature);
                         if (targetEl) targetEl.textContent = '/ ' + formatTemp(tool.target);
+                        if (warningEl) warningEl.innerHTML = tool.docked ? 'Docked' : '&nbsp;';
+                        if (inputEl) inputEl.disabled = !!tool.docked;
+                        if (setBtn) {
+                            setBtn.disabled = !!tool.docked;
+                            setBtn.title = tool.docked ? 'Tool is docked' : '';
+                        }
                     });
                 }
             }

@@ -114,6 +114,7 @@ class KlipperClient:
         # Detected capabilities (set during connect)
         self._has_mmu = False
         self._extruder_objects = ["extruder"]
+        self._tool_objects = []
         self._fan_objects = []   # e.g. ["fan_generic exhaust_fan", "heater_fan hotend_fan"]
         self._led_objects = []   # e.g. ["neopixel chamber_light", "led sb_leds"]
         self._output_pins = []   # e.g. ["output_pin caselight"]
@@ -163,6 +164,7 @@ class KlipperClient:
             self._stop_event.clear()
             self._has_mmu = False
             self._extruder_objects = ["extruder"]
+            self._tool_objects = []
             self._fan_objects = []
             self._led_objects = []
             self._output_pins = []
@@ -181,6 +183,9 @@ class KlipperClient:
                         [obj_name for obj_name in objects if _is_extruder_object(obj_name)],
                         key=_extruder_sort_key,
                     ) or ["extruder"]
+                    self._tool_objects = sorted(
+                        [obj_name for obj_name in objects if obj_name.startswith("tool ")],
+                    )
 
                     # Auto-discover fan objects
                     for obj_name in objects:
@@ -195,6 +200,8 @@ class KlipperClient:
 
                     if len(self._extruder_objects) > 1:
                         logger.info(f"[{self.name}] Extruders detected: {self._extruder_objects}")
+                    if self._tool_objects:
+                        logger.info(f"[{self.name}] Toolchanger tools detected: {self._tool_objects}")
                     if self._fan_objects:
                         logger.info(f"[{self.name}] Fans detected: {self._fan_objects}")
                     if self._led_objects:
@@ -303,6 +310,11 @@ class KlipperClient:
         if heater not in allowed:
             logger.warning(f"[{self.name}] Cannot set unknown heater: {heater}")
             return False
+        if temp > 0:
+            tool = next((t for t in self._state.klipper_tools if t.get("object") == heater), None)
+            if tool and tool.get("docked"):
+                logger.warning(f"[{self.name}] Refusing to heat docked tool {heater}")
+                return False
         return self._gcode(f"SET_HEATER_TEMPERATURE HEATER={heater} TARGET={temp}")
 
     def set_chamber_light(self, on: bool) -> bool:
@@ -441,6 +453,8 @@ class KlipperClient:
 
         for extruder_obj in getattr(self, "_extruder_objects", ["extruder"]):
             params[extruder_obj] = "temperature,target,pressure_advance"
+        for tool_obj in getattr(self, "_tool_objects", []):
+            params[tool_obj] = "tool_number,extruder,active"
 
         # Include Happy Hare MMU objects if detected
         if self._has_mmu:
@@ -535,14 +549,29 @@ class KlipperClient:
             self._state.nozzle_target_temper = _number(ext.get("target"), 0.0)
 
             tools = []
+            tool_status_by_extruder = {}
+            for tool_obj in getattr(self, "_tool_objects", []):
+                tool_status = result.get(tool_obj, {})
+                extruder_name = tool_status.get("extruder")
+                if extruder_name:
+                    tool_status_by_extruder[extruder_name] = {
+                        "tool_object": tool_obj,
+                        "tool_number": tool_status.get("tool_number"),
+                        "active": bool(tool_status.get("active", False)),
+                    }
             for idx, extruder_obj in enumerate(getattr(self, "_extruder_objects", ["extruder"])):
                 tool_data = result.get(extruder_obj, {})
+                tool_status = tool_status_by_extruder.get(extruder_obj, {})
                 tools.append({
                     "object": extruder_obj,
-                    "name": f"T{idx}",
+                    "name": f"T{tool_status.get('tool_number')}" if tool_status.get("tool_number") is not None else f"T{idx}",
                     "temperature": _number(tool_data.get("temperature"), 0.0),
                     "target": _number(tool_data.get("target"), 0.0),
                     "pressure_advance": _number(tool_data.get("pressure_advance"), 0.0),
+                    "active": tool_status.get("active", not bool(tool_status_by_extruder)),
+                    "docked": not tool_status.get("active", not bool(tool_status_by_extruder)),
+                    "tool_object": tool_status.get("tool_object", ""),
+                    "tool_number": tool_status.get("tool_number"),
                 })
             self._state.klipper_tools = tools
 
