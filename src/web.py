@@ -1140,17 +1140,20 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 job_queue.mark_failed(job_id)
                 return
 
+            from .bambu_client import build_3mf_ams_mapping, read_3mf_first_extruder, sanitize_3mf_external_spool
+            num_ams = len(printer.state.ams_trays) if printer.state.ams_trays else 4
+            first_ext = read_3mf_first_extruder(file_path) if file_path.lower().endswith(".3mf") else None
+            ams_mapping = build_3mf_ams_mapping(file_path, num_ams) if file_path.lower().endswith(".3mf") else None
+            use_ams = True if ams_mapping else (None if (first_ext is None or first_ext < num_ams) else False)
+            upload_path = sanitize_3mf_external_spool(file_path) if ams_mapping else file_path
+
             # Upload the file to the printer
-            ok = printer.upload_file(file_path, remote_name)
+            ok = printer.upload_file(upload_path, remote_name)
             if ok:
                 job_queue.mark_printing(job_id)
                 # Wait for file to be ready before starting print
                 time.sleep(2 if printer_type == "bambulab" else 0.5)
-                from .bambu_client import read_3mf_first_extruder
-                num_ams = len(printer.state.ams_trays) if printer.state.ams_trays else 4
-                first_ext = read_3mf_first_extruder(file_path) if file_path.lower().endswith(".3mf") else None
-                use_ams = None if (first_ext is None or first_ext < num_ams) else False
-                printer.start_print(remote_name, use_ams=use_ams)
+                printer.start_print(remote_name, use_ams=use_ams, ams_mapping=ams_mapping)
                 logger.info(f"Started printing job #{job_id} on {printer_name}")
             else:
                 job_queue.mark_failed(job_id)

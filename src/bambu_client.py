@@ -12,6 +12,7 @@ Protocol reference (Bambu LAN mode):
 """
 
 import ftplib
+import hashlib
 import io
 import json
 import logging
@@ -88,6 +89,82 @@ def read_3mf_first_extruder(path: str) -> Optional[int]:
             return int(data.get("first_extruder", 0))
     except Exception:
         return None
+
+
+def read_3mf_filament_ids(path: str) -> list[int]:
+    """Return filament ids used by plate_1.json in a .3mf file."""
+    try:
+        with zipfile.ZipFile(path, "r") as z:
+            data = json.loads(z.read("Metadata/plate_1.json"))
+            ids = data.get("filament_ids", [])
+            return [int(i) for i in ids]
+    except Exception:
+        return []
+
+
+def build_3mf_ams_mapping(path: str, num_ams_trays: int) -> Optional[list[int]]:
+    """Build an AMS mapping for 3MF jobs that use the external spool.
+
+    Orca/Bambu 3MF files can address the external/bypass spool as the logical
+    filament after the AMS slots (slot 4 on a single AMS).  The printer still
+    needs an AMS mapping table for those embedded M620 S4A/M621 S4A commands;
+    the external spool is represented by virtual tray 254.
+    """
+    filament_ids = read_3mf_filament_ids(path)
+    if not filament_ids:
+        first = read_3mf_first_extruder(path)
+        filament_ids = [first] if first is not None else []
+
+    if not filament_ids or all(i < num_ams_trays for i in filament_ids):
+        return None
+
+    mapping_len = max(5, max(filament_ids) + 1)
+    mapping = [-1] * mapping_len
+    for filament_id in filament_ids:
+        mapping[filament_id] = filament_id if filament_id < num_ams_trays else 254
+    return mapping
+
+
+def sanitize_3mf_external_spool(path: str) -> str:
+    """Create a copy of an external-spool 3MF with AMS switch G-code disabled.
+
+    Orca can emit M620/M621 material-switch commands even when the selected
+    logical filament is the external spool. On AMS-equipped P1/P1S machines
+    those commands can trigger cutter/AMS handling before the print starts.
+    For bypass jobs there is no AMS material switch to perform, so the commands
+    are commented out in a temporary copy and the embedded G-code MD5 is updated.
+    """
+    first = read_3mf_first_extruder(path)
+    if first is None or first < 4 or not path.lower().endswith(".3mf"):
+        return path
+
+    sanitized_path = path[:-4] + ".external.3mf"
+    changed = False
+
+    with zipfile.ZipFile(path, "r") as src, zipfile.ZipFile(sanitized_path, "w", zipfile.ZIP_DEFLATED) as dst:
+        gcode_bytes = None
+        for info in src.infolist():
+            data = src.read(info.filename)
+            if info.filename == "Metadata/plate_1.gcode":
+                text = data.decode("utf-8", errors="replace")
+                lines = []
+                for line in text.splitlines(keepends=True):
+                    stripped = line.lstrip()
+                    if stripped.startswith(("M620", "M621")):
+                        line = "; external spool: disabled AMS command: " + line
+                        changed = True
+                    lines.append(line)
+                data = "".join(lines).encode("utf-8")
+                gcode_bytes = data
+            elif info.filename == "Metadata/plate_1.gcode.md5":
+                # Rewritten after plate_1.gcode so the checksum matches.
+                continue
+            dst.writestr(info, data)
+
+        if gcode_bytes is not None:
+            dst.writestr("Metadata/plate_1.gcode.md5", hashlib.md5(gcode_bytes).hexdigest())
+
+    return sanitized_path if changed else path
 
 
 class PrintStatus(Enum):
@@ -263,18 +340,53 @@ class BambuClient:
             "print": {"command": "stop", "sequence_id": str(int(time.time()))}
         })
 
-    def start_print(self, filename: str, plate_number: int = 1, use_ams: Optional[bool] = None) -> bool:
+    def start_print(self, filename: str, plate_number: int = 1,
+                    use_ams: Optional[bool] = None,
+                    ams_mapping: Optional[list[int]] = None) -> bool:
         """Start printing a file already uploaded to the printer's root.
 
         For .3mf files, uses project_file command.
         For raw .gcode, also wraps via project_file with ftp:// URL.
 
         use_ams: override whether to activate AMS routing. If None, defaults to
-        True when the printer has an AMS. Pass False for external/bypass spool jobs.
+        True when the printer has an AMS.
+        ams_mapping: optional explicit logical-filament -> tray mapping. Use 254
+        for the external/bypass spool.
         """
         subtask = filename.replace(".3mf", "").replace(".gcode", "")
         if use_ams is None:
             use_ams = self._state.has_ams
+
+        flat_ams_mapping = []
+        ams_mapping2 = []
+        if ams_mapping is not None:
+            for tray_id in ams_mapping:
+                tray_id = int(tray_id) if tray_id is not None else -1
+                if tray_id < 0:
+                    flat_ams_mapping.append(-1)
+                    ams_mapping2.append({"ams_id": 255, "slot_id": 255})
+                elif tray_id >= 254:
+                    # Match BambuStudio/Bambuddy: virtual external trays are
+                    # represented as -1 in the flat mapping and described in
+                    # ams_mapping2. Single-nozzle P/X/A printers use virtual
+                    # AMS id 255 for the external holder.
+                    flat_ams_mapping.append(-1)
+                    ams_mapping2.append({"ams_id": 255, "slot_id": 0})
+                elif tray_id >= 128:
+                    flat_ams_mapping.append(tray_id)
+                    ams_mapping2.append({"ams_id": tray_id, "slot_id": 0})
+                else:
+                    flat_ams_mapping.append(tray_id)
+                    ams_mapping2.append({"ams_id": tray_id // 4, "slot_id": tray_id % 4})
+
+            if use_ams and all(
+                tray_id is None or int(tray_id) < 0 or int(tray_id) >= 254
+                for tray_id in ams_mapping
+            ):
+                use_ams = False
+                logger.info(f"[{self.name}] External-spool-only job: setting use_ams=False")
+
+        submission_id = str(int(time.time() * 1000) % 2_147_483_647 or 1)
 
         cmd = {
             "print": {
@@ -293,18 +405,34 @@ class BambuClient:
                 "vibration_cali": True,
                 "layer_inspect": False,
                 "use_ams": use_ams,
+                "cfg": "0",
+                "extrude_cali_flag": 1,
+                "extrude_cali_manual_mode": 0,
+                "nozzle_offset_cali": 0,
                 "profile_id": "0",
-                "project_id": "0",
-                "subtask_id": "0",
-                "task_id": "0",
+                "project_id": submission_id,
+                "subtask_id": submission_id,
+                "task_id": submission_id,
             }
         }
 
-        # If AMS is present, create identity mapping for all trays
-        # so gcode M620 Sx commands map directly to the correct AMS tray
+        # If AMS is present, create identity mapping for all trays unless the
+        # caller supplied a mapping that includes the external virtual tray.
         if use_ams:
-            num_trays = len(self._state.ams_trays) if self._state.ams_trays else 4
-            cmd["print"]["ams_mapping"] = list(range(num_trays))
+            if ams_mapping is not None:
+                cmd["print"]["ams_mapping"] = flat_ams_mapping
+                cmd["print"]["ams_mapping2"] = ams_mapping2
+            else:
+                num_trays = len(self._state.ams_trays) if self._state.ams_trays else 4
+                default_mapping = list(range(num_trays))
+                cmd["print"]["ams_mapping"] = default_mapping
+                cmd["print"]["ams_mapping2"] = [
+                    {"ams_id": tray_id // 4, "slot_id": tray_id % 4}
+                    for tray_id in default_mapping
+                ]
+        elif ams_mapping is not None:
+            cmd["print"]["ams_mapping"] = flat_ams_mapping
+            cmd["print"]["ams_mapping2"] = ams_mapping2
 
         return self._send_command(cmd)
 

@@ -482,15 +482,18 @@ def cmd_run(args, config: dict):
                             queue.mark_failed(job["id"])
                             continue
 
-                        ok = printer.upload_file(file_path, remote_name)
+                        from .bambu_client import build_3mf_ams_mapping, read_3mf_first_extruder, sanitize_3mf_external_spool
+                        num_ams = len(printer.state.ams_trays) if printer.state.ams_trays else 4
+                        first_ext = read_3mf_first_extruder(file_path) if file_path.lower().endswith(".3mf") else None
+                        ams_mapping = build_3mf_ams_mapping(file_path, num_ams) if file_path.lower().endswith(".3mf") else None
+                        use_ams = True if ams_mapping else (None if (first_ext is None or first_ext < num_ams) else False)
+                        upload_path = sanitize_3mf_external_spool(file_path) if ams_mapping else file_path
+
+                        ok = printer.upload_file(upload_path, remote_name)
                         if ok:
                             queue.mark_printing(job["id"])
                             time.sleep(2)
-                            from .bambu_client import read_3mf_first_extruder
-                            num_ams = len(printer.state.ams_trays) if printer.state.ams_trays else 4
-                            first_ext = read_3mf_first_extruder(file_path) if file_path.lower().endswith(".3mf") else None
-                            use_ams = None if (first_ext is None or first_ext < num_ams) else False
-                            printer.start_print(remote_name, use_ams=use_ams)
+                            printer.start_print(remote_name, use_ams=use_ams, ams_mapping=ams_mapping)
                             logger.info(f"Started printing job #{job['id']} on {printer_name}")
                         else:
                             queue.mark_failed(job["id"])
