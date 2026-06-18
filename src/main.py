@@ -30,6 +30,8 @@ from .web import create_app, start_web_server
 
 logger = logging.getLogger("the_print_farm")
 
+PRINT_START_GRACE_SECONDS = 60
+
 
 def setup_logging(config: dict):
     log_config = config.get("logging", {})
@@ -491,10 +493,14 @@ def cmd_run(args, config: dict):
 
                         ok = printer.upload_file(upload_path, remote_name)
                         if ok:
-                            queue.mark_printing(job["id"])
                             time.sleep(2)
-                            printer.start_print(remote_name, use_ams=use_ams, ams_mapping=ams_mapping)
-                            logger.info(f"Started printing job #{job['id']} on {printer_name}")
+                            started = printer.start_print(remote_name, use_ams=use_ams, ams_mapping=ams_mapping)
+                            if started:
+                                queue.mark_printing(job["id"])
+                                logger.info(f"Started printing job #{job['id']} on {printer_name}")
+                            else:
+                                queue.mark_failed(job["id"])
+                                logger.error(f"Failed to start job #{job['id']} on {printer_name}")
                         else:
                             queue.mark_failed(job["id"])
                             logger.error(f"Failed to upload job #{job['id']} to {printer_name}")
@@ -511,15 +517,16 @@ def cmd_run(args, config: dict):
                         from .bambu_client import PrintStatus
                         from datetime import datetime, timezone
 
-                        # Grace period: ignore printer status for 60s after job
+                        # Grace period: ignore printer status briefly after job
                         # enters 'printing'. The printer needs time to transition
                         # from its old state (e.g. FAILED) to RUNNING for the new job.
                         started = job.get("started_at")
+                        age = None
                         if started:
                             if isinstance(started, str):
                                 started = datetime.fromisoformat(started)
                             age = (datetime.now(timezone.utc) - started).total_seconds()
-                            if age < 60:
+                            if age < PRINT_START_GRACE_SECONDS:
                                 continue
 
                         job_key = job["id"]
@@ -546,6 +553,23 @@ def cmd_run(args, config: dict):
                             notifier.notify(
                                 "print_failed", subj,
                                 f"Job #{job_key} failed on {pname}.\nFile: {fname}\nReason: {reason or 'Unknown'}",
+                            )
+                        elif (
+                            state.status == PrintStatus.IDLE
+                            and int(state.mc_percent or 0) <= 0
+                            and not state.subtask_name
+                        ):
+                            queue.mark_failed(job_key)
+                            logger.warning(
+                                f"Job #{job_key} never started on {pname}: "
+                                f"printer stayed idle for {int(age or 0)}s"
+                            )
+                            notifier.notify(
+                                "print_failed",
+                                f"Print Did Not Start — {fname}",
+                                f"Job #{job_key} did not start on {pname}.\n"
+                                f"File: {fname}\n"
+                                "Reason: Printer stayed idle after the start command.",
                             )
                         elif state.status in (PrintStatus.PAUSED, PrintStatus.PAUSE_FILAMENT):
                             prev = _job_prev_status.get(job_key)

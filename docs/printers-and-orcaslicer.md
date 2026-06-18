@@ -36,6 +36,14 @@ printers:
 
 Klipper webcams are auto-detected from Moonraker's `/server/webcams/list` endpoint. Happy Hare MMU is auto-detected from Klipper printer objects.
 
+### BambuLab Firmware And Developer Mode
+
+Current BambuLab firmware uses stricter local command authorisation. On P1/P1S firmware 01.08.02.00 and newer, including 01.09.01.00, the printer must have both **LAN-only mode** and **Developer Mode** enabled before The Print Farm can start prints, stop prints, set filament trays, or send other local MQTT control commands.
+
+On the printer screen, open **Settings → WLAN/Network**, enable **LAN-only mode**, then enable **Developer Mode**. Power-cycle the printer after changing these settings. Check the displayed LAN access code afterwards; if it changed, update the printer entry in `config/config.yaml` or re-enter it through the Add Printer flow.
+
+If uploads succeed but the printer stays idle, this is the first thing to check. In that case the file may arrive over FTPS, but the `project_file` start command will not be acknowledged by the printer.
+
 ## Obico Integration
 
 If a local [Obico](https://www.obico.io/) server is running and the Obico plugin is installed on a Klipper printer, the dashboard automatically pulls failure detection data and remote monitoring info from it and displays it on the printer card. No additional configuration is required.
@@ -163,3 +171,4 @@ printers:
 | OrcaSlicer shows "Failed to connect to printer" on first try | Use **Manual Setup** to enter IP and access code directly — this bypasses SSDP discovery. If it succeeds, the virtual printer is working correctly |
 | OrcaSlicer can't connect at all | Confirm port 8883 is not blocked by a firewall on the server |
 | Permission denied creating interface | Ensure `AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW` is present in the service unit (`systemctl cat the-print-farm`) |
+| Upload succeeds but a BambuLab printer stays idle | On current firmware, enable LAN-only mode and Developer Mode on the printer, power-cycle it, and verify the LAN access code in config |

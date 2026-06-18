@@ -258,6 +258,9 @@ class BambuClient:
         self._connected = threading.Event()
         self._state = PrintState()
         self._state_lock = threading.Lock()
+        self._command_lock = threading.Lock()
+        self._command_events = {}
+        self._command_responses = {}
         self._on_state_change: Optional[Callable[[str, PrintState], None]] = None
         self._tray_overrides: dict = {}  # {tray_id: {type, color, nozzle_temp_min, nozzle_temp_max}}
         self._last_tray_exist_bits: int = 0
@@ -391,7 +394,7 @@ class BambuClient:
         cmd = {
             "print": {
                 "command": "project_file",
-                "sequence_id": "20000",
+                "sequence_id": submission_id,
                 "param": f"Metadata/plate_{plate_number}.gcode",
                 "subtask_name": subtask,
                 "url": f"ftp://{filename}",
@@ -434,7 +437,12 @@ class BambuClient:
             cmd["print"]["ams_mapping"] = flat_ams_mapping
             cmd["print"]["ams_mapping2"] = ams_mapping2
 
-        return self._send_command(cmd)
+        return self._send_command_and_wait(
+            cmd,
+            command="project_file",
+            sequence_id=submission_id,
+            timeout=15,
+        )
 
     def set_chamber_light(self, on: bool) -> bool:
         mode = "on" if on else "off"
@@ -621,6 +629,44 @@ class BambuClient:
             logger.error(f"[{self.name}] Error sending command: {e}")
             return False
 
+    def _send_command_and_wait(
+        self,
+        payload: dict,
+        command: str,
+        sequence_id: str,
+        timeout: float = 10.0,
+    ) -> bool:
+        """Send a command and wait for the printer's command response."""
+        key = (command, str(sequence_id))
+        event = threading.Event()
+        with self._command_lock:
+            self._command_events[key] = event
+            self._command_responses.pop(key, None)
+
+        try:
+            if not self._send_command(payload):
+                return False
+            if not event.wait(timeout):
+                logger.error(
+                    f"[{self.name}] No response for {command} "
+                    f"sequence_id={sequence_id} after {timeout:g}s"
+                )
+                return False
+            with self._command_lock:
+                response = self._command_responses.pop(key, {})
+            result = str(response.get("result", "")).lower()
+            reason = response.get("reason", "")
+            if result == "success":
+                return True
+            logger.error(
+                f"[{self.name}] Command {command} rejected: "
+                f"result={response.get('result', '')} reason={reason}"
+            )
+            return False
+        finally:
+            with self._command_lock:
+                self._command_events.pop(key, None)
+
     def _handle_connect(self, client, userdata, flags, rc, properties=None):
         if rc == 0:
             logger.info(f"[{self.name}] MQTT connected, subscribing...")
@@ -669,8 +715,15 @@ class BambuClient:
             cmd = print_data.get("command", "?")
             result = print_data.get("result", "?")
             reason = print_data.get("reason", "")
+            sequence_id = str(print_data.get("sequence_id", ""))
             logger.info(f"[{self.name}] Command response: {cmd} -> {result}"
                         f"{f' reason={reason}' if reason else ''}")
+            key = (cmd, sequence_id)
+            with self._command_lock:
+                self._command_responses[key] = print_data
+                event = self._command_events.get(key)
+                if event:
+                    event.set()
 
         self._update_state(print_data)
 

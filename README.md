@@ -24,6 +24,7 @@ This README acts as a documentation index. Detailed information is split across 
 - Apache 2 with `mod_proxy`
 - Debian 11+ / Ubuntu 22.04+ / Raspberry Pi OS
 - `isc-dhcp-client` and `openssl`, installed automatically by `setup.sh` and required for virtual printers
+- BambuLab P1/P1S firmware 01.08.02.00+ requires LAN-only mode and Developer Mode for local start/control commands
 - Spoolman optional
 - Happy Hare optional
 

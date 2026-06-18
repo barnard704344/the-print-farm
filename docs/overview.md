@@ -19,6 +19,7 @@ Connection method:
 Prerequisites on each BambuLab printer:
 
 - Enable LAN mode / LAN-only access on the printer
+- Enable Developer Mode on current firmware when available. P1/P1S firmware 01.08.02.00 and newer blocks third-party local start/control commands unless LAN-only mode and Developer Mode are both enabled.
 - Use the printer access code and serial in config or Add Printer flow
 
 Cloud-only mode is not used for core printer communication.

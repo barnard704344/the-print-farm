@@ -1150,11 +1150,15 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             # Upload the file to the printer
             ok = printer.upload_file(upload_path, remote_name)
             if ok:
-                job_queue.mark_printing(job_id)
                 # Wait for file to be ready before starting print
                 time.sleep(2 if printer_type == "bambulab" else 0.5)
-                printer.start_print(remote_name, use_ams=use_ams, ams_mapping=ams_mapping)
-                logger.info(f"Started printing job #{job_id} on {printer_name}")
+                started = printer.start_print(remote_name, use_ams=use_ams, ams_mapping=ams_mapping)
+                if started:
+                    job_queue.mark_printing(job_id)
+                    logger.info(f"Started printing job #{job_id} on {printer_name}")
+                else:
+                    job_queue.mark_failed(job_id)
+                    logger.error(f"Failed to start job #{job_id} on {printer_name}")
             else:
                 job_queue.mark_failed(job_id)
                 logger.error(f"Failed to upload job #{job_id} to {printer_name}")
