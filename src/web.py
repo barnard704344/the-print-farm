@@ -34,24 +34,55 @@ logger = logging.getLogger(__name__)
 ALLOWED_EXTENSIONS = {"gcode", "3mf"}
 
 
+def _load_or_create_secret_key(config):
+    """Keep Flask sessions valid across service restarts."""
+    configured = (
+        os.environ.get("THE_PRINT_FARM_SECRET_KEY")
+        or os.environ.get("FLASK_SECRET_KEY")
+        or config.get("web", {}).get("secret_key")
+        or config.get("secret_key")
+    )
+    if configured:
+        return configured
+
+    secret_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "flask_secret.key"))
+    try:
+        if os.path.exists(secret_path):
+            with open(secret_path, "r", encoding="utf-8") as fh:
+                existing = fh.read().strip()
+            if existing:
+                return existing
+
+        os.makedirs(os.path.dirname(secret_path), exist_ok=True)
+        secret = secrets.token_hex(32)
+        with open(secret_path, "w", encoding="utf-8") as fh:
+            fh.write(secret + "\n")
+        os.chmod(secret_path, 0o600)
+        return secret
+    except OSError as exc:
+        logger.warning("Unable to persist Flask secret key: %s", exc)
+        return secrets.token_hex(32)
+
+
 def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
 def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin_password=None, config=None, file_library=None, spoolman_client=None, vp_manager=None):
     """Create the Flask app with references to farm manager, job queue, and camera manager."""
+    if config is None:
+        config = {}
+    app_config = config
+
     app = Flask(
         __name__,
         template_folder=os.path.join(os.path.dirname(__file__), "..", "templates"),
         static_folder=os.path.join(os.path.dirname(__file__), "..", "static"),
     )
     app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024 * 1024  # 10GB max upload
-    app.secret_key = secrets.token_hex(32)
+    app.secret_key = _load_or_create_secret_key(app_config)
 
     # Full config reference for AD settings management
-    if config is None:
-        config = {}
-    app_config = config
     _vp_manager = vp_manager  # VirtualPrinterManager, may be None
     prefix = os.environ.get("APP_PREFIX", "/the-print-farm")
 

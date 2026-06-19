@@ -4420,10 +4420,24 @@
         async function apiPost(url, body) {
             const res = await fetch(url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Api-Key': '{{ api_key }}',
+                },
                 body: body ? JSON.stringify(body) : undefined,
             });
-            return res.json();
+            let data = {};
+            try {
+                data = await res.json();
+            } catch (_) {
+                data = {};
+            }
+            if (!res.ok) {
+                data.ok = false;
+                data.status = res.status;
+                data.message = data.message || data.error || `HTTP ${res.status}`;
+            }
+            return data;
         }
 
         // ── Printer Rendering ────────────────────────────────
@@ -5667,7 +5681,8 @@
                     nozzle_temp_min: tempMin, nozzle_temp_max: tempMax,
                 });
                 if (!resp || !resp.ok) {
-                    resultEl.innerHTML = '<span class="test-fail">&#10007; Failed to send to printer.</span>';
+                    const message = resp?.message || resp?.error || 'Failed to send to printer.';
+                    resultEl.innerHTML = `<span class="test-fail">&#10007; ${escapeHtml(message)}</span>`;
                     return;
                 }
 
