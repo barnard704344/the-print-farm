@@ -1059,7 +1059,12 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         if tray_id is None:
             return jsonify({"ok": False, "message": "tray_id required"}), 400
         ok = client.set_tray_info(int(tray_id), tray_type, color, nozzle_temp_min, nozzle_temp_max)
-        return jsonify({"ok": ok})
+        if not ok:
+            return jsonify({
+                "ok": False,
+                "message": "Printer rejected AMS tray update. Try again when the printer is idle, or when that AMS tray is not active.",
+            }), 409
+        return jsonify({"ok": True})
 
     # ── Job Queue API ─────────────────────────────────────
 

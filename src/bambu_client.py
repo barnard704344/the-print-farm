@@ -556,8 +556,7 @@ class BambuClient:
             logger.warning(f"[{self.name}] Invalid tray color '{color}', defaulting to FFFFFFFF")
             color_hex = "FFFFFFFF"
 
-        # Store local override so dashboard shows it even before printer confirms
-        self._tray_overrides[tray_id] = {
+        override = {
             "type": tray_type,
             "color": f"#{color_hex[:6]}",
             "color_raw": color_hex,
@@ -565,10 +564,17 @@ class BambuClient:
             "nozzle_temp_max": str(nozzle_temp_max),
         }
 
-        return self._send_command({
+        sequence_id = str(int(time.time()))
+        command = "ams_filament_setting"
+        logger.info(
+            "[%s] Setting AMS tray %s (ams_id=%s slot=%s) to %s %s",
+            self.name, tray_id, ams_id, slot, tray_type, override["color"],
+        )
+
+        ok = self._send_command_and_wait({
             "print": {
-                "command": "ams_filament_setting",
-                "sequence_id": str(int(time.time())),
+                "command": command,
+                "sequence_id": sequence_id,
                 "ams_id": ams_id,
                 "tray_id": slot,
                 "tray_info_idx": "",
@@ -577,7 +583,21 @@ class BambuClient:
                 "nozzle_temp_max": nozzle_temp_max,
                 "tray_type": tray_type,
             }
-        })
+        }, command, sequence_id)
+        if not ok:
+            logger.warning("[%s] AMS tray %s setting command was not acknowledged", self.name, tray_id)
+            return False
+
+        # Store local override and update the current state immediately. Some
+        # Bambu firmware revisions only send partial AMS updates while printing,
+        # so waiting for a full AMS rebuild can leave the dashboard stale.
+        with self._state_lock:
+            self._tray_overrides[tray_id] = override
+            for tray in self._state.ams_trays:
+                if tray.get("id") == tray_id:
+                    tray.update(override)
+                    break
+        return True
 
     def push_status_request(self) -> bool:
         return self._send_command({
