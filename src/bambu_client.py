@@ -549,9 +549,12 @@ class BambuClient:
         ams_id = tray_id // 4
         slot = tray_id % 4
         # Normalize color to 8-char hex RRGGBBAA (strip # prefix)
-        color_hex = color.lstrip("#")
+        color_hex = str(color or "").strip().lstrip("#").upper()
         if len(color_hex) == 6:
             color_hex += "FF"
+        if len(color_hex) != 8 or any(c not in "0123456789ABCDEF" for c in color_hex):
+            logger.warning(f"[{self.name}] Invalid tray color '{color}', defaulting to FFFFFFFF")
+            color_hex = "FFFFFFFF"
 
         # Store local override so dashboard shows it even before printer confirms
         self._tray_overrides[tray_id] = {
@@ -885,16 +888,21 @@ class BambuClient:
                     tray_type = tray.get("tray_type", "")
                     # Apply local override if set (for manual filament config)
                     override = self._tray_overrides.get(global_id)
-                    display_type = tray_type or (override["type"] if override else ("3rd Party" if tray_exists else ""))
-                    display_color = (f"#{color_hex[:6]}" if color_hex != "00000000"
-                                     else (override["color"] if override else ""))
+                    display_type = (
+                        override["type"] if override else
+                        (tray_type or ("3rd Party" if tray_exists else ""))
+                    )
+                    display_color = (
+                        override["color"] if override else
+                        (f"#{color_hex[:6]}" if color_hex != "00000000" else "")
+                    )
                     trays.append({
                         "id": global_id,
                         "unit": unit_id,
                         "slot": tray_id,
                         "type": display_type,
                         "color": display_color,
-                        "color_raw": color_hex if color_hex != "00000000" else (override["color_raw"] if override else "00000000"),
+                        "color_raw": override["color_raw"] if override else color_hex,
                         "remain": tray.get("remain", -1),
                         "nozzle_temp_min": override["nozzle_temp_min"] if override else tray.get("nozzle_temp_min", "0"),
                         "nozzle_temp_max": override["nozzle_temp_max"] if override else tray.get("nozzle_temp_max", "0"),

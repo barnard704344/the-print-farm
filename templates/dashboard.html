@@ -5652,7 +5652,10 @@
             const name = document.getElementById('trayConfigPrinter').value;
             const trayId = parseInt(document.getElementById('trayConfigId').value);
             const type = document.getElementById('trayConfigType').value;
-            const color = document.getElementById('trayConfigColor').value;
+            const colorInput = document.getElementById('trayConfigColorHex').value.trim();
+            const color = /^#[0-9a-fA-F]{6}$/.test(colorInput)
+                ? colorInput
+                : document.getElementById('trayConfigColor').value;
             const tempMin = parseInt(document.getElementById('trayConfigTempMin').value) || 190;
             const tempMax = parseInt(document.getElementById('trayConfigTempMax').value) || 230;
             const resultEl = document.getElementById('trayConfigResult');
