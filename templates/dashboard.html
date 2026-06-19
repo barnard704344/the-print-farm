@@ -6935,6 +6935,10 @@
             document.getElementById('wiz-step-2').style.display = 'none';
         }
 
+        function apiErrorMessage(data, fallback) {
+            return (data && (data.message || data.error)) || fallback || 'Request failed';
+        }
+
         async function wizTest() {
             const resultEl = document.getElementById('wizTestResult');
             const btnTest = document.getElementById('btnTest');
@@ -6966,7 +6970,7 @@
                         resultEl.innerHTML = `<span class="test-ok">&#10003; ${data.message}${detail}</span>`;
                         document.getElementById('btnAdd').disabled = false;
                     } else {
-                        resultEl.innerHTML = `<span class="test-fail">&#10007; ${data.message}</span>`;
+                        resultEl.innerHTML = `<span class="test-fail">&#10007; ${apiErrorMessage(data, 'Connection test failed')}</span>`;
                         document.getElementById('btnAdd').disabled = true;
                     }
                 } catch (err) {
@@ -7000,7 +7004,7 @@
                         resultEl.innerHTML = `<span class="test-ok">&#10003; ${data.message}${detail}</span>`;
                         document.getElementById('btnAdd').disabled = false;
                     } else {
-                        resultEl.innerHTML = `<span class="test-fail">&#10007; ${data.message}</span>`;
+                        resultEl.innerHTML = `<span class="test-fail">&#10007; ${apiErrorMessage(data, 'Connection test failed')}</span>`;
                         document.getElementById('btnAdd').disabled = true;
                     }
                 } catch (err) {
@@ -7054,7 +7058,7 @@
                     closeWizard();
                     refreshPrinters();
                 } else {
-                    document.getElementById('wizTestResult').innerHTML = `<span class="test-fail">${data.message}</span>`;
+                    document.getElementById('wizTestResult').innerHTML = `<span class="test-fail">${apiErrorMessage(data, 'Could not add printer')}</span>`;
                     btnAdd.disabled = false;
                 }
             } catch (err) {

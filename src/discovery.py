@@ -175,6 +175,11 @@ def test_bambu_connection(host: str, access_code: str, serial: str,
 
         client.loop_stop()
         client.disconnect()
+    except ConnectionRefusedError:
+        result["message"] = (
+            f"Connection refused at {host}:{port} - check that the printer IP is the real "
+            "BambuLab LAN IP, LAN mode is enabled, and MQTT/LAN access is available"
+        )
     except Exception as e:
         result["message"] = str(e)
 

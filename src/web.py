@@ -10,6 +10,7 @@ import os
 import re
 import secrets
 import shutil
+import socket
 import subprocess
 import threading
 import time
@@ -411,6 +412,57 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             port += 1
         return port
 
+    def _local_ipv4_addresses():
+        """Return IPv4 addresses currently bound on this host."""
+        addresses = set()
+        try:
+            for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+                ip = info[4][0]
+                if ip and not ip.startswith("127."):
+                    addresses.add(ip)
+        except Exception:
+            pass
+        try:
+            result = subprocess.run(
+                ["ip", "-o", "-4", "addr", "show"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            for match in re.finditer(r"\binet\s+([0-9.]+)/", result.stdout):
+                ip = match.group(1)
+                if ip and not ip.startswith("127."):
+                    addresses.add(ip)
+        except Exception:
+            pass
+        return addresses
+
+    def _filter_discovery_results(printers):
+        """Hide configured printers and this host's virtual Bambu endpoints."""
+        configured_serials = {
+            str(p.get("serial", "")).strip()
+            for p in app_config.get("printers", [])
+            if str(p.get("serial", "")).strip()
+        }
+        configured_hosts = {
+            str(p.get("host", "")).strip()
+            for p in app_config.get("printers", [])
+            if str(p.get("host", "")).strip()
+        }
+        local_ips = _local_ipv4_addresses()
+        filtered = []
+        for p in printers:
+            host = str(p.get("host", "")).strip()
+            serial = str(p.get("serial", "")).strip()
+            if host in local_ips:
+                continue
+            if host in configured_hosts:
+                continue
+            if serial and serial in configured_serials:
+                continue
+            filtered.append(p)
+        return filtered
+
     def _sudo_cmd(args):
         """Run a command with sudo if available, otherwise directly."""
         sudo = shutil.which("sudo")
@@ -534,7 +586,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         @wraps(f)
         def decorated(*args, **kwargs):
             if not is_admin() and not _check_api_key():
-                return jsonify({"error": "Admin login required"}), 403
+                return jsonify({"ok": False, "error": "Admin login required", "message": "Admin login required"}), 403
             return f(*args, **kwargs)
         return decorated
 
@@ -549,7 +601,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         @wraps(f)
         def decorated(*args, **kwargs):
             if not is_authenticated() and not _check_api_key():
-                return jsonify({"error": "Login required"}), 401
+                return jsonify({"ok": False, "error": "Login required", "message": "Login required"}), 401
             return f(*args, **kwargs)
         return decorated
 
@@ -1725,7 +1777,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         subnet = data.get("subnet", "")
 
         # UDP broadcast discovery (Bambu only)
-        printers = discover_printers(timeout=timeout)
+        printers = _filter_discovery_results(discover_printers(timeout=timeout))
 
         # Optional port scan fallback
         scan_results = []
@@ -1736,7 +1788,10 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 subnets = [subnet]
             for s in subnets:
                 # Scan for Bambu (8883) and Klipper/Moonraker (7125)
-                hosts = scan_subnet(s, timeout=1.0)
+                hosts = [
+                    h for h in scan_subnet(s, timeout=1.0)
+                    if h not in _local_ipv4_addresses()
+                ]
                 klipper_hosts = scan_moonraker_port(s, timeout=1.0)
                 known_ips = {p["host"] for p in printers}
                 for h in hosts:
@@ -1767,6 +1822,10 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             if not host:
                 return jsonify({"ok": False, "message": "host is required"}), 400
             result = test_klipper_connection(host, moonraker_port, api_key)
+            logger.info(
+                "Discovery test for Klipper host %s:%s: ok=%s message=%s",
+                host, moonraker_port, result.get("ok"), result.get("message", ""),
+            )
             return jsonify(result)
         else:
             access_code = data.get("access_code", "")
@@ -1774,6 +1833,10 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             if not host or not access_code or not serial:
                 return jsonify({"ok": False, "message": "host, access_code, and serial are required"}), 400
             result = test_bambu_connection(host, access_code, serial)
+            logger.info(
+                "Discovery test for Bambu host %s serial %s: ok=%s message=%s",
+                host, serial, result.get("ok"), result.get("message", ""),
+            )
             return jsonify(result)
 
     @app.route(prefix + "/api/discover/add", methods=["POST"])
