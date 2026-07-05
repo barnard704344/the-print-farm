@@ -2267,7 +2267,7 @@
             <div class="setup-section" style="max-width:700px; margin-top:32px;">
                 <h3 style="margin-bottom:16px;">Build Plate Detection</h3>
                 <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
-                    Compare the live camera image with empty-plate references before sending a job. Capture references with the plate empty and set the ROI to the build surface area.
+                    Compare the live camera feed with an empty-plate reference before sending a job.
                 </p>
                 <div style="display:flex; flex-direction:column; gap:14px;">
                     <div>
@@ -2278,11 +2278,13 @@
                     </div>
                     <div id="plateDetectionFields" style="display:none; flex-direction:column; gap:14px;">
                         <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
-                            <input type="checkbox" id="plateEnabled" style="width:18px; height:18px;">
+                            <input type="checkbox" id="plateEnabled" style="width:18px; height:18px;" onchange="savePlateDetectionConfig()">
                             <span>Enable build plate detection for this printer</span>
                         </label>
 
-                        <div style="border:1px solid var(--border); border-radius:8px; padding:12px; background:var(--bg);">
+                        <details style="border:1px solid var(--border); border-radius:8px; padding:10px 12px;">
+                            <summary style="cursor:pointer; font-size:13px; color:var(--text-muted);">Advanced detection options</summary>
+                            <div style="border:1px solid var(--border); border-radius:8px; padding:12px; background:var(--bg); margin-top:12px;">
                             <div style="display:grid; grid-template-columns:1.2fr 1fr; gap:12px; align-items:end;">
                                 <div>
                                     <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Easy setup</label>
@@ -2303,13 +2305,11 @@
                             </div>
                             <div id="platePresetSummary" style="font-size:12px; color:var(--text-muted); margin-top:10px;"></div>
                             <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-top:12px;">
-                                <input type="checkbox" id="platePrepareBeforeCheck" style="width:16px; height:16px;" onchange="updatePlatePresetSummary();">
+                                <input type="checkbox" id="platePrepareBeforeCheck" style="width:16px; height:16px;" onchange="updatePlateModeUI(); updatePlatePresetSummary();">
                                 <span style="font-size:13px;">Move Bambu bed to camera inspection height before checking</span>
                             </label>
-                        </div>
+                            </div>
 
-                        <details style="border:1px solid var(--border); border-radius:8px; padding:10px 12px;">
-                            <summary style="cursor:pointer; font-size:13px; color:var(--text-muted);">Advanced crop and sensitivity numbers</summary>
                             <div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:10px; margin-top:12px;">
                                 <div>
                                     <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">ROI X %</label>
@@ -2342,28 +2342,23 @@
                             </div>
                         </details>
                         <div class="plate-action-panel">
-                            <div class="plate-action-group">
-                                <div class="plate-action-title">Capture</div>
+                            <div class="plate-action-group full">
+                                <div class="plate-action-title">Live plate check</div>
                                 <div class="plate-action-row">
-                                    <button class="btn btn-primary" onclick="capturePlateReference('rest')">Empty At Rest</button>
-                                    <button class="btn btn-primary" onclick="capturePlateReference('inspection')">Empty Raised</button>
+                                    <button class="btn btn-primary" id="plateCaptureRestBtn" onclick="capturePlateReference('rest')">Empty At Rest</button>
+                                    <button class="btn btn-primary" id="plateCaptureInspectionBtn" onclick="capturePlateReference('inspection')">Capture Empty Plate</button>
+                                    <button class="btn" onclick="testPlateDetection()">Run Pre-print Check</button>
+                                    <button class="btn btn-success" onclick="savePlateDetectionConfig()">Save</button>
                                 </div>
                             </div>
-                            <div class="plate-action-group">
-                                <div class="plate-action-title">Check</div>
-                                <div class="plate-action-row">
-                                    <button class="btn" onclick="testPlateDetection()">Live Plate</button>
-                                    <button class="btn" onclick="testPlateReferenceImages()">Saved References</button>
-                                </div>
-                            </div>
-                            <div class="plate-action-group">
+                            <div class="plate-action-group" id="plateTuneGroup" style="display:none;">
                                 <div class="plate-action-title">Tune</div>
                                 <div class="plate-action-row">
                                     <button class="btn" onclick="useCurrentEmptyAsBaseline()">Use Current Empty Baseline</button>
-                                    <button class="btn btn-success" onclick="savePlateDetectionConfig()">Save Configuration</button>
+                                    <button class="btn" onclick="testPlateReferenceImages()">Saved References</button>
                                 </div>
                             </div>
-                            <div class="plate-action-group">
+                            <div class="plate-action-group" id="plateJogGroup">
                                 <div class="plate-action-title">Bambu Bed Jog</div>
                                 <div class="plate-action-row">
                                     <input type="number" id="plateJogStep" class="ad-input plate-jog-step" min="1" max="50" value="10" aria-label="Jog step in millimetres">
@@ -2373,12 +2368,12 @@
                                 </div>
                             </div>
                         </div>
-                        <div>
+                        <div id="plateRestReferenceSection">
                             <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">Resting-bed references</div>
                             <div id="plateRestReferenceList" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:10px;"></div>
                         </div>
                         <div>
-                            <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">Raised inspection references</div>
+                            <div id="plateInspectionReferenceTitle" style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">Empty references</div>
                             <div id="plateReferenceList" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:10px;"></div>
                         </div>
                         <div id="plateDetectionResult" style="font-size:13px; margin-top:2px;"></div>
@@ -3643,8 +3638,9 @@
             setPlateRoi(preset.roi);
             document.getElementById('plateThreshold').value = preset.threshold;
             document.getElementById('plateInspectionZ').value = preset.inspectionZ;
-            document.getElementById('platePrepareBeforeCheck').checked = true;
+            document.getElementById('platePrepareBeforeCheck').checked = false;
             syncPlateSensitivityFromThreshold();
+            updatePlateModeUI();
             updatePlatePresetSummary();
         }
 
@@ -3703,6 +3699,39 @@
             summary.textContent = `${platePresetLabel(roi)} crop · ${strictness} detection${bedMove}`;
         }
 
+        function selectedPlatePrinterType() {
+            const name = document.getElementById('platePrinter').value;
+            return (window._platePrinterTypes || {})[name] || 'bambulab';
+        }
+
+        function updatePlateModeUI() {
+            const name = document.getElementById('platePrinter').value;
+            const printerType = selectedPlatePrinterType();
+            const prepareEl = document.getElementById('platePrepareBeforeCheck');
+            if (!prepareEl) return;
+
+            const isKlipper = printerType === 'klipper';
+            if (isKlipper) prepareEl.checked = false;
+            prepareEl.disabled = isKlipper;
+
+            const raisedMode = !isKlipper && prepareEl.checked;
+            const restSection = document.getElementById('plateRestReferenceSection');
+            const restButton = document.getElementById('plateCaptureRestBtn');
+            const inspectionButton = document.getElementById('plateCaptureInspectionBtn');
+            const inspectionTitle = document.getElementById('plateInspectionReferenceTitle');
+            const jogGroup = document.getElementById('plateJogGroup');
+
+            if (restSection) restSection.style.display = raisedMode ? 'block' : 'none';
+            if (restButton) restButton.style.display = raisedMode ? '' : 'none';
+            if (inspectionButton) inspectionButton.textContent = raisedMode ? 'Empty Raised' : 'Capture Empty Plate';
+            if (inspectionTitle) inspectionTitle.textContent = raisedMode ? 'Raised inspection references' : 'Empty references';
+            if (jogGroup) jogGroup.style.display = raisedMode ? '' : 'none';
+
+            if (!name) return;
+            renderPlateReferences(name, window._plateRestReferences || [], 'rest');
+            renderPlateReferences(name, window._plateInspectionReferences || [], 'inspection');
+        }
+
         function platePayload() {
             return {
                 enabled: document.getElementById('plateEnabled').checked,
@@ -3741,10 +3770,10 @@
                 if (printerType === 'klipper') {
                     document.getElementById('platePrepareBeforeCheck').checked = false;
                 }
-                const raisedBedRequired = data.raised_bed_required === true || document.getElementById('platePrepareBeforeCheck').checked;
+                const raisedBedRequired = document.getElementById('platePrepareBeforeCheck').checked;
                 const references = data.references || [];
                 if (!data.enabled && !references.length && printerType !== 'klipper' && samePlateRoi(currentPlateRoi(), PLATE_PRESETS.full.roi)) {
-                    applyPlatePreset(raisedBedRequired ? 'bambu' : 'full');
+                    applyPlatePreset('bambu');
                     document.getElementById('platePrepareBeforeCheck').checked = raisedBedRequired;
                     updatePlatePresetSummary();
                 } else {
@@ -3756,14 +3785,21 @@
                 }
                 renderPlateReferences(name, data.rest_references || [], 'rest');
                 renderPlateReferences(name, references, 'inspection');
+                updatePlateModeUI();
             } catch (e) {}
         }
 
         function renderPlateReferences(printerName, refs, phase = 'inspection') {
             const list = document.getElementById(phase === 'rest' ? 'plateRestReferenceList' : 'plateReferenceList');
             if (!list) return;
+            if (phase === 'rest') {
+                window._plateRestReferences = refs || [];
+            } else {
+                window._plateInspectionReferences = refs || [];
+            }
             if (!refs.length) {
-                const label = phase === 'rest' ? 'resting-bed' : 'raised inspection';
+                const raisedMode = selectedPlatePrinterType() !== 'klipper' && document.getElementById('platePrepareBeforeCheck')?.checked;
+                const label = phase === 'rest' ? 'resting-bed' : (raisedMode ? 'raised inspection' : 'empty');
                 list.innerHTML = `<div style="grid-column:1/-1;color:var(--text-muted);font-size:12px;">No ${label} references captured yet.</div>`;
                 return;
             }
@@ -3786,9 +3822,16 @@
                     body: JSON.stringify(platePayload()),
                 });
                 const data = await res.json();
-                resultEl.innerHTML = data.ok
-                    ? '<span style="color:var(--accent);">&#10003; Build plate detection saved</span>'
-                    : `<span style="color:var(--danger);">&#10007; ${data.message || data.error || 'Save failed'}</span>`;
+                if (data.ok) {
+                    if (data.rest_references || data.inspection_references || data.references) {
+                        renderPlateReferences(name, data.rest_references || [], 'rest');
+                        renderPlateReferences(name, data.inspection_references || data.references || [], 'inspection');
+                        updatePlateModeUI();
+                    }
+                    resultEl.innerHTML = `<span style="color:var(--accent);">&#10003; ${data.message || 'Build plate detection saved'}</span>`;
+                } else {
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message || data.error || 'Save failed'}</span>`;
+                }
             } catch (e) {
                 resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
             }
@@ -3856,9 +3899,13 @@
             const resultEl = document.getElementById('plateDetectionResult');
             if (!name) { resultEl.innerHTML = '<span style="color:var(--danger);">Select a printer first</span>'; return; }
             await savePlateDetectionConfig();
-            resultEl.innerHTML = '<span style="color:var(--text-muted);">Testing current camera frame...</span>';
+            resultEl.innerHTML = '<span style="color:var(--text-muted);">Running the same build plate check used before printing...</span>';
             try {
-                const res = await fetch(BASE + '/api/plate-detection/test/' + encodeURIComponent(name), { method: 'POST' });
+                const res = await fetch(BASE + '/api/plate-detection/test/' + encodeURIComponent(name), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ full_check: true }),
+                });
                 const data = await res.json();
                 const color = data.ok ? 'var(--accent)' : 'var(--danger)';
                 const prefix = data.ok ? '&#10003;' : '&#10007;';
@@ -3918,7 +3965,11 @@
             await savePlateDetectionConfig();
             resultEl.innerHTML = '<span style="color:var(--text-muted);">Testing empty plate baseline...</span>';
             try {
-                const res = await fetch(BASE + '/api/plate-detection/test/' + encodeURIComponent(name), { method: 'POST' });
+                const res = await fetch(BASE + '/api/plate-detection/test/' + encodeURIComponent(name), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ full_check: false }),
+                });
                 const data = await res.json();
                 const checks = Array.isArray(data.checks) ? data.checks : [];
                 const scores = checks

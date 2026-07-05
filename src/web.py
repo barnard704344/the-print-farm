@@ -211,6 +211,63 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             logger.warning(f"Could not start camera for plate detection on {printer_name}: {e}")
         return None
 
+    def _live_camera_frames(printer_name, sample_count=3, after=None):
+        """Collect fresh frames from the active camera stream for a live plate check."""
+        frames = []
+        first = _current_camera_frame(printer_name, wait_seconds=0.5 if after else 0.0, after=after)
+        if first:
+            frames.append(first)
+
+        marker = time.monotonic()
+        while camera_manager and len(frames) < sample_count:
+            frame = camera_manager.get_frame_after(printer_name, marker, timeout=2.5)
+            if not frame:
+                break
+            frames.append(frame)
+            marker = time.monotonic()
+        return frames
+
+    def _analyse_live_plate(printer_name, refs, cfg, phase, after=None):
+        frames = _live_camera_frames(printer_name, sample_count=3, after=after)
+        if not frames:
+            return {
+                "ok": False,
+                "occupied": False,
+                "score": None,
+                "threshold": cfg["threshold"],
+                "phase": phase,
+                "samples": 0,
+                "message": "No live camera frames available for build plate detection",
+            }
+
+        results = [analyse_plate(frame, refs, cfg["roi"], cfg["threshold"]) for frame in frames]
+        valid = [r for r in results if r.ok]
+        if not valid:
+            message = results[0].message if results else "Build plate detection failed"
+            return {
+                "ok": False,
+                "occupied": False,
+                "score": None,
+                "threshold": cfg["threshold"],
+                "phase": phase,
+                "samples": len(frames),
+                "message": message,
+            }
+
+        scores = sorted(r.score for r in valid)
+        score = scores[len(scores) // 2]
+        occupied_count = sum(1 for r in valid if r.occupied)
+        occupied = occupied_count >= ((len(valid) // 2) + 1)
+        return {
+            "ok": not occupied,
+            "occupied": occupied,
+            "score": score,
+            "threshold": cfg["threshold"],
+            "phase": phase,
+            "samples": len(valid),
+            "message": "Build plate appears occupied" if occupied else "Build plate appears empty",
+        }
+
     def _prepare_plate_detection_view(printer_name, cfg, home=False):
         if not cfg.get("prepare_before_check"):
             return {"ok": True, "skipped": True}
@@ -240,10 +297,6 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         is_bambu = farm_manager.get_printer_type(printer_name) == "bambulab"
         should_prepare = is_bambu and cfg.get("prepare_before_check")
 
-        frame = _current_camera_frame(printer_name)
-        if not frame:
-            return {"ok": False, "occupied": False, "message": "No camera snapshot available for build plate detection"}
-
         if should_prepare:
             rest_refs = _load_plate_reference_bytes(printer_name, "rest")
             if not rest_refs:
@@ -252,36 +305,23 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                     "occupied": False,
                     "message": "Capture a Bambu resting-bed reference before enabling raised plate inspection",
                 }
-            rest_result = analyse_plate(frame, rest_refs, cfg["roi"], cfg["threshold"])
-            if not rest_result.ok or rest_result.occupied:
-                return {
-                    "ok": rest_result.ok and not rest_result.occupied,
-                    "occupied": rest_result.occupied,
-                    "score": rest_result.score,
-                    "threshold": rest_result.threshold,
-                    "phase": "rest",
-                    "message": rest_result.message,
-                }
+            rest_result = _analyse_live_plate(printer_name, rest_refs, cfg, "rest")
+            if not rest_result.get("ok"):
+                return rest_result
 
             prep = _prepare_plate_detection_view(printer_name, cfg)
             if not prep.get("ok"):
                 return {"ok": False, "occupied": False, "message": prep.get("message", "Build plate inspection setup failed")}
 
-            frame = _current_camera_frame(printer_name, wait_seconds=0.5, after=prep.get("after"))
-            if not frame:
-                return {"ok": False, "occupied": False, "message": "No camera snapshot available after moving bed"}
             refs = _load_plate_reference_bytes(printer_name, "inspection")
+            result = _analyse_live_plate(printer_name, refs, cfg, "inspection", after=prep.get("after"))
         else:
             refs = _load_plate_reference_bytes(printer_name, "inspection")
+            result = _analyse_live_plate(printer_name, refs, cfg, "single")
 
-        result = analyse_plate(frame, refs, cfg["roi"], cfg["threshold"])
         return {
-            "ok": result.ok and not result.occupied,
-            "occupied": result.occupied,
-            "score": result.score,
-            "threshold": result.threshold,
-            "phase": "inspection" if should_prepare else "single",
-            "message": result.message,
+            **result,
+            "live": True,
         }
 
     def _test_current_plate_view(printer_name):
@@ -2497,10 +2537,29 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             plate_cfg = file_config.get("plate_detection", {})
             plate_cfg[name] = cfg
             file_config["plate_detection"] = plate_cfg
+            captured_reference = None
+            if cfg["enabled"] and not cfg["prepare_before_check"] and not _list_plate_references(name, "inspection"):
+                frame = _current_camera_frame(name)
+                if not frame:
+                    return jsonify({
+                        "ok": False,
+                        "message": "Could not enable build plate detection because no live camera frame is available",
+                    }), 400
+                captured_reference = "inspection_reference_1.jpg"
+                with open(os.path.join(_plate_detection_dir(name), captured_reference), "wb") as f:
+                    f.write(frame)
             with open(os.environ.get("FARM_CONFIG", "config/config.yaml"), "w") as f:
                 yaml.dump(file_config, f, default_flow_style=False, sort_keys=False)
             app_config["plate_detection"] = plate_cfg
-            return jsonify({"ok": True, "message": "Build plate detection saved"})
+            message = "Build plate detection enabled with a live empty-plate reference" if captured_reference else "Build plate detection saved"
+            return jsonify({
+                "ok": True,
+                "message": message,
+                "captured_reference": captured_reference,
+                "references": _list_plate_references(name, "inspection"),
+                "inspection_references": _list_plate_references(name, "inspection"),
+                "rest_references": _list_plate_references(name, "rest"),
+            })
         except Exception as e:
             logger.error(f"Failed to save plate detection config: {e}")
             return jsonify({"ok": False, "message": str(e)}), 500
