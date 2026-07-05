@@ -117,67 +117,6 @@
             gap: 8px;
         }
 
-        .stealth-toggle {
-            background: none;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            color: var(--text-muted);
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 700;
-            line-height: 1;
-            min-width: 34px;
-            padding: 7px 9px;
-            transition: border-color 0.2s, color 0.2s, background 0.2s;
-        }
-        .stealth-toggle:hover { border-color: var(--text-muted); color: var(--text); }
-        .stealth-toggle.active {
-            background: var(--warning-dim);
-            border-color: var(--warning);
-            color: var(--warning);
-        }
-
-        [data-stealth="on"] .header-subtitle,
-        [data-stealth="on"] .farm-stats,
-        [data-stealth="on"] .printer-job,
-        [data-stealth="on"] .progress-bar-container,
-        [data-stealth="on"] .camera-section,
-        [data-stealth="on"] .printer-meta,
-        [data-stealth="on"] .staff-only-toggle,
-        [data-stealth="on"] .printer-orca-port,
-        [data-stealth="on"] .printer-type-badge,
-        [data-stealth="on"] #authArea,
-        [data-stealth="on"] #uploadArea,
-        [data-stealth="on"] #bulkActions,
-        [data-stealth="on"] .library-grid {
-            display: none !important;
-        }
-
-        [data-stealth="on"] .printer-display-name {
-            display: none;
-        }
-
-        [data-stealth="on"] .printer-name::after {
-            content: "Printer";
-        }
-
-        [data-stealth="on"] .printer-status {
-            background: rgba(107,114,128,0.15);
-            color: var(--text-muted);
-        }
-
-        [data-stealth="on"] .job-table td,
-        [data-stealth="on"] .job-table th {
-            color: transparent;
-            text-shadow: 0 0 8px var(--text-muted);
-        }
-
-        [data-stealth="on"] .job-status,
-        [data-stealth="on"] .job-actions,
-        [data-stealth="on"] .assign-select {
-            visibility: hidden;
-        }
-
         .farm-stats {
             display: flex;
             gap: 20px;
@@ -1253,6 +1192,7 @@
             display: block;
             border-radius: 8px;
             cursor: pointer;
+            transform-origin: center;
         }
 
         .camera-placeholder {
@@ -1271,7 +1211,6 @@
         .camera-btn {
             position: absolute;
             top: 6px;
-            right: 6px;
             padding: 2px 8px;
             font-size: 11px;
             background: rgba(0,0,0,0.6);
@@ -1282,6 +1221,8 @@
         }
 
         .camera-btn:hover { background: rgba(0,0,0,0.8); }
+        .camera-stop-btn { right: 6px; }
+        .camera-rotate-btn { left: 6px; }
 
         /* Camera modal (full-screen view) */
         .camera-modal-overlay {
@@ -1306,6 +1247,7 @@
             max-width: 90vw;
             max-height: 85vh;
             border-radius: 8px;
+            transform-origin: center;
         }
 
         .camera-modal-title {
@@ -1330,6 +1272,21 @@
             display: flex;
             align-items: center;
             justify-content: center;
+        }
+
+        .camera-modal-rotate {
+            position: absolute;
+            top: -12px;
+            left: -12px;
+            min-width: 32px;
+            height: 32px;
+            padding: 0 10px;
+            border-radius: 16px;
+            border: none;
+            background: var(--info);
+            color: #fff;
+            font-size: 12px;
+            cursor: pointer;
         }
 
         .btn {
@@ -1746,7 +1703,6 @@
             .temp-set-btn { padding: 6px 10px; font-size: 12px; min-height: 36px; }
             .temp-off-btn { padding: 6px 8px; font-size: 12px; min-height: 36px; }
             .theme-toggle { padding: 8px 10px; min-height: 44px; }
-            .stealth-toggle { min-height: 44px; min-width: 44px; }
 
             /* Font size bumps for legibility */
             .ams-tray-type, .mmu-gate-label { font-size: 11px; }
@@ -1882,9 +1838,6 @@
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         const theme = saved || (prefersDark ? 'dark' : 'light');
         document.documentElement.setAttribute('data-theme', theme);
-        if (localStorage.getItem('stealthMode') === 'on') {
-            document.documentElement.setAttribute('data-stealth', 'on');
-        }
     })();
 </script>
 <body>
@@ -1902,7 +1855,6 @@
                 <div class="farm-stat"><span class="dot dot-error"></span> <span id="statErrored">0</span> Error</div>
             </div>
             <div class="header-controls">
-                <button class="stealth-toggle" id="stealthToggle" onclick="toggleStealthMode()" title="Toggle stealth mode" aria-pressed="false">S</button>
                 <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark theme">
                     <span class="theme-icon-dark">🌛</span>
                     <span class="theme-icon-light">🔆</span>
@@ -2588,6 +2540,7 @@
         <div class="camera-modal" onclick="event.stopPropagation()">
             <div class="camera-modal-title" id="cameraModalTitle"></div>
             <img id="cameraModalImg" src="" alt="Camera Feed">
+            <button class="camera-modal-rotate" id="cameraModalRotate" onclick="rotateCamera(currentCameraModalName)" title="Rotate camera feed">&#8635; 0&deg;</button>
             <button class="camera-modal-close" onclick="closeCameraModal()">&times;</button>
         </div>
     </div>
@@ -3091,27 +3044,6 @@
             localStorage.setItem('theme', next);
         }
 
-        function setStealthMode(enabled) {
-            const toggle = document.getElementById('stealthToggle');
-            if (enabled) {
-                document.documentElement.setAttribute('data-stealth', 'on');
-                localStorage.setItem('stealthMode', 'on');
-                closeCameraModal();
-            } else {
-                document.documentElement.removeAttribute('data-stealth');
-                localStorage.removeItem('stealthMode');
-            }
-            if (toggle) {
-                toggle.classList.toggle('active', enabled);
-                toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
-                toggle.title = enabled ? 'Disable stealth mode' : 'Enable stealth mode';
-            }
-        }
-
-        function toggleStealthMode() {
-            setStealthMode(document.documentElement.getAttribute('data-stealth') !== 'on');
-        }
-
         let isAdmin = false;
         let isAuthenticated = false;
         let userRole = null;
@@ -3124,10 +3056,7 @@
         let myActivePrinters = new Set();  // printers with the current user's active jobs
         let cameraStreaming = {};   // {printerName: true/false}
         let cameraRefreshTimers = {};  // per-printer snapshot refresh intervals
-
-        document.addEventListener('DOMContentLoaded', () => {
-            setStealthMode(localStorage.getItem('stealthMode') === 'on');
-        });
+        let currentCameraModalName = null;
 
         // ── Auth ─────────────────────────────────────────────
         async function checkAuth() {
@@ -4575,8 +4504,9 @@
                     </div>
                     <div class="camera-section" id="cam-${name}">
                         ${cameraStreaming[name]
-                            ? `<img class="camera-feed" src="${BASE}/api/camera/${encodeURIComponent(name)}/snapshot?t=${Date.now()}" alt="Camera" onclick="openCameraModal('${name}')">
-                               <button class="camera-btn" onclick="event.stopPropagation();toggleCamera('${name}',false)">&#x25A0; Stop</button>`
+                            ? `<img class="camera-feed" src="${BASE}/api/camera/${encodeURIComponent(name)}/snapshot?t=${Date.now()}" alt="Camera" onclick="openCameraModal('${name}')" style="transform:${cameraRotationStyle(name)}">
+                               <button class="camera-btn camera-rotate-btn" onclick="event.stopPropagation();rotateCamera('${name}')" title="Rotate camera feed">&#8635; ${getCameraRotation(name)}&deg;</button>
+                               <button class="camera-btn camera-stop-btn" onclick="event.stopPropagation();toggleCamera('${name}',false)">&#x25A0; Stop</button>`
                             : `<div class="camera-placeholder" onclick="toggleCamera('${name}',true)">&#x1F4F7; Start Camera</div>`
                         }
                     </div>
@@ -5856,12 +5786,49 @@
         }
 
         // ── Camera Functions ─────────────────────────────────
+        function cameraRotationStorageKey(name) {
+            return `printFarmCameraRotation:${name}`;
+        }
+
+        function getCameraRotation(name) {
+            const raw = parseInt(localStorage.getItem(cameraRotationStorageKey(name)) || '0', 10);
+            return [0, 90, 180, 270].includes(raw) ? raw : 0;
+        }
+
+        function cameraRotationStyle(name) {
+            return `rotate(${getCameraRotation(name)}deg)`;
+        }
+
+        function applyCameraRotation(name) {
+            const rotation = getCameraRotation(name);
+            document.querySelectorAll(`#cam-${CSS.escape(name)} .camera-feed`).forEach(img => {
+                img.style.transform = `rotate(${rotation}deg)`;
+            });
+            document.querySelectorAll(`#cam-${CSS.escape(name)} .camera-rotate-btn`).forEach(btn => {
+                btn.innerHTML = `&#8635; ${rotation}&deg;`;
+            });
+            if (currentCameraModalName === name) {
+                const modalImg = document.getElementById('cameraModalImg');
+                const modalRotate = document.getElementById('cameraModalRotate');
+                if (modalImg) modalImg.style.transform = `rotate(${rotation}deg)`;
+                if (modalRotate) modalRotate.innerHTML = `&#8635; ${rotation}&deg;`;
+            }
+        }
+
+        function rotateCamera(name) {
+            if (!name) return;
+            const nextRotation = (getCameraRotation(name) + 90) % 360;
+            localStorage.setItem(cameraRotationStorageKey(name), String(nextRotation));
+            applyCameraRotation(name);
+        }
+
         function updateCameraSectionDOM(name, streaming) {
             const section = document.getElementById(`cam-${name}`);
             if (!section) return;
             if (streaming) {
-                section.innerHTML = `<img class="camera-feed" src="${BASE}/api/camera/${encodeURIComponent(name)}/snapshot?t=${Date.now()}" alt="Camera" onclick="openCameraModal('${name}')">
-                    <button class="camera-btn" onclick="event.stopPropagation();toggleCamera('${name}',false)">&#x25A0; Stop</button>`;
+                section.innerHTML = `<img class="camera-feed" src="${BASE}/api/camera/${encodeURIComponent(name)}/snapshot?t=${Date.now()}" alt="Camera" onclick="openCameraModal('${name}')" style="transform:${cameraRotationStyle(name)}">
+                    <button class="camera-btn camera-rotate-btn" onclick="event.stopPropagation();rotateCamera('${name}')" title="Rotate camera feed">&#8635; ${getCameraRotation(name)}&deg;</button>
+                    <button class="camera-btn camera-stop-btn" onclick="event.stopPropagation();toggleCamera('${name}',false)">&#x25A0; Stop</button>`;
             } else {
                 section.innerHTML = `<div class="camera-placeholder" onclick="toggleCamera('${name}',true)">&#x1F4F7; Start Camera</div>`;
             }
@@ -5906,7 +5873,11 @@
             const overlay = document.getElementById('cameraModalOverlay');
             const img = document.getElementById('cameraModalImg');
             const title = document.getElementById('cameraModalTitle');
+            currentCameraModalName = name;
             title.textContent = name;
+            img.style.transform = cameraRotationStyle(name);
+            const modalRotate = document.getElementById('cameraModalRotate');
+            if (modalRotate) modalRotate.innerHTML = `&#8635; ${getCameraRotation(name)}&deg;`;
             // Use MJPEG stream for full-screen view
             img.src = `${BASE}/api/camera/${encodeURIComponent(name)}/stream`;
             overlay.classList.add('active');
@@ -5917,6 +5888,8 @@
             const img = document.getElementById('cameraModalImg');
             overlay.classList.remove('active');
             img.src = '';  // Stop the stream
+            img.style.transform = 'rotate(0deg)';
+            currentCameraModalName = null;
         }
 
         document.addEventListener('keydown', e => {
