@@ -561,11 +561,17 @@ def update_apply(config):
         cwd=repo,
         timeout=600,
     )
-    pip = str(Path(repo) / "venv/bin/pip")
-    if not Path(pip).is_file():
-        raise HelperError("Virtual environment pip is missing")
-    _run([pip, "install", "-r", str(Path(repo) / "requirements.txt")], timeout=300)
-    _run([pip, "check"], timeout=60)
+    python = str(Path(repo) / "venv/bin/python")
+    requirements = Path(repo) / "requirements.txt"
+    if not Path(python).is_file():
+        raise HelperError("Virtual environment Python is missing")
+    if not requirements.is_file():
+        raise HelperError("requirements.txt is missing")
+    _run(
+        [python, "-m", "pip", "install", "-r", str(requirements)],
+        timeout=300,
+    )
+    _run([python, "-m", "pip", "check"], timeout=60)
     print(result.stdout.strip() or "Update applied")
 
 

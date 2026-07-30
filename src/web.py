@@ -1000,6 +1000,9 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         return jsonify({
             "summary": farm_manager.get_farm_summary(),
             "printers": states,
+            "spoolman_configured": bool(
+                app_config.get("spoolman", {}).get("url", "").strip()
+            ),
         })
 
     @app.route(prefix + "/api/farm/summary")

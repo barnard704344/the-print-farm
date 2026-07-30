@@ -3444,8 +3444,10 @@
                 const res = await fetch(BASE + '/api/spoolman/config');
                 if (!res.ok) return;
                 const data = await res.json();
+                const tab = document.getElementById('spoolmanTab');
+                tab.style.display = 'none';
+                tab.removeAttribute('href');
                 if (data.url) {
-                    const tab = document.getElementById('spoolmanTab');
                     tab.href = resolveSpoolmanUrl(data.url);
                     tab.style.display = '';
                 }
@@ -4501,6 +4503,7 @@
 
         let lastPrinterNames = [];  // Track which printers are in the grid
         let availablePrinters = [];  // Track available printers for manual assign
+        let spoolmanConfigured = false;
 
         function renderPrinterCard(name, p) {
             const status = String(p.status || 'unknown').toLowerCase().replace(/[^a-z_]/g, '');
@@ -4853,16 +4856,22 @@
                     const activeClass = t.active ? 'active' : '';
                     const emptyClass = !t.loaded ? 'empty' : '';
                     if (isAdmin) {
+                        const configureAction = t.is_bbl
+                            ? ''
+                            : `openTrayConfig(${nameArg}, ${Number(t.id)}, ${Number(t.slot)}, ${jsArg(t.type || '')}, ${jsArg(safeCssColor(t.color, '#333333'))}, ${jsArg(t.nozzle_temp_min)}, ${jsArg(t.nozzle_temp_max)})`;
+                        const trayTitle = t.is_bbl
+                            ? 'Bambu RFID filament — colour and type are supplied by the tag'
+                            : (t.loaded ? 'Click to configure filament' : 'Empty slot');
                         return `
                             <div class="ams-tray ${activeClass} ${emptyClass}"
-                                 onclick="event.stopPropagation();${t.loaded ? `amsLoadTray(${nameArg}, ${Number(t.id)})` : ''}"
-                                 title="${t.loaded ? `Click to load · Right-click to configure` : 'Empty slot'}"
-                                 oncontextmenu="event.stopPropagation();${t.loaded ? `event.preventDefault();openTrayConfig(${nameArg}, ${Number(t.id)}, ${Number(t.slot)}, ${jsArg(t.type || '')}, ${jsArg(safeCssColor(t.color, '#333333'))}, ${jsArg(t.nozzle_temp_min)}, ${jsArg(t.nozzle_temp_max)})` : ''}">
+                                 onclick="event.stopPropagation();${t.loaded ? configureAction : ''}"
+                                 title="${trayTitle}"
+                                 oncontextmenu="event.stopPropagation();${configureAction ? `event.preventDefault();${configureAction}` : ''}">
                                 <div class="ams-tray-swatch" style="background:${t.loaded ? swatchColor : '#333'}"></div>
                                 <div class="ams-tray-type">${escapeHtml(t.type || '—')}</div>
                                 <div class="ams-tray-slot">#${t.slot + 1}</div>
                                 ${t.loaded && t.remain >= 0 ? `<div class="ams-tray-remain">${t.remain}%</div>` : ''}
-                                ${t.loaded ? `<div class="ams-tray-edit" onclick="event.stopPropagation();openTrayConfig(${nameArg}, ${Number(t.id)}, ${Number(t.slot)}, ${jsArg(t.type || '')}, ${jsArg(safeCssColor(t.color, '#333333'))}, ${jsArg(t.nozzle_temp_min)}, ${jsArg(t.nozzle_temp_max)})" title="Configure filament">&#9998;</div>` : ''}
+                                ${t.loaded && !t.is_bbl ? `<div class="ams-tray-edit" onclick="event.stopPropagation();${configureAction}" title="Configure filament">&#9998;</div>` : ''}
                             </div>
                         `;
                     } else {
@@ -4905,7 +4914,7 @@
 
                 const spoolData = _printerSpoolCache[name];
                 let spoolHtml = '';
-                if (!hasMmu && toolSpools.length > 1) {
+                if (spoolmanConfigured && !hasMmu && toolSpools.length > 1) {
                     const cachedTools = _toolSpoolCache[name] || {};
                     spoolHtml = `<div class="toolhead-groups">${toolSpools.map((tool, idx) => renderToolheadGroup(
                         name,
@@ -4914,7 +4923,7 @@
                         idx,
                         cachedTools[tool.name],
                     )).join('')}</div>`;
-                } else if (!hasMmu) {
+                } else if (spoolmanConfigured && !hasMmu) {
                     if (spoolData && spoolData.id) {
                         spoolHtml = renderSpoolAssignmentRow({
                             printerName: name,
@@ -5506,6 +5515,7 @@
             document.getElementById('traySpoolMsg').textContent = '';
 
             // Pre-populate with currently linked spool if any
+            window._amsTraySpoolsCache = window._amsTraySpoolsCache || {};
             const cachedSpool = (window._amsTraySpoolsCache[printerName] || {})[trayId];
             if (cachedSpool) {
                 _trayConfigSpoolId = cachedSpool.id;
@@ -5516,6 +5526,10 @@
 
             // Load spools in background
             _trayConfigSpoolsAll = [];
+            if (!spoolmanConfigured) {
+                document.getElementById('traySpoolSection').style.display = 'none';
+                return;
+            }
             document.getElementById('traySpoolMsg').textContent = 'Loading spools…';
             try {
                 const data = await hhFetch('/api/v1/spoolman/spools');
@@ -5661,12 +5675,12 @@
 
                 // 2. Save Spoolman spool link / unlink
                 const currentLinked = (window._amsTraySpoolsCache[name] || {})[trayId];
-                if (_trayConfigSpoolId > 0) {
+                if (spoolmanConfigured && _trayConfigSpoolId > 0) {
                     await hhFetch(`/api/v1/printers/${encodeURIComponent(name)}/ams/trays/${trayId}/spool/${_trayConfigSpoolId}`, { method: 'PUT' });
                     // Bust cache so overview refreshes with new spool info
                     if (window._amsTraySpoolsCache[name]) delete window._amsTraySpoolsCache[name][trayId];
                     await _amsLoadTraySpools(name);
-                } else if (_trayConfigSpoolId === -1 && currentLinked) {
+                } else if (spoolmanConfigured && _trayConfigSpoolId === -1 && currentLinked) {
                     // User cleared an existing link
                     try { await hhFetch(`/api/v1/printers/${encodeURIComponent(name)}/ams/trays/${trayId}/spool`, { method: 'DELETE' }); } catch(_) {}
                     if (window._amsTraySpoolsCache[name]) delete window._amsTraySpoolsCache[name][trayId];
@@ -6351,6 +6365,7 @@
             try {
                 const res = await fetch(BASE + '/api/farm/status');
                 const data = await res.json();
+                spoolmanConfigured = data.spoolman_configured === true;
 
                 // Update summary
                 document.getElementById('statConnected').textContent = data.summary.connected;
@@ -6387,7 +6402,7 @@
                     lastPrinterNames = entries.map(([n]) => n);
                     // Fetch spool assignments and immediately re-render filament sections
                     // so spools appear on first load without waiting for the next poll.
-                    refreshAllPrinterSpools();
+                    if (spoolmanConfigured) refreshAllPrinterSpools();
                 } else {
                     // Same printers — update in place (no flicker)
                     for (const [name, p] of entries) {
@@ -7736,7 +7751,7 @@
                     // Admin: click to configure. Non-admin: click to load.
                     const clickAttr = t.loaded
                         ? (isAdmin
-                            ? `onclick="openTrayConfig(${jsArg(printerName)},${Number(t.id)},${Number(t.slot)},${jsArg(t.type || '')},${jsArg(safeCssColor(t.color, '#333333'))},${jsArg(t.nozzle_temp_min)},${jsArg(t.nozzle_temp_max)})"`
+                            ? (t.is_bbl ? '' : `onclick="openTrayConfig(${jsArg(printerName)},${Number(t.id)},${Number(t.slot)},${jsArg(t.type || '')},${jsArg(safeCssColor(t.color, '#333333'))},${jsArg(t.nozzle_temp_min)},${jsArg(t.nozzle_temp_max)})"`)
                             : `onclick="amsLoadTray(${jsArg(printerName)},${Number(t.id)})"`)
                         : '';
 
@@ -7746,12 +7761,12 @@
                                 <span class="ams-pop-tray-spool-name">${escapeHtml(spoolName)}</span>
                                 ${spoolRem ? `<span class="ams-pop-tray-spool-rem">${spoolRem}</span>` : ''}
                            </div>`
-                        : (isAdmin && t.loaded
+                        : (isAdmin && t.loaded && !t.is_bbl
                             ? `<div class="ams-pop-tray-spool">+ Link spool</div>`
                             : '');
 
                     html += `<div class="ams-pop-tray ${activeClass} ${emptyClass}" ${clickAttr}
-                            title="${t.loaded ? (isAdmin ? 'Click to configure / link spool' : 'Click to load') : 'Empty slot'}">
+                            title="${t.is_bbl ? 'Bambu RFID filament — colour and type are supplied by the tag' : (t.loaded ? (isAdmin ? 'Click to configure / link spool' : 'Click to load') : 'Empty slot')}">
                         <div class="ams-pop-swatch ${bblClass}" style="background:${sw}"></div>
                         <div class="ams-pop-tray-info">
                             <div class="ams-pop-tray-type">${escapeHtml(t.type || '—')}</div>

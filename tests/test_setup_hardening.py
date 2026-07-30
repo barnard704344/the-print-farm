@@ -20,6 +20,13 @@ helper = load_helper()
 
 
 class PrivilegedHelperTests(unittest.TestCase):
+    def test_update_installs_and_checks_declared_dependencies(self):
+        with open(HELPER_PATH, "r", encoding="utf-8") as handle:
+            source = handle.read()
+        self.assertIn('"pip", "install", "-r"', source)
+        self.assertIn('"pip", "check"', source)
+        self.assertIn('requirements = Path(repo) / "requirements.txt"', source)
+
     def test_printer_names_and_ports_are_strictly_validated(self):
         self.assertEqual(helper.validate_printer_name("P1S-1"), "P1S-1")
         self.assertEqual(helper.validate_port("5001"), 5001)
@@ -122,6 +129,10 @@ class SetupScriptTests(unittest.TestCase):
         self.assertIn("Python 3.10 or newer is required", self.script)
         self.assertIn("configured runtime paths", self.script.lower())
         self.assertIn("must be a real directory, not a symlink", self.script)
+        self.assertIn(
+            'install -r "${SCRIPT_DIR}/requirements.txt"',
+            self.script,
+        )
 
     def test_setup_does_not_grant_generic_privileged_commands(self):
         forbidden = (
