@@ -70,6 +70,7 @@ class PrivilegedHelperTests(unittest.TestCase):
         self.assertIn(helper.PROXY_BEGIN, installed)
         self.assertIn("ProxyPreserveHost On", installed)
         self.assertIn("LimitRequestBody 1073741824", installed)
+        self.assertNotIn(r"^/[^/]+/api/", installed)
         self.assertEqual(helper.update_proxy_config(installed, 5000), installed)
 
         updated = helper.update_proxy_config(installed, 5100)
