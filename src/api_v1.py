@@ -178,7 +178,11 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
             return "Printer is not connected", 409, "PRINTER_OFFLINE"
         if _staff_only_printer(name) and not (_check_api_key() or _is_admin()):
             return "Printer is restricted to staff", 403, "STAFF_ONLY_PRINTER"
-        status = getattr(getattr(printer, "state", None), "status", None)
+        status = (
+            farm_manager.get_effective_status(name)
+            if hasattr(farm_manager, "get_effective_status")
+            else getattr(getattr(printer, "state", None), "status", None)
+        )
         status_value = getattr(status, "value", str(status or "")).upper()
         if status_value not in ("IDLE", "FINISH"):
             return f"Printer is not idle ({status_value or 'unknown'})", 409, "PRINTER_BUSY"

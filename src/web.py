@@ -93,6 +93,11 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     if config is None:
         config = {}
     app_config = config
+    failure_timeout_minutes = max(
+        0.0, float(app_config.get("ui", {}).get("failed_printer_timeout_minutes", 5))
+    )
+    if hasattr(farm_manager, "set_failure_timeout"):
+        farm_manager.set_failure_timeout(failure_timeout_minutes * 60)
 
     app = Flask(
         __name__,
@@ -544,7 +549,11 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             return f"Printer '{printer_name}' not found", 404
         if not printer.is_connected():
             return f"Printer '{printer_name}' is not connected", 409
-        status = getattr(getattr(printer, "state", None), "status", None)
+        status = (
+            farm_manager.get_effective_status(printer_name)
+            if hasattr(farm_manager, "get_effective_status")
+            else getattr(getattr(printer, "state", None), "status", None)
+        )
         status_value = getattr(status, "value", str(status or "")).upper()
         if status_value not in ("IDLE", "FINISH"):
             return f"Printer '{printer_name}' is not idle ({status_value or 'unknown'})", 409
@@ -2584,6 +2593,9 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         return jsonify({
             "timezone": ui.get("timezone", ""),
             "locale": ui.get("locale", "en-AU"),
+            "failed_printer_timeout_minutes": ui.get(
+                "failed_printer_timeout_minutes", 5
+            ),
         })
 
     @app.route(prefix + "/api/ui/config", methods=["POST"])
@@ -2600,9 +2612,21 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 ui["timezone"] = data["timezone"].strip()
             if "locale" in data:
                 ui["locale"] = data["locale"].strip()
+            if "failed_printer_timeout_minutes" in data:
+                timeout = float(data["failed_printer_timeout_minutes"])
+                if not 0 <= timeout <= 1440:
+                    return jsonify({
+                        "ok": False,
+                        "message": "Failed-printer timeout must be between 0 and 1440 minutes.",
+                    }), 400
+                ui["failed_printer_timeout_minutes"] = timeout
             file_config["ui"] = ui
             save_yaml_config(config_path, file_config)
             app_config["ui"] = ui
+            if hasattr(farm_manager, "set_failure_timeout"):
+                farm_manager.set_failure_timeout(
+                    float(ui.get("failed_printer_timeout_minutes", 5)) * 60
+                )
             return jsonify({"ok": True})
         except Exception as e:
             logger.error(f"Failed to save UI config: {e}")

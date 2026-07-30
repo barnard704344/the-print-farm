@@ -6,11 +6,16 @@ Control how dates and times are shown across the dashboard. Configure from **Set
 
 - **Timezone** — Select any IANA timezone (e.g. `Australia/Sydney`, `Europe/London`, `America/New_York`). Leave blank to auto-detect from each viewer's browser. The selected timezone is persisted server-side so all users see the same zone by default.
 - **Locale** — Controls date format. Currently fixed to `en-AU` (DD/MM/YYYY). Configurable via the API if needed.
+- **Failed printer cooldown** — After this many minutes, a connected printer
+  that still reports `FAILED` is presented as `READY` and may receive a new
+  staff-approved job. This never resends a job automatically. Set it to `0` to
+  keep failed printers blocked until their reported state changes.
 
 ```yaml
 ui:
   timezone: Australia/Sydney
   locale: en-AU
+  failed_printer_timeout_minutes: 5
 ```
 
 Or configure from **Settings → Display Preferences** in the dashboard.

@@ -587,6 +587,7 @@ def cmd_run(args, config: dict):
                                 f"Job #{job_key} finished on {pname}.\nFile: {fname}",
                             )
                         elif state.status == PrintStatus.FAILED:
+                            farm.reset_failure_timer(pname)
                             queue.mark_failed(job_key)
                             reason = _get_error_reason(state)
                             subj = f"Print Failed — {fname}"

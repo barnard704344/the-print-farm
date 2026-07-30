@@ -8,6 +8,7 @@ and provides a unified interface for the web UI and job queue.
 import copy
 import logging
 import threading
+import time
 from typing import Dict, Optional, Union
 
 from .bambu_client import BambuClient, PrintStatus
@@ -53,6 +54,8 @@ class FarmManager:
         self._printers: Dict[str, PrinterClient] = {}
         self._printer_types: Dict[str, str] = {}
         self._lock = threading.Lock()
+        self._failure_timeout_seconds = 300
+        self._failure_first_seen: Dict[str, float] = {}
         # Persisted MMU gate configs: {printer_name: {gate_index: {material, color, spool_id}}}
         self._gate_configs: Dict[str, Dict[int, dict]] = {}
         self._gate_config_saver = None  # callable set by load_gate_configs()
@@ -102,8 +105,34 @@ class FarmManager:
         return self._printer_types.get(name, "bambulab")
 
     def _effective_status(self, name: str, client: PrinterClient) -> PrintStatus:
-        """Return the printer's reported status without masking failures."""
-        return client.state.status
+        """Return farm status, auto-clearing stale failures after the configured delay."""
+        reported = client.state.status
+        if reported != PrintStatus.FAILED:
+            self._failure_first_seen.pop(name, None)
+            return reported
+        now = time.monotonic()
+        first_seen = self._failure_first_seen.setdefault(name, now)
+        if (
+            self._failure_timeout_seconds > 0
+            and now - first_seen >= self._failure_timeout_seconds
+        ):
+            return PrintStatus.IDLE
+        return reported
+
+    def get_effective_status(self, name: str) -> Optional[PrintStatus]:
+        client = self._printers.get(name)
+        return self._effective_status(name, client) if client else None
+
+    def set_failure_timeout(self, seconds: float) -> None:
+        """Set how long FAILED remains blocking; zero disables automatic clearing."""
+        self._failure_timeout_seconds = max(0.0, float(seconds))
+
+    def get_failure_timeout(self) -> float:
+        return self._failure_timeout_seconds
+
+    def reset_failure_timer(self, name: str) -> None:
+        """Start a fresh cooldown for a newly detected failure."""
+        self._failure_first_seen[name] = time.monotonic()
 
     def load_gate_configs(self, job_queue) -> None:
         """Load persisted MMU gate configs from the database into memory."""
@@ -173,6 +202,10 @@ class FarmManager:
         for name, client in self._printers.items():
             s = client.state
             status = self._effective_status(name, client)
+            reported_status = s.status
+            auto_cleared_failure = (
+                reported_status == PrintStatus.FAILED and status == PrintStatus.IDLE
+            )
             printer_type = self._printer_types.get(name, "bambulab")
             state = {
                 "name": name,
@@ -180,6 +213,9 @@ class FarmManager:
                 "type": printer_type,
                 "connected": client.is_connected(),
                 "status": status.value,
+                "display_status": "READY" if auto_cleared_failure else status.value,
+                "reported_status": reported_status.value,
+                "failure_auto_cleared": auto_cleared_failure,
                 "gcode_state": s.gcode_state,
                 "mc_percent": s.mc_percent,
                 "mc_remaining_time": s.mc_remaining_time,

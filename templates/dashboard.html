@@ -2501,6 +2501,13 @@
                         <select id="uiTimezone" class="ad-input" style="max-width:320px;"></select>
                         <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Leave blank to auto-detect from your browser.</div>
                     </div>
+                    <div>
+                        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Failed printer cooldown (minutes)</label>
+                        <input type="number" id="failedPrinterTimeout" class="ad-input" min="0" max="1440" step="1" value="5" style="max-width:160px;">
+                        <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">
+                            After this delay, a connected failed printer is shown as Ready and can receive a staff-approved job. Use 0 to disable automatic clearing.
+                        </div>
+                    </div>
                     <div style="display:flex; gap:8px; margin-top:4px;">
                         <button class="btn btn-success" onclick="saveUiConfig()">Save</button>
                     </div>
@@ -4005,17 +4012,24 @@
                 window._uiLocale = data.locale || 'en-AU';
                 const sel = document.getElementById('uiTimezone');
                 if (sel) sel.value = data.timezone || '';
+                const timeout = document.getElementById('failedPrinterTimeout');
+                if (timeout) timeout.value = data.failed_printer_timeout_minutes ?? 5;
             } catch (e) {}
         }
 
         async function saveUiConfig() {
             const resultEl = document.getElementById('uiConfigResult');
             const tz = document.getElementById('uiTimezone').value;
+            const failureTimeout = Number(document.getElementById('failedPrinterTimeout').value);
             try {
                 const res = await fetch(BASE + '/api/ui/config', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ timezone: tz, locale: 'en-AU' }),
+                    body: JSON.stringify({
+                        timezone: tz,
+                        locale: 'en-AU',
+                        failed_printer_timeout_minutes: failureTimeout,
+                    }),
                 });
                 const data = await res.json();
                 if (data.ok) {
@@ -4509,7 +4523,7 @@
             const status = String(p.status || 'unknown').toLowerCase().replace(/[^a-z_]/g, '');
             const connected = p.connected;
             const connClass = connected ? 'conn-online' : 'conn-offline';
-            const statusLabel = connected ? p.status : 'OFFLINE';
+            const statusLabel = connected ? (p.display_status || p.status) : 'OFFLINE';
             const statusBadge = connected ? `status-badge-${status}` : 'status-badge-unknown';
             const cardClass = connected ? `status-${status}` : 'status-unknown';
             const pType = p.type || 'bambulab';
@@ -4972,7 +4986,7 @@
 
             // Status label
             const statusEl = card.querySelector('[data-field="status"]');
-            const statusLabel = connected ? p.status : 'OFFLINE';
+            const statusLabel = connected ? (p.display_status || p.status) : 'OFFLINE';
             const statusBadge = connected ? `status-badge-${status}` : 'status-badge-unknown';
             if (statusEl) { statusEl.textContent = statusLabel; statusEl.className = `printer-status ${statusBadge}`; }
 
@@ -6418,7 +6432,10 @@
                         && ['IDLE', 'FINISH'].includes(String(p.status || '').toUpperCase())
                     )
                     .filter(([_, p]) => isAdmin || !p.staff_only)
-                    .map(([name, p]) => ({ name, status: p.status }));
+                    .map(([name, p]) => ({
+                        name,
+                        status: p.display_status || p.status,
+                    }));
             } catch (err) {
                 console.error('Failed to refresh printers:', err);
             }

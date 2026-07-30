@@ -97,5 +97,13 @@ active_directory:
 #spoolman:
 #  url: http://localhost:7912
 
+# ── Display and printer readiness ────────────────────────
+ui:
+  timezone: ''
+  locale: en-AU
+  # A connected FAILED printer becomes READY after this delay.
+  # Jobs are never resent automatically. Set to 0 to disable.
+  failed_printer_timeout_minutes: 5
+
 logging:
   level: INFO
