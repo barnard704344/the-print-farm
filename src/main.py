@@ -72,6 +72,28 @@ def load_config(path: str) -> dict:
         return yaml.safe_load(f)
 
 
+def _resolve_web_bind(web_config: dict) -> str:
+    """Resolve the backend bind address with an explicit remote-access gate."""
+    host = str(
+        os.environ.get("FARM_WEB_HOST")
+        or web_config.get("host")
+        or "127.0.0.1"
+    ).strip()
+    allow_remote = bool(web_config.get("allow_remote_backend", False))
+    env_allow_remote = os.environ.get("FARM_ALLOW_REMOTE_BACKEND")
+    if env_allow_remote is not None:
+        allow_remote = env_allow_remote.strip().lower() in {"1", "true", "yes", "on"}
+
+    if host in ("0.0.0.0", "::") and not allow_remote:  # nosec B104
+        logger.warning(
+            "Ignoring wildcard web host; binding to 127.0.0.1 behind the reverse "
+            "proxy. Set web.allow_remote_backend=true only when direct backend "
+            "access is required."
+        )
+        return "127.0.0.1"
+    return host
+
+
 def _deduct_filament_usage(spoolman, job, farm):
     """After a job completes, report filament usage to Spoolman.
 
@@ -343,13 +365,7 @@ def cmd_run(args, config: dict):
 
     # Start web UI
     web_cfg = config.get("web", {})
-    host = web_cfg.get("host", "127.0.0.1")
-    if host in ("0.0.0.0", "::") and not web_cfg.get("allow_remote_backend", False):  # nosec B104
-        logger.warning(
-            "Ignoring wildcard web.host; binding to 127.0.0.1 behind the reverse proxy. "
-            "Set web.allow_remote_backend=true only when direct backend access is required."
-        )
-        host = "127.0.0.1"
+    host = _resolve_web_bind(web_cfg)
     port = web_cfg.get("port", 5000)
 
     # Camera manager — auto-start cameras for connected printers

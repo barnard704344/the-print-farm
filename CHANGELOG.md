@@ -3,7 +3,7 @@
 This file records notable user-facing, security, deployment, and compatibility
 changes to The Print Farm.
 
-## 2026-07-30 - Security and deployment hardening
+## v1.0.9 - 2026-07-30 - Security and deployment hardening
 
 Commit: `c47ca23`
 
@@ -36,6 +36,9 @@ Commit: `c47ca23`
   and runtime secrets are ignored by Git.
 - Bound the Python backend to `127.0.0.1` by default and exposed the dashboard
   through Apache at `/the-print-farm/`.
+- Kept native installs loopback-only while allowing the official Docker image
+  to opt into container-reachable binding through explicit environment
+  variables.
 - Added a dedicated, root-owned privileged helper for narrowly scoped Apache,
   OrcaSlicer, update, and service operations. Generic passwordless shell
   commands are no longer granted.

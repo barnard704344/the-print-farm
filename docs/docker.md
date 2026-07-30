@@ -27,6 +27,12 @@ mkdir -p config data uploads logs
 docker pull ghcr.io/barnard704344/the-print-farm:latest
 ```
 
+For reproducible deployments, pin this release instead:
+
+```bash
+docker pull ghcr.io/barnard704344/the-print-farm:v1.0.9
+```
+
 ### Run the container
 
 ```bash
@@ -42,6 +48,20 @@ docker run -d --name the-print-farm \
 ### Dashboard URL
 
 - http://host-ip:5000/the-print-farm
+
+### Container networking
+
+The official image explicitly sets `FARM_WEB_HOST=0.0.0.0` and
+`FARM_ALLOW_REMOTE_BACKEND=true` so Docker port publishing can reach the
+Waitress server. Native setup does not set these variables and remains bound to
+`127.0.0.1` behind Apache.
+
+Only publish port 5000 on a trusted network. When a host reverse proxy is the
+only intended client, bind the published port to loopback:
+
+```bash
+-p 127.0.0.1:5000:5000
+```
 
 ### Stop the container
 

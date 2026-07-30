@@ -9,6 +9,8 @@ services:
       - "5000:5000"
     environment:
       FARM_CONFIG: /app/config/config.yaml
+      FARM_WEB_HOST: 0.0.0.0
+      FARM_ALLOW_REMOTE_BACKEND: "true"
       APP_PREFIX: /the-print-farm
     volumes:
       - ./config:/app/config

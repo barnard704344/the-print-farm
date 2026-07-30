@@ -15,6 +15,7 @@ from src.camera import BambuCamera
 from src.config_store import load_config, save_config
 from src.file_validation import InvalidPrintFile, validate_print_file
 from src.image_validation import save_normalized_image
+from src.main import _resolve_web_bind
 from src.tls_trust import verify_peer_certificate
 from src.web import create_app
 
@@ -313,6 +314,22 @@ class SecurityTests(unittest.TestCase):
 
 
 class ResourceLimitTests(unittest.TestCase):
+    def test_remote_web_bind_requires_explicit_opt_in(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(
+                _resolve_web_bind({"host": "0.0.0.0"}),
+                "127.0.0.1",
+            )
+        with patch.dict(
+            os.environ,
+            {
+                "FARM_WEB_HOST": "0.0.0.0",
+                "FARM_ALLOW_REMOTE_BACKEND": "true",
+            },
+            clear=True,
+        ):
+            self.assertEqual(_resolve_web_bind({"host": "127.0.0.1"}), "0.0.0.0")
+
     def test_valid_gcode_is_accepted(self):
         with tempfile.NamedTemporaryFile(suffix=".gcode") as handle:
             handle.write(b"G28\n")
