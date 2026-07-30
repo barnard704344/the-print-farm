@@ -68,8 +68,13 @@ class PrivilegedHelperTests(unittest.TestCase):
         original = "<VirtualHost *:80>\n    DocumentRoot /var/www/html\n</VirtualHost>\n"
         installed = helper.update_proxy_config(original, 5000)
         self.assertIn(helper.PROXY_BEGIN, installed)
-        self.assertIn("ProxyPreserveHost On", installed)
-        self.assertIn("LimitRequestBody 1073741824", installed)
+        managed = installed[
+            installed.index(helper.PROXY_BEGIN):
+            installed.index(helper.PROXY_END) + len(helper.PROXY_END)
+        ]
+        self.assertIn("ProxyPass /the-print-farm ", managed)
+        self.assertNotIn("ProxyPass /api ", managed)
+        self.assertNotIn("LimitRequestBody", managed)
         self.assertNotIn(r"^/[^/]+/api/", installed)
         self.assertEqual(helper.update_proxy_config(installed, 5000), installed)
 
@@ -90,7 +95,7 @@ class PrivilegedHelperTests(unittest.TestCase):
 """
         migrated = helper.update_proxy_config(original, 5000)
         self.assertIn("Header always set X-Unrelated yes", migrated)
-        self.assertIn("LimitRequestBody 1073741824", migrated)
+        self.assertNotIn("LimitRequestBody", migrated)
         self.assertNotIn("10737418240", migrated)
         self.assertEqual(migrated.count(helper.PROXY_BEGIN), 1)
 

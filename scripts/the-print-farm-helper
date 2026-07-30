@@ -156,12 +156,8 @@ def render_proxy_block(web_port):
     return "\n".join(
         [
             PROXY_BEGIN,
-            "    LimitRequestBody 1073741824",
-            "    ProxyPreserveHost On",
             f"    ProxyPass /the-print-farm http://127.0.0.1:{web_port}",
             f"    ProxyPassReverse /the-print-farm http://127.0.0.1:{web_port}",
-            f"    ProxyPass /api http://127.0.0.1:{web_port}/api",
-            f"    ProxyPassReverse /api http://127.0.0.1:{web_port}/api",
             PROXY_END,
         ]
     )
