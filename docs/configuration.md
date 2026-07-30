@@ -97,7 +97,6 @@ notifications:
     print_completed: true
     print_paused: true
     print_failed: true
-    plate_blocked: true
   email:
     enabled: true
     smtp_host: smtp.gmail.com

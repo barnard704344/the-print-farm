@@ -52,8 +52,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
                   api_key=None, config=None, file_library=None,
                   send_job_fn=None, parse_filaments_fn=None,
                   parse_model_name_fn=None, parse_metadata_fn=None,
-                  wrap_gcode_fn=None, spoolman_client=None,
-                  plate_check_fn=None):
+                  wrap_gcode_fn=None, spoolman_client=None):
     """
     Create and return the /api/v1 Blueprint.
 
@@ -188,14 +187,6 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
             return f"Printer is not idle ({status_value or 'unknown'})", 409, "PRINTER_BUSY"
         if any(j.get("printer_name") == name for j in job_queue.get_active_jobs()):
             return "Printer already has an active job", 409, "PRINTER_BUSY"
-        if plate_check_fn:
-            plate_check = plate_check_fn(name)
-            if not plate_check.get("ok"):
-                return (
-                    plate_check.get("message", "Build plate check failed"),
-                    409,
-                    "BUILD_PLATE_BLOCKED",
-                )
         return None
 
     # ── Server Info ───────────────────────────────────────

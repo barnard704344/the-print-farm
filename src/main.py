@@ -458,24 +458,11 @@ def cmd_run(args, config: dict):
     _job_prev_status = {}
     _pool_dispatching = set()
     _pool_dispatch_lock = threading.Lock()
-    _pool_blocked_until = {}
     web_services = app.extensions["print_farm"]
 
     def _dispatch_pool_job(job_id, printer_name):
-        """Check, claim, and send one pool job without blocking farm monitoring."""
+        """Claim and send one pool job without blocking farm monitoring."""
         try:
-            plate_check = web_services["check_build_plate"](printer_name)
-            if not plate_check.get("ok"):
-                message = plate_check.get("message", "Build plate check failed")
-                _pool_blocked_until[(job_id, printer_name)] = time.monotonic() + 60
-                web_services["notify_plate_blocked"](printer_name, job_id, message)
-                logger.warning(
-                    "Pool dispatch blocked: job #%s -> %s: %s",
-                    job_id,
-                    printer_name,
-                    message,
-                )
-                return
             if not queue.assign_job(job_id, printer_name):
                 logger.info("Pool dispatch claim lost: job #%s", job_id)
                 return
@@ -536,9 +523,6 @@ def cmd_run(args, config: dict):
                         if job.get("printer_name"):
                             continue
                         printer_name = idle_printers.pop(0)
-                        blocked_until = _pool_blocked_until.get((job["id"], printer_name), 0)
-                        if blocked_until > time.monotonic():
-                            continue
                         with _pool_dispatch_lock:
                             _pool_dispatching.add(printer_name)
                         threading.Thread(

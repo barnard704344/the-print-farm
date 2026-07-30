@@ -145,7 +145,6 @@ class SecurityTests(unittest.TestCase):
                 camera_manager=FakeCameraManager(),
                 api_key=api_key,
                 config=self.config,
-                plate_check_fn=lambda name: {"ok": True},
             )
         )
         return app

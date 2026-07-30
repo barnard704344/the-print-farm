@@ -3,6 +3,16 @@
 This file records notable user-facing, security, deployment, and compatibility
 changes to The Print Farm.
 
+## Unreleased
+
+### Changed
+
+- Removed build-plate camera detection, calibration controls, Bambu bed-motion
+  helpers, and pre-print blocking. Printer readiness now relies on normal printer
+  state and the configurable failed-print timeout.
+- Setup upgrades now remove retired plate-detection configuration and notification
+  settings from existing installations.
+
 ## v1.0.9 - 2026-07-30 - Security and deployment hardening
 
 Commit: `c47ca23`

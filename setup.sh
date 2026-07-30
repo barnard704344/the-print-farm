@@ -546,6 +546,14 @@ queue.setdefault("upload_dir", "./uploads")
 queue.setdefault("db_path", "./data/farm.db")
 queue.setdefault("auto_assign", False)
 
+# Build-plate camera detection was removed in v1.0.11. Drop its retired
+# configuration during upgrades so existing installations converge on the
+# current example configuration.
+config.pop("plate_detection", None)
+notification_events = (config.get("notifications") or {}).get("events")
+if isinstance(notification_events, dict):
+    notification_events.pop("plate_blocked", None)
+
 printers = config.get("printers") or []
 if not isinstance(printers, list):
     raise SystemExit("printers must be a YAML list")
