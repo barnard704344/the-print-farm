@@ -17,6 +17,7 @@ This README acts as a documentation index. Detailed information is split across 
 - [3D Toolpath Viewer](docs/3d-toolpath-viewer.md)
 - [API Reference Summary](docs/api-reference.md)
 - [Full API Reference](API.md)
+- [Changelog](CHANGELOG.md)
 
 ## Requirements
 

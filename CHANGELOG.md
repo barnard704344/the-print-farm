@@ -1,0 +1,81 @@
+# Changelog
+
+This file records notable user-facing, security, deployment, and compatibility
+changes to The Print Farm.
+
+## 2026-07-30 - Security and deployment hardening
+
+Commit: `c47ca23`
+
+### Security
+
+- Made API authentication fail closed when no integration key or authenticated
+  session is present.
+- Restricted deployment updates and printer administration to authenticated
+  staff sessions. Integration API keys can no longer invoke privileged updates.
+- Added same-origin checks for state-changing browser requests, constant-time
+  API-key comparisons, secure response headers, login throttling, and private
+  persistent Flask session keys.
+- Migrated plaintext local and legacy administrator passwords to Werkzeug
+  password hashes.
+- Redacted credentials, internal file paths, and other privileged fields from
+  student and unauthenticated responses.
+- Added live TLS certificate validation and persistent certificate pinning for
+  Bambu MQTT, FTPS, and camera connections. LDAPS now validates certificates by
+  default and supports a configured CA bundle.
+- Added strict validation and resource limits for uploads, archives, images,
+  thumbnails, printer names, ports, macros, and privileged helper arguments.
+
+### Deployment
+
+- Reworked `setup.sh` as an idempotent installer and upgrade reconciler with a
+  process lock, strict shell handling, private file modes, atomic writes, and
+  recoverable configuration migration.
+- Moved runtime configuration to `/etc/the-print-farm/config.yaml`; the
+  repository path remains a symlink for compatibility. Pre-migration backups
+  and runtime secrets are ignored by Git.
+- Bound the Python backend to `127.0.0.1` by default and exposed the dashboard
+  through Apache at `/the-print-farm/`.
+- Added a dedicated, root-owned privileged helper for narrowly scoped Apache,
+  OrcaSlicer, update, and service operations. Generic passwordless shell
+  commands are no longer granted.
+- Added a hardened systemd unit and dedicated `print-farm` service account.
+  Installations below an inaccessible home directory, such as `/root`, fall
+  back to root with an explicit warning.
+- Setup now uses Apache configuration tests and graceful reloads instead of
+  restarting Apache.
+- Restart and update operations fail closed unless every configured printer is
+  connected in `IDLE`, `FINISH`, or `FAILED` state and the queue has no assigned,
+  uploading, printing, or paused jobs. `--force-restart` remains an explicit
+  operator override.
+- Added `--start`, `--restart`, `--no-restart`, `--force-restart`, and
+  `--skip-packages` setup modes, backend health checks, and no-restart
+  dependency deferral.
+- Dashboard updates now require a clean worktree and use fetch plus fast-forward
+  merge only.
+
+### Reliability And Performance
+
+- Replaced the Flask development server with Waitress and kept it behind the
+  Apache loopback proxy.
+- Added bounded upload, archive, image, camera, worker, and request behavior to
+  reduce memory, disk, and thread exhaustion risks.
+- Improved asynchronous printer-pool work and stopped masking failed printer
+  states as idle.
+- Hardened camera frame reads against fragmented network packets and stale
+  frames.
+- Repaired camera click, modal, start/stop, and rotation controls after
+  authenticated dashboard rendering. Rotation is saved per printer.
+- Removed wildcard CORS from OrcaSlicer proxy sites and made generated Apache
+  site identifiers collision resistant.
+
+### Documentation And Validation
+
+- Updated setup, configuration, API, and OrcaSlicer documentation for the new
+  proxy, authentication, TLS, and runtime configuration behavior.
+- Added regression coverage for authentication boundaries, student data
+  ownership, update safety, TLS pinning, archive and image validation, camera
+  snapshots, Apache reconciliation, and privileged helper input validation.
+- Verified the live migration and repeat setup behavior on Debian 12 with Bambu
+  and Klipper printers. Repeat `--no-restart` runs preserved the application PID
+  and all managed configuration hashes.
