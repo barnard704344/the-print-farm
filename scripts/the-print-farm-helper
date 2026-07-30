@@ -1,0 +1,637 @@
+#!/usr/bin/python3
+"""Narrow root helper for The Print Farm deployment operations."""
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import stat
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from urllib.parse import quote, unquote
+
+CONFIG_PATH = Path("/etc/the-print-farm-helper.json")
+SAFE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+PRINTER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._()-]{0,63}$")
+PROXY_BEGIN = "    # BEGIN THE PRINT FARM MANAGED PROXY"
+PROXY_END = "    # END THE PRINT FARM MANAGED PROXY"
+LEGACY_PROXY_MARKER = "# the-print-farm proxy"
+ORCA_MARKER = "# Managed by The Print Farm"
+
+
+class HelperError(RuntimeError):
+    pass
+
+
+def _safe_environment():
+    return {
+        "PATH": SAFE_PATH,
+        "HOME": "/root",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "GIT_TERMINAL_PROMPT": "0",
+    }
+
+
+def _command_path(name):
+    for directory in SAFE_PATH.split(":"):
+        candidate = Path(directory) / name
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    raise HelperError(f"Required command not found: {name}")
+
+
+def _run(command, *, cwd=None, timeout=60, check=True):
+    result = subprocess.run(
+        command,
+        cwd=cwd,
+        env=_safe_environment(),
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+    if check and result.returncode != 0:
+        output = (result.stdout + result.stderr).strip()
+        raise HelperError(output or f"Command failed with status {result.returncode}")
+    return result
+
+
+def _validate_root_owned_file(path, *, private=False):
+    info = path.lstat()
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != 0:
+        raise HelperError(f"{path} must be a root-owned regular file")
+    if info.st_mode & 0o022:
+        raise HelperError(f"{path} must not be group or world writable")
+    if private and info.st_mode & 0o077:
+        raise HelperError(f"{path} must not be accessible by group or other users")
+
+
+def load_config(path=CONFIG_PATH):
+    _validate_root_owned_file(path, private=True)
+    with path.open("r", encoding="utf-8") as handle:
+        config = json.load(handle)
+    required = {"repo_dir", "service_name", "web_port", "apache_vhost"}
+    if not isinstance(config, dict) or not required.issubset(config):
+        raise HelperError("Helper configuration is incomplete")
+
+    repo = Path(config["repo_dir"])
+    if not repo.is_absolute() or not repo.is_dir():
+        raise HelperError("Configured repository path is invalid")
+    repo_info = repo.stat()
+    if repo_info.st_uid != 0 or repo_info.st_mode & 0o022:
+        raise HelperError("Repository must be root-owned and not group or world writable")
+
+    service = str(config["service_name"])
+    if service != "the-print-farm":
+        raise HelperError("Unexpected systemd service name")
+    config["web_port"] = validate_port(config["web_port"], allow_privileged=True)
+
+    vhost = Path(config["apache_vhost"]).resolve()
+    apache_root = Path("/etc/apache2").resolve()
+    if apache_root not in vhost.parents or not vhost.is_file():
+        raise HelperError("Configured Apache vhost is invalid")
+    _validate_root_owned_file(vhost)
+    config["repo_dir"] = str(repo.resolve())
+    config["apache_vhost"] = str(vhost)
+    return config
+
+
+def validate_printer_name(name):
+    name = str(name).strip()
+    if not PRINTER_NAME_RE.fullmatch(name):
+        raise HelperError(
+            "Printer name must start with a letter or number and use only "
+            "letters, numbers, spaces, dots, underscores, parentheses, or hyphens"
+        )
+    return name
+
+
+def validate_port(value, *, allow_privileged=False):
+    try:
+        port = int(value)
+    except (TypeError, ValueError) as exc:
+        raise HelperError("Port must be an integer") from exc
+    minimum = 1 if allow_privileged else 1024
+    if not minimum <= port <= 65535:
+        raise HelperError(f"Port must be between {minimum} and 65535")
+    return port
+
+
+def site_id(name):
+    name = validate_printer_name(name)
+    base = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:32] or "printer"
+    digest = hashlib.sha256(name.encode("utf-8")).hexdigest()[:10]
+    return f"printer-{base}-{digest}"
+
+
+def legacy_site_id(name):
+    name = validate_printer_name(name)
+    return "printer-" + re.sub(r"[^a-zA-Z0-9_-]", "-", name).lower()
+
+
+def render_orca_vhost(name, port, web_port):
+    name = validate_printer_name(name)
+    port = validate_port(port)
+    web_port = validate_port(web_port, allow_privileged=True)
+    if port == web_port:
+        raise HelperError("Orca port cannot be the same as the backend web port")
+    target = quote(name, safe="")
+    return (
+        f"{ORCA_MARKER}\n"
+        f"<VirtualHost *:{port}>\n"
+        "    ProxyRequests Off\n"
+        "    ProxyPreserveHost On\n"
+        f"    ProxyPass /api http://127.0.0.1:{web_port}/{target}/api\n"
+        f"    ProxyPassReverse /api http://127.0.0.1:{web_port}/{target}/api\n"
+        "</VirtualHost>\n"
+    )
+
+
+def render_proxy_block(web_port):
+    web_port = validate_port(web_port, allow_privileged=True)
+    return "\n".join(
+        [
+            PROXY_BEGIN,
+            "    LimitRequestBody 1073741824",
+            "    ProxyPreserveHost On",
+            f"    ProxyPass /the-print-farm http://127.0.0.1:{web_port}",
+            f"    ProxyPassReverse /the-print-farm http://127.0.0.1:{web_port}",
+            f"    ProxyPass /api http://127.0.0.1:{web_port}/api",
+            f"    ProxyPassReverse /api http://127.0.0.1:{web_port}/api",
+            "    RewriteEngine On",
+            r"    RewriteCond %{REQUEST_URI} ^/[^/]+/api/",
+            f"    RewriteRule ^(.*)$ http://127.0.0.1:{web_port}$1 [P,L]",
+            PROXY_END,
+        ]
+    )
+
+
+def _legacy_proxy_line(line):
+    stripped = line.strip()
+    if not stripped:
+        return False
+    if stripped.startswith(
+        (
+            "# Allow large file uploads",
+            "# Match the application upload limit",
+            "# OrcaSlicer OctoPrint-compat",
+            "# Per-printer OrcaSlicer routes",
+        )
+    ):
+        return True
+    if stripped in {"ProxyPreserveHost On", "RewriteEngine On"}:
+        return True
+    if stripped.startswith("LimitRequestBody "):
+        return True
+    if re.match(r"ProxyPass(?:Reverse)? /(?:the-print-farm|api) http://127\.0\.0\.1:\d+", stripped):
+        return True
+    if stripped.startswith("RewriteCond %{REQUEST_URI} ^/[^/]+/api/"):
+        return True
+    return bool(
+        re.match(
+            r"RewriteRule \^\(\.\*\)\$ http://127\.0\.0\.1:\d+\$1 \[P,L\]",
+            stripped,
+        )
+    )
+
+
+def update_proxy_config(content, web_port):
+    block = render_proxy_block(web_port)
+    if PROXY_BEGIN in content:
+        if content.count(PROXY_BEGIN) != 1 or content.count(PROXY_END) != 1:
+            raise HelperError("Apache vhost must contain exactly one complete managed proxy block")
+        start = content.index(PROXY_BEGIN)
+        end = content.index(PROXY_END, start) + len(PROXY_END)
+        return content[:start] + block + content[end:]
+
+    lines = content.splitlines()
+    legacy_indexes = [
+        index for index, line in enumerate(lines) if LEGACY_PROXY_MARKER in line
+    ]
+    if len(legacy_indexes) > 1:
+        raise HelperError("Multiple legacy proxy markers found in Apache vhost")
+    if legacy_indexes:
+        marker = legacy_indexes[0]
+        end = next(
+            (index for index in range(marker + 1, len(lines)) if lines[index].strip() == "</VirtualHost>"),
+            None,
+        )
+        if end is None:
+            raise HelperError("Legacy proxy marker is not inside a VirtualHost")
+        preserved = [
+            line for line in lines[marker + 1:end] if not _legacy_proxy_line(line)
+        ]
+        replacement = block.splitlines()
+        if preserved and any(line.strip() for line in preserved):
+            replacement.extend(preserved)
+        lines[marker:end] = replacement
+        return "\n".join(lines) + ("\n" if content.endswith("\n") else "")
+
+    closing = [index for index, line in enumerate(lines) if line.strip() == "</VirtualHost>"]
+    if len(closing) != 1:
+        raise HelperError(
+            "Apache vhost must contain exactly one VirtualHost when no managed block exists"
+        )
+    lines[closing[0]:closing[0]] = block.splitlines()
+    return "\n".join(lines) + ("\n" if content.endswith("\n") else "")
+
+
+def _atomic_write(path, content, mode=0o644):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_path = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        os.fchmod(fd, mode)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+        os.chmod(path, mode)
+    except Exception:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _snapshot(paths):
+    snapshots = {}
+    for path in {Path(item) for item in paths}:
+        if path.is_symlink():
+            snapshots[path] = ("symlink", os.readlink(path))
+        elif path.exists():
+            snapshots[path] = ("file", path.read_bytes(), stat.S_IMODE(path.stat().st_mode))
+        else:
+            snapshots[path] = ("missing",)
+    return snapshots
+
+
+def _restore(snapshots):
+    for path, snapshot in snapshots.items():
+        if path.is_symlink() or path.exists():
+            path.unlink()
+        if snapshot[0] == "symlink":
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.symlink_to(snapshot[1])
+        elif snapshot[0] == "file":
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _atomic_write(path, snapshot[1].decode("utf-8"), snapshot[2])
+
+
+def _apache_test():
+    _run([_command_path("apache2ctl"), "configtest"], timeout=30)
+
+
+def _apache_reload():
+    _run([_command_path("systemctl"), "reload", "apache2"], timeout=30)
+
+
+def _apply_apache_transaction(paths, mutation):
+    snapshots = _snapshot(paths)
+    try:
+        mutation()
+        _apache_test()
+        _apache_reload()
+    except Exception:
+        _restore(snapshots)
+        try:
+            _apache_test()
+            _apache_reload()
+        except Exception as rollback_error:
+            raise HelperError(f"Apache rollback failed: {rollback_error}") from rollback_error
+        raise
+
+
+def configure_proxy(config):
+    vhost = Path(config["apache_vhost"])
+    original = vhost.read_text(encoding="utf-8")
+    updated = update_proxy_config(original, config["web_port"])
+    if updated == original:
+        _apache_test()
+        return
+
+    backup = vhost.with_suffix(vhost.suffix + ".the-print-farm.bak")
+
+    def mutate():
+        _atomic_write(backup, original, 0o600)
+        _atomic_write(vhost, updated, 0o644)
+
+    _apply_apache_transaction([vhost, backup], mutate)
+
+
+def _managed_orca_files():
+    available = Path("/etc/apache2/sites-available")
+    managed = []
+    for path in available.glob("printer-*.conf"):
+        try:
+            content = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if ORCA_MARKER in content or (
+            "# OrcaSlicer per-printer proxy:" in content
+            and "ProxyPass /api http://127.0.0.1:" in content
+        ):
+            managed.append(path)
+    return managed
+
+
+def _orca_details(path):
+    content = path.read_text(encoding="utf-8")
+    port_match = re.search(r"<VirtualHost \*:(\d+)>", content)
+    proxy_match = re.search(
+        r"http://127\.0\.0\.1:\d+/([^/\s]+)/api",
+        content,
+    )
+    if not port_match or not proxy_match:
+        return None
+    return {
+        "name": unquote(proxy_match.group(1)),
+        "port": int(port_match.group(1)),
+    }
+
+
+def _other_vhost_ports(managed_paths):
+    managed = {path.resolve() for path in managed_paths}
+    ports = set()
+    for path in Path("/etc/apache2/sites-available").glob("*.conf"):
+        if path.resolve() in managed:
+            continue
+        try:
+            content = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        ports.update(
+            int(match)
+            for match in re.findall(r"<VirtualHost [^>]*:(\d+)>", content)
+        )
+    return ports
+
+
+def reconcile_listen_lines(content, existing_ports, desired_ports, other_ports):
+    """Keep exactly one Listen line for every port still needed by managed sites."""
+    existing_ports = set(existing_ports)
+    desired_ports = set(desired_ports)
+    other_ports = set(other_ports)
+    controlled_ports = existing_ports | desired_ports
+    required_ports = desired_ports | (existing_ports & other_ports)
+    retained = []
+    configured_ports = set()
+
+    for line in content.splitlines():
+        match = re.fullmatch(r"\s*Listen\s+(\d+)\s*", line)
+        if not match:
+            retained.append(line)
+            continue
+        port = int(match.group(1))
+        if port not in controlled_ports:
+            retained.append(line)
+            continue
+        if port in required_ports and port not in configured_ports:
+            retained.append(f"Listen {port}")
+            configured_ports.add(port)
+
+    for port in sorted(required_ports - configured_ports):
+        retained.append(f"Listen {port}")
+    return "\n".join(retained).rstrip() + "\n"
+
+
+def _write_orca_state(config, printers):
+    available = Path("/etc/apache2/sites-available")
+    enabled = Path("/etc/apache2/sites-enabled")
+    ports_conf = Path("/etc/apache2/ports.conf")
+
+    desired = {}
+    used_ports = set()
+    for item in printers:
+        name = validate_printer_name(item.get("name", ""))
+        port = validate_port(item.get("port"))
+        if port == config["web_port"]:
+            raise HelperError(f"Orca port for {name} conflicts with the backend web port")
+        if port in used_ports:
+            raise HelperError(f"Duplicate Orca port: {port}")
+        used_ports.add(port)
+        identifier = site_id(name)
+        if identifier in desired:
+            raise HelperError(f"Duplicate printer name: {name}")
+        desired[identifier] = render_orca_vhost(name, port, config["web_port"])
+
+    existing = _managed_orca_files()
+    existing_set = {path.resolve() for path in existing}
+    for path in existing:
+        enabled_path = enabled / path.name
+        if enabled_path.is_symlink():
+            if enabled_path.resolve() != path.resolve():
+                raise HelperError(f"Enabled Apache site points to an unexpected target: {enabled_path}")
+        elif enabled_path.exists():
+            raise HelperError(f"Enabled Apache site must be a symlink: {enabled_path}")
+
+    for identifier in desired:
+        available_path = available / f"{identifier}.conf"
+        enabled_path = enabled / available_path.name
+        if available_path.exists() and available_path.resolve() not in existing_set:
+            raise HelperError(f"Refusing to overwrite unmanaged Apache site: {available_path}")
+        if enabled_path.is_symlink():
+            if enabled_path.resolve() != available_path.resolve():
+                raise HelperError(f"Enabled Apache site points to an unexpected target: {enabled_path}")
+        elif enabled_path.exists():
+            raise HelperError(f"Refusing to replace unmanaged enabled site: {enabled_path}")
+
+    existing_ports = {
+        details["port"]
+        for path in existing
+        if (details := _orca_details(path)) is not None
+    }
+    other_ports = _other_vhost_ports(existing)
+    touched = [ports_conf]
+    for path in existing:
+        touched.extend([path, enabled / path.name])
+    for identifier in desired:
+        touched.extend(
+            [available / f"{identifier}.conf", enabled / f"{identifier}.conf"]
+        )
+
+    def mutate():
+        for path in existing:
+            identifier = path.stem
+            if identifier not in desired:
+                enabled_path = enabled / path.name
+                if enabled_path.is_symlink() or enabled_path.exists():
+                    enabled_path.unlink()
+                path.unlink()
+
+        for identifier, content in desired.items():
+            path = available / f"{identifier}.conf"
+            enabled_path = enabled / path.name
+            _atomic_write(path, content, 0o644)
+            if enabled_path.is_symlink() or enabled_path.exists():
+                enabled_path.unlink()
+            enabled_path.symlink_to(Path("../sites-available") / path.name)
+
+        ports_content = reconcile_listen_lines(
+            ports_conf.read_text(encoding="utf-8"),
+            existing_ports,
+            used_ports,
+            other_ports,
+        )
+        _atomic_write(ports_conf, ports_content, 0o644)
+
+    _apply_apache_transaction(touched, mutate)
+
+
+def orca_upsert(config, name, port):
+    name = validate_printer_name(name)
+    port = validate_port(port)
+    printers = []
+    target_id = site_id(name)
+    for path in _managed_orca_files():
+        if path.stem == target_id or path.stem == legacy_site_id(name):
+            continue
+        details = _orca_details(path)
+        if details:
+            printers.append(details)
+    printers.append({"name": name, "port": port})
+    _write_orca_state(config, printers)
+
+
+def orca_remove(config, name):
+    name = validate_printer_name(name)
+    remove_ids = {site_id(name), legacy_site_id(name)}
+    printers = []
+    for path in _managed_orca_files():
+        if path.stem in remove_ids:
+            continue
+        details = _orca_details(path)
+        if details:
+            printers.append(details)
+    _write_orca_state(config, printers)
+
+
+def update_check(config):
+    repo = config["repo_dir"]
+    git = _command_path("git")
+    _run([git, "-C", repo, "fetch", "--prune", "origin", "main"], timeout=60)
+    current = _run(
+        [git, "-C", repo, "rev-parse", "--short", "HEAD"], timeout=10
+    ).stdout.strip()
+    log = _run(
+        [git, "-C", repo, "log", "HEAD..origin/main", "--oneline"], timeout=10
+    )
+    commits = [line.strip() for line in log.stdout.splitlines() if line.strip()]
+    print(
+        json.dumps(
+            {
+                "current_commit": current,
+                "updates_available": len(commits),
+                "commits": commits,
+            }
+        )
+    )
+
+
+def update_apply(config):
+    repo = config["repo_dir"]
+    git = _command_path("git")
+    status = _run([git, "-C", repo, "status", "--porcelain"], timeout=10)
+    if status.stdout.strip():
+        raise HelperError("Working tree has local changes; update from the command line")
+    _run([git, "-C", repo, "fetch", "--prune", "origin", "main"], timeout=60)
+    _run([git, "-C", repo, "merge-base", "--is-ancestor", "HEAD", "origin/main"], timeout=10)
+    result = _run(
+        [git, "-C", repo, "merge", "--ff-only", "origin/main"], timeout=60
+    )
+    setup = Path(repo) / "setup.sh"
+    _validate_root_owned_file(setup)
+    _run(
+        [
+            _command_path("bash"),
+            str(setup),
+            "--skip-packages",
+            "--no-restart",
+        ],
+        cwd=repo,
+        timeout=600,
+    )
+    pip = str(Path(repo) / "venv/bin/pip")
+    if not Path(pip).is_file():
+        raise HelperError("Virtual environment pip is missing")
+    _run([pip, "install", "-r", str(Path(repo) / "requirements.txt")], timeout=300)
+    _run([pip, "check"], timeout=60)
+    print(result.stdout.strip() or "Update applied")
+
+
+def restart_service(config):
+    _run(
+        [_command_path("systemctl"), "restart", config["service_name"]],
+        timeout=30,
+    )
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers.add_parser("configure-proxy")
+    sync = subparsers.add_parser("orca-sync")
+    sync.add_argument("json_file")
+    upsert = subparsers.add_parser("orca-upsert")
+    upsert.add_argument("name")
+    upsert.add_argument("port")
+    remove = subparsers.add_parser("orca-remove")
+    remove.add_argument("name")
+    subparsers.add_parser("update-check")
+    subparsers.add_parser("update-apply")
+    subparsers.add_parser("restart-service")
+    return parser
+
+
+def main():
+    if os.geteuid() != 0:
+        raise HelperError("This helper must run as root")
+    args = build_parser().parse_args()
+    config = load_config()
+    if args.command == "configure-proxy":
+        configure_proxy(config)
+    elif args.command == "orca-sync":
+        path = Path(args.json_file).resolve()
+        if Path("/run/the-print-farm") not in path.parents:
+            raise HelperError("Orca sync input must be under /run/the-print-farm")
+        _validate_root_owned_file(path, private=True)
+        with path.open("r", encoding="utf-8") as handle:
+            printers = json.load(handle)
+        if not isinstance(printers, list) or len(printers) > 500:
+            raise HelperError("Invalid Orca printer list")
+        _write_orca_state(config, printers)
+        path.unlink()
+    elif args.command == "orca-upsert":
+        orca_upsert(config, args.name, args.port)
+    elif args.command == "orca-remove":
+        orca_remove(config, args.name)
+    elif args.command == "update-check":
+        update_check(config)
+    elif args.command == "update-apply":
+        update_apply(config)
+    elif args.command == "restart-service":
+        restart_service(config)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (
+        HelperError,
+        OSError,
+        ValueError,
+        json.JSONDecodeError,
+        subprocess.SubprocessError,
+    ) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)

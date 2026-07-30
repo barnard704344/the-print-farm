@@ -23,20 +23,25 @@ import threading
 import time
 from typing import Optional
 
+from .tls_trust import verify_peer_certificate
+
 logger = logging.getLogger(__name__)
 
-JPEG_START = b'\xff\xd8\xff\xe0'
+JPEG_START = b'\xff\xd8'
 JPEG_END = b'\xff\xd9'
 STALE_FRAME_SECONDS = 15
+MAX_CAMERA_FRAME_BYTES = 10 * 1024 * 1024
 
 
 class BambuCamera:
     """Receives JPEG frames from a P1S camera over TLS."""
 
-    def __init__(self, host: str, access_code: str, port: int = 6000):
+    def __init__(self, host: str, access_code: str, port: int = 6000,
+                 tls_fingerprint: str = ""):
         self.host = host
         self.access_code = access_code
         self.port = port
+        self.tls_fingerprint = tls_fingerprint
 
         self._latest_frame: Optional[bytes] = None
         self._last_frame_at = 0.0
@@ -130,53 +135,53 @@ class BambuCamera:
 
         with socket.create_connection((self.host, self.port), timeout=5) as sock:
             ssl_sock = ctx.wrap_socket(sock, server_hostname=self.host)
-            ssl_sock.write(self._build_auth())
-            ssl_sock.setblocking(False)
+            verify_peer_certificate(
+                self.host,
+                self.port,
+                ssl_sock.getpeercert(binary_form=True),
+                self.tls_fingerprint,
+            )
+            ssl_sock.sendall(self._build_auth())
+            ssl_sock.settimeout(1.0)
 
             logger.info(f"Camera connected to {self.host}:{self.port}")
             self._connected = True
             stream_started = time.monotonic()
 
-            img = None
-            payload_size = 0
-
             while not self._stop_event.is_set():
                 if time.monotonic() - stream_started > STALE_FRAME_SECONDS and self.is_stale:
                     raise RuntimeError("Camera stream stale")
-                try:
-                    data = ssl_sock.recv(4096)
-                except ssl.SSLWantReadError:
-                    if self._stop_event.wait(timeout=0.5):
-                        break
-                    continue
-
-                if len(data) == 0:
-                    logger.error(f"Camera {self.host}: received 0 bytes (auth rejected?)")
-                    raise RuntimeError("No data from camera")
-
-                if img is not None and len(data) > 0:
-                    img += data
-                    if len(img) > payload_size:
-                        logger.warning(f"Camera {self.host}: frame overrun, resetting")
-                        img = None
-                    elif len(img) == payload_size:
-                        # Full frame received
-                        if img[:4] == JPEG_START and img[-2:] == JPEG_END:
-                            with self._frame_lock:
-                                self._latest_frame = bytes(img)
-                                self._last_frame_at = time.monotonic()
-                        else:
-                            logger.warning(f"Camera {self.host}: invalid JPEG markers")
-                        img = None
-
-                elif len(data) == 16:
-                    # Frame header: first 4 bytes = payload size (LE)
-                    payload_size = int.from_bytes(data[0:4], byteorder='little')
-                    img = bytearray()
-
+                header = self._recv_exact(ssl_sock, 16)
+                if header is None:
+                    break
+                payload_size = int.from_bytes(header[0:4], byteorder="little")
+                if not 4 <= payload_size <= MAX_CAMERA_FRAME_BYTES:
+                    raise RuntimeError(f"Invalid camera frame size: {payload_size}")
+                frame = self._recv_exact(ssl_sock, payload_size)
+                if frame is None:
+                    break
+                if frame.startswith(JPEG_START) and frame.endswith(JPEG_END):
+                    with self._frame_lock:
+                        self._latest_frame = frame
+                        self._last_frame_at = time.monotonic()
                 else:
-                    logger.warning(f"Camera {self.host}: unexpected chunk size {len(data)}")
-                    raise RuntimeError(f"Unexpected data: {len(data)} bytes")
+                    logger.warning(f"Camera {self.host}: invalid JPEG markers")
+
+    def _recv_exact(self, sock, size):
+        """Read exactly one protocol field across arbitrary TLS fragments."""
+        data = bytearray()
+        deadline = time.monotonic() + STALE_FRAME_SECONDS
+        while len(data) < size and not self._stop_event.is_set():
+            if time.monotonic() >= deadline:
+                raise RuntimeError("Camera frame read timed out")
+            try:
+                chunk = sock.recv(min(65536, size - len(data)))
+            except (socket.timeout, ssl.SSLWantReadError):
+                continue
+            if not chunk:
+                raise RuntimeError("Camera connection closed")
+            data.extend(chunk)
+        return bytes(data) if len(data) == size else None
 
 
 class HttpCamera:
@@ -315,7 +320,8 @@ class CameraManager:
         self._cameras = {}
         self._lock = threading.Lock()
 
-    def start_camera(self, name: str, host: str, access_code: str, port: int = 6000):
+    def start_camera(self, name: str, host: str, access_code: str, port: int = 6000,
+                     tls_fingerprint: str = ""):
         """Start a BambuLab camera stream for a printer."""
         with self._lock:
             existing = self._cameras.get(name)
@@ -323,7 +329,12 @@ class CameraManager:
                 return
             if existing:
                 existing.stop()
-            cam = BambuCamera(host=host, access_code=access_code, port=port)
+            cam = BambuCamera(
+                host=host,
+                access_code=access_code,
+                port=port,
+                tls_fingerprint=tls_fingerprint,
+            )
             cam.start()
             self._cameras[name] = cam
 

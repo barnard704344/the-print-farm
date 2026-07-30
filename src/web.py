@@ -5,6 +5,7 @@ Provides a dashboard and API endpoints to monitor printers,
 manage the job queue, and control individual printers.
 """
 
+import json
 import logging
 import os
 import re
@@ -15,23 +16,28 @@ import subprocess
 import threading
 import time
 import uuid
+from collections import defaultdict, deque
 from functools import wraps
-from typing import Optional
 
-import yaml
 from flask import Flask, Response, jsonify, render_template, request, send_from_directory, session
+from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
+from .config_store import load_config as load_yaml_config, save_config as save_yaml_config
 from .discovery import discover_printers, scan_subnet, get_local_subnets, test_bambu_connection, test_klipper_connection, scan_moonraker_port
 from .gcode_to_3mf import wrap_gcode_as_3mf, parse_gcode_filaments, parse_gcode_model_name
 from .ldap_auth import authenticate_user, test_ad_connection, lookup_user
 from .file_library import parse_gcode_metadata
+from .file_validation import InvalidPrintFile, validate_print_file
+from .image_validation import save_normalized_image
 from .api_v1 import create_api_v1
 from .plate_detection import analyse_plate
 
 logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {"gcode", "3mf"}
+MAX_THUMBNAIL_BYTES = 5 * 1024 * 1024
+PRINTER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._()-]{0,63}$")
 
 
 def _load_or_create_secret_key(config):
@@ -68,6 +74,20 @@ def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+def _valid_printer_name(name: str) -> bool:
+    return bool(PRINTER_NAME_RE.fullmatch(name))
+
+
+def _save_valid_thumbnail(upload, destination: str) -> None:
+    """Decode and rewrite a small uploaded image so active content is discarded."""
+    payload = upload.stream.read(MAX_THUMBNAIL_BYTES + 1)
+    save_normalized_image(
+        payload,
+        destination,
+        max_bytes=MAX_THUMBNAIL_BYTES,
+    )
+
+
 def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin_password=None, config=None, file_library=None, spoolman_client=None, vp_manager=None):
     """Create the Flask app with references to farm manager, job queue, and camera manager."""
     if config is None:
@@ -79,8 +99,56 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         template_folder=os.path.join(os.path.dirname(__file__), "..", "templates"),
         static_folder=os.path.join(os.path.dirname(__file__), "..", "static"),
     )
-    app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024 * 1024  # 10GB max upload
+    web_config = app_config.get("web", {})
+    max_upload_mb = max(1, min(int(web_config.get("max_upload_mb", 1024)), 4096))
+    app.config["MAX_CONTENT_LENGTH"] = max_upload_mb * 1024 * 1024
+    app.config.update(
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SECURE=bool(web_config.get("session_cookie_secure", False)),
+        PERMANENT_SESSION_LIFETIME=12 * 60 * 60,
+    )
     app.secret_key = _load_or_create_secret_key(app_config)
+    config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
+    login_attempts = defaultdict(deque)
+    login_attempts_lock = threading.Lock()
+    login_window_seconds = 300
+    max_login_attempts = 5
+
+    credentials_migrated = False
+    for local_user in app_config.get("local_users") or []:
+        if "password" in local_user:
+            local_user["password_hash"] = generate_password_hash(str(local_user.pop("password")))
+            credentials_migrated = True
+    legacy_web_password = app_config.get("web", {}).get("admin_password")
+    if legacy_web_password:
+        app_config["web"]["admin_password_hash"] = generate_password_hash(str(legacy_web_password))
+        app_config["web"].pop("admin_password", None)
+        credentials_migrated = True
+    if credentials_migrated:
+        try:
+            save_yaml_config(config_path, app_config)
+            logger.info("Migrated plaintext local credentials to password hashes")
+        except OSError as exc:
+            logger.error("Could not persist password-hash migration: %s", exc)
+
+    @app.after_request
+    def add_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+        response.headers.setdefault(
+            "Permissions-Policy",
+            "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+        )
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; img-src 'self' data: blob: http: https:; "
+            "connect-src 'self' http: https:; style-src 'self' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; "
+            "frame-ancestors 'none'; form-action 'self'",
+        )
+        return response
 
     # Full config reference for AD settings management
     _vp_manager = vp_manager  # VirtualPrinterManager, may be None
@@ -199,6 +267,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                     printer.host,
                     printer.access_code,
                     getattr(printer, "camera_port", 6000),
+                    getattr(printer, "tls_fingerprints", {}).get("camera", ""),
                 )
             if after is not None:
                 return camera_manager.get_frame_after(printer_name, after, timeout=6.0)
@@ -469,11 +538,23 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 return p.get("staff_only", False)
         return False
 
+    def _printer_availability_error(printer_name):
+        printer = farm_manager.get_printer(printer_name)
+        if not printer:
+            return f"Printer '{printer_name}' not found", 404
+        if not printer.is_connected():
+            return f"Printer '{printer_name}' is not connected", 409
+        status = getattr(getattr(printer, "state", None), "status", None)
+        status_value = getattr(status, "value", str(status or "")).upper()
+        if status_value not in ("IDLE", "FINISH"):
+            return f"Printer '{printer_name}' is not idle ({status_value or 'unknown'})", 409
+        if any(j.get("printer_name") == printer_name for j in job_queue.get_active_jobs()):
+            return f"Printer '{printer_name}' already has an active job", 409
+        return None
+
     def _save_config():
         """Write the current app_config to the YAML file."""
-        config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
-        with open(config_path, "w") as f:
-            yaml.dump(app_config, f, default_flow_style=False, sort_keys=False)
+        save_yaml_config(config_path, app_config)
 
     def _next_orca_port():
         """Return the next available OrcaSlicer port (starting at 5001)."""
@@ -534,115 +615,51 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             filtered.append(p)
         return filtered
 
-    def _sudo_cmd(args):
-        """Run a command with sudo if available, otherwise directly."""
-        sudo = shutil.which("sudo")
-        if sudo:
-            return subprocess.run([sudo, "-n"] + args, capture_output=True)
-        return subprocess.run(args, capture_output=True)
-
-    def _write_file_privileged(path, content):
-        """Write a file using sudo tee if direct write fails."""
-        try:
-            with open(path, "w") as f:
-                f.write(content)
-        except PermissionError:
+    def _run_privileged_helper(*args, timeout=90):
+        """Run one validated deployment operation through the fixed helper."""
+        helper = os.environ.get(
+            "FARM_PRIVILEGED_HELPER",
+            "/usr/local/sbin/the-print-farm-helper",
+        )
+        if not os.path.isfile(helper) or not os.access(helper, os.X_OK):
+            raise RuntimeError("Privileged helper is not installed; rerun setup.sh")
+        command = [helper, *[str(arg) for arg in args]]
+        if os.geteuid() != 0:
             sudo = shutil.which("sudo")
-            if sudo:
-                subprocess.run(
-                    [sudo, "tee", path],
-                    input=content.encode(), capture_output=True,
-                )
-            else:
-                raise
-
-    def _read_file_privileged(path):
-        """Read a file using sudo cat if direct read fails."""
-        try:
-            with open(path) as f:
-                return f.read()
-        except PermissionError:
-            sudo = shutil.which("sudo")
-            if sudo:
-                r = subprocess.run([sudo, "cat", path], capture_output=True)
-                return r.stdout.decode()
-            raise
-
-    def _append_file_privileged(path, content):
-        """Append to a file using sudo tee -a if direct write fails."""
-        try:
-            with open(path, "a") as f:
-                f.write(content)
-        except PermissionError:
-            sudo = shutil.which("sudo")
-            if sudo:
-                subprocess.run(
-                    [sudo, "tee", "-a", path],
-                    input=content.encode(), capture_output=True,
-                )
-            else:
-                raise
-
-    def _remove_file_privileged(path):
-        """Remove a file using sudo rm if direct remove fails."""
-        try:
-            os.remove(path)
-        except PermissionError:
-            sudo = shutil.which("sudo")
-            if sudo:
-                subprocess.run([sudo, "rm", path], capture_output=True)
-            else:
-                raise
+            if not sudo:
+                raise RuntimeError("sudo is required to run the privileged helper")
+            command = [sudo, "-n", *command]
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            timeout=timeout,
+            text=True,
+            check=False,
+        )
+        output = (result.stdout + result.stderr).strip()
+        if result.returncode != 0:
+            raise RuntimeError(output or "Privileged helper operation failed")
+        return result.stdout.strip()
 
     def _create_orca_vhost(printer_name, port):
         """Create an Apache VirtualHost for a per-printer OrcaSlicer port."""
-        safe_name = re.sub(r'[^a-zA-Z0-9_-]', '-', printer_name).lower()
-        conf_name = f"printer-{safe_name}"
-        conf_path = f"/etc/apache2/sites-available/{conf_name}.conf"
-        web_port = app_config.get("web", {}).get("port", 5000)
-        vhost = (
-            f"<VirtualHost *:{port}>\n"
-            f"    # OrcaSlicer per-printer proxy: {printer_name}\n"
-            f"    ProxyPass /api http://127.0.0.1:{web_port}/{printer_name}/api\n"
-            f"    ProxyPassReverse /api http://127.0.0.1:{web_port}/{printer_name}/api\n"
-            f"    Header always set Access-Control-Allow-Origin \"*\"\n"
-            f"</VirtualHost>\n"
-        )
         try:
-            _write_file_privileged(conf_path, vhost)
-            # Add Listen directive if not already present
-            ports_conf = "/etc/apache2/ports.conf"
-            ports_content = _read_file_privileged(ports_conf)
-            if f"Listen {port}" not in ports_content:
-                _append_file_privileged(ports_conf, f"\nListen {port}\n")
-            _sudo_cmd(["a2ensite", conf_name])
-            _sudo_cmd(["systemctl", "reload", "apache2"])
+            _run_privileged_helper("orca-upsert", printer_name, int(port))
             logger.info(f"Created Apache vhost for {printer_name} on port {port}")
+            return True
         except Exception as e:
             logger.error(f"Failed to create Apache vhost for {printer_name}: {e}")
+            return False
 
     def _remove_orca_vhost(printer_name, port):
         """Remove the Apache VirtualHost for a printer."""
-        safe_name = re.sub(r'[^a-zA-Z0-9_-]', '-', printer_name).lower()
-        conf_name = f"printer-{safe_name}"
         try:
-            _sudo_cmd(["a2dissite", conf_name])
-            conf_path = f"/etc/apache2/sites-available/{conf_name}.conf"
-            if os.path.exists(conf_path):
-                _remove_file_privileged(conf_path)
-            # Remove Listen directive
-            if port:
-                ports_conf = "/etc/apache2/ports.conf"
-                ports_content = _read_file_privileged(ports_conf)
-                new_content = "\n".join(
-                    line for line in ports_content.splitlines()
-                    if line.strip() != f"Listen {port}"
-                ) + "\n"
-                _write_file_privileged(ports_conf, new_content)
-            _sudo_cmd(["systemctl", "reload", "apache2"])
+            _run_privileged_helper("orca-remove", printer_name)
             logger.info(f"Removed Apache vhost for {printer_name}")
+            return True
         except Exception as e:
             logger.error(f"Failed to remove Apache vhost for {printer_name}: {e}")
+            return False
 
     def is_admin():
         """True when user has staff role (AD) or legacy admin session."""
@@ -661,11 +678,43 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             return f(*args, **kwargs)
         return decorated
 
+    def staff_session_required(f):
+        """Require an authenticated staff session for deployment-sensitive actions."""
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if not is_admin():
+                return jsonify({
+                    "ok": False,
+                    "error": "Staff login required",
+                    "message": "Staff login required",
+                }), 403
+            return f(*args, **kwargs)
+        return decorated
+
     def _check_api_key():
         """Check if a valid API key was provided in the request header."""
         if not api_key:
             return False
-        return request.headers.get("X-Api-Key", "") == api_key
+        return secrets.compare_digest(
+            request.headers.get("X-Api-Key", ""),
+            str(api_key),
+        )
+
+    @app.before_request
+    def reject_cross_site_state_changes():
+        """Block browser CSRF while leaving API-key integrations unaffected."""
+        if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
+            return None
+        if _check_api_key():
+            return None
+        if request.headers.get("Sec-Fetch-Site", "").lower() == "cross-site":
+            return jsonify({"ok": False, "error": "Cross-site request rejected"}), 403
+        origin = request.headers.get("Origin")
+        if origin:
+            expected = request.host_url.rstrip("/")
+            if origin.rstrip("/") != expected:
+                return jsonify({"ok": False, "error": "Request origin rejected"}), 403
+        return None
 
     def login_required(f):
         """Require any authenticated user (student or staff), or a valid API key."""
@@ -736,7 +785,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     @app.route(prefix)
     @app.route("/")
     def dashboard():
-        return render_template("dashboard.html", prefix=prefix, api_key=api_key or "")
+        return render_template("dashboard.html", prefix=prefix)
 
     @app.route(prefix + "/api/auth/status")
     @app.route("/api/auth/status")
@@ -768,17 +817,57 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         data = request.get_json(silent=True) or {}
         username = data.get("username", "").strip()
         password = data.get("password", "")
+        throttle_key = (request.remote_addr or "unknown", username.lower())
+
+        now = time.monotonic()
+        with login_attempts_lock:
+            attempts = login_attempts[throttle_key]
+            while attempts and now - attempts[0] > login_window_seconds:
+                attempts.popleft()
+            if len(attempts) >= max_login_attempts:
+                return jsonify({
+                    "ok": False,
+                    "error": "Too many failed login attempts. Try again in a few minutes.",
+                }), 429
+
+        def _record_failure():
+            with login_attempts_lock:
+                login_attempts[throttle_key].append(time.monotonic())
+
+        def _record_success():
+            with login_attempts_lock:
+                login_attempts.pop(throttle_key, None)
 
         # Check local users first (works regardless of AD)
         local_users = app_config.get("local_users") or []
         for lu in local_users:
-            if lu.get("username") == username and lu.get("password") == password:
+            if lu.get("username") != username:
+                continue
+            password_hash = lu.get("password_hash", "")
+            legacy_password = lu.get("password")
+            password_ok = (
+                bool(password_hash) and check_password_hash(password_hash, password)
+            ) or (
+                legacy_password is not None and secrets.compare_digest(str(legacy_password), password)
+            )
+            if password_ok:
                 role = lu.get("role", "staff")
                 session["role"] = role
                 session["display_name"] = lu.get("display_name", username)
                 session["username"] = username
                 if role == "staff":
                     session["admin"] = True
+                else:
+                    session.pop("admin", None)
+                session.permanent = True
+                _record_success()
+                if legacy_password is not None:
+                    lu["password_hash"] = generate_password_hash(password)
+                    lu.pop("password", None)
+                    try:
+                        _save_config()
+                    except OSError as exc:
+                        logger.error("Could not migrate local password hash: %s", exc)
                 return jsonify({"ok": True, "role": role, "display_name": session["display_name"]})
 
         if _ad_enabled():
@@ -791,14 +880,26 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 session["display_name"] = result.get("display_name", username)
                 session["username"] = result.get("username", username)
                 session.pop("admin", None)
+                session.permanent = True
+                _record_success()
                 return jsonify({"ok": True, "role": result["role"], "display_name": result.get("display_name", username)})
+            _record_failure()
             return jsonify({"ok": False, "error": result.get("error", "Authentication failed")}), 401
         else:
             # Legacy single-password login (no username needed)
-            if admin_password and password == admin_password:
+            legacy_hash = app_config.get("web", {}).get("admin_password_hash", "")
+            legacy_ok = (
+                bool(legacy_hash) and check_password_hash(legacy_hash, password)
+            ) or (
+                bool(admin_password) and secrets.compare_digest(str(admin_password), password)
+            )
+            if legacy_ok:
                 session["admin"] = True
                 session["role"] = "staff"
+                session.permanent = True
+                _record_success()
                 return jsonify({"ok": True, "role": "staff"})
+            _record_failure()
             return jsonify({"ok": False, "error": "Invalid credentials"}), 401
 
     @app.route(prefix + "/api/auth/logout", methods=["POST"])
@@ -813,14 +914,21 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     @app.route(prefix + "/api/auth/sso", methods=["POST"])
     @app.route("/api/auth/sso", methods=["POST"])
     def auth_sso():
-        """SSO login — accepts username from Apache GSSAPI-verified PHP check."""
+        """Create an SSO session from a trusted reverse-proxy identity header."""
         if not _ad_enabled():
             return jsonify({"ok": False, "error": "AD not enabled"}), 400
 
-        data = request.get_json(silent=True) or {}
-        username = data.get("username", "").strip().lower()
+        sso_config = _get_ad_config().get("sso", {})
+        if not sso_config.get("enabled", False):
+            return jsonify({"ok": False, "error": "SSO not enabled"}), 404
+        trusted_proxies = set(sso_config.get("trusted_proxies", ["127.0.0.1", "::1"]))
+        if request.remote_addr not in trusted_proxies:
+            logger.warning("Rejected SSO request from untrusted proxy %s", request.remote_addr)
+            return jsonify({"ok": False, "error": "Untrusted SSO proxy"}), 403
+        header_name = sso_config.get("identity_header", "X-Remote-User")
+        username = request.headers.get(header_name, "").split("@", 1)[0].strip().lower()
         if not username:
-            return jsonify({"ok": False, "error": "No username provided"}), 401
+            return jsonify({"ok": False, "error": "No verified SSO identity"}), 401
 
         # Verify user in AD and determine role (prevents spoofed usernames)
         result = lookup_user(username, _get_ad_config())
@@ -834,6 +942,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         session.pop("admin", None)
         if result["role"] == "staff":
             session["admin"] = True
+        session.permanent = True
 
         logger.info(f"SSO auth: {username} -> role={result['role']}")
         return jsonify({"ok": True, "role": result["role"], "display_name": result.get("display_name", username)})
@@ -871,6 +980,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/farm/status")
     @app.route("/api/farm/status")
+    @login_required
     def farm_status():
         """Full status of all printers + farm summary."""
         states = farm_manager.get_all_states()
@@ -894,6 +1004,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/farm/summary")
     @app.route("/api/farm/summary")
+    @login_required
     def farm_summary():
         return jsonify(farm_manager.get_farm_summary())
 
@@ -901,6 +1012,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/printer/<name>/status")
     @app.route("/api/printer/<name>/status")
+    @login_required
     def printer_status(name):
         states = farm_manager.get_all_states()
         if name not in states:
@@ -1110,29 +1222,50 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/jobs", methods=["GET"])
     @app.route("/api/jobs", methods=["GET"])
+    @login_required
     def list_jobs():
+        jobs = job_queue.get_all_jobs()
+        privileged = is_admin() or _check_api_key()
+        if not privileged:
+            jobs = [j for j in jobs if _is_job_owner(j)]
+        jobs = [{k: v for k, v in j.items() if k not in ("file_path", "filename")} for j in jobs]
+        if privileged:
+            stats = job_queue.get_stats()
+        else:
+            stats = {"total": len(jobs)}
+            for status in ("queued", "printing", "completed", "failed", "cancelled"):
+                stats[status] = sum(1 for job in jobs if job.get("status") == status)
         return jsonify({
-            "jobs": job_queue.get_all_jobs(),
-            "stats": job_queue.get_stats(),
+            "jobs": jobs,
+            "stats": stats,
         })
 
     @app.route(prefix + "/api/jobs/queued")
     @app.route("/api/jobs/queued")
+    @login_required
     def queued_jobs():
-        return jsonify(job_queue.get_queued_jobs())
+        jobs = job_queue.get_queued_jobs()
+        if not (is_admin() or _check_api_key()):
+            jobs = [j for j in jobs if _is_job_owner(j)]
+        return jsonify([{k: v for k, v in j.items() if k not in ("file_path", "filename")} for j in jobs])
 
     @app.route(prefix + "/api/jobs/active")
     @app.route("/api/jobs/active")
+    @login_required
     def active_jobs():
-        return jsonify(job_queue.get_active_jobs())
+        jobs = job_queue.get_active_jobs()
+        if not (is_admin() or _check_api_key()):
+            jobs = [j for j in jobs if _is_job_owner(j)]
+        return jsonify([{k: v for k, v in j.items() if k not in ("file_path", "filename")} for j in jobs])
 
     @app.route(prefix + "/api/jobs/<int:job_id>")
     @app.route("/api/jobs/<int:job_id>")
+    @owner_or_admin_required
     def get_job(job_id):
         job = job_queue.get_job(job_id)
         if not job:
             return jsonify({"error": "Job not found"}), 404
-        return jsonify(job)
+        return jsonify({k: v for k, v in job.items() if k not in ("file_path", "filename")})
 
     @app.route(prefix + "/api/jobs/upload", methods=["POST"])
     @app.route("/api/jobs/upload", methods=["POST"])
@@ -1147,24 +1280,45 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         if not file.filename or not allowed_file(file.filename):
             return jsonify({"error": "Invalid file type. Allowed: .gcode, .3mf"}), 400
 
+        try:
+            copies = int(request.form.get("copies", 1))
+            priority = int(request.form.get("priority", 0))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Copies and priority must be integers"}), 400
+        if not 1 <= copies <= 100:
+            return jsonify({"error": "Copies must be between 1 and 100"}), 400
+        if not -100 <= priority <= 100:
+            return jsonify({"error": "Priority must be between -100 and 100"}), 400
+        notes = request.form.get("notes", "")[:2000]
+        printer = request.form.get("printer", "").strip()
+        if printer and not (is_admin() or _check_api_key()) and _is_staff_only_printer(printer):
+            return jsonify({"error": f"Printer '{printer}' is restricted to staff"}), 403
+        if printer:
+            availability_error = _printer_availability_error(printer)
+            if availability_error:
+                return jsonify({"error": availability_error[0]}), availability_error[1]
+
         original_name = secure_filename(file.filename)
+        if not original_name:
+            return jsonify({"error": "Invalid filename"}), 400
         unique_name = f"{uuid.uuid4().hex}_{original_name}"
         file_path = os.path.join(job_queue.upload_dir, unique_name)
         file.save(file_path)
+        try:
+            validate_print_file(file_path)
+        except InvalidPrintFile as exc:
+            try:
+                os.unlink(file_path)
+            except OSError:
+                pass
+            return jsonify({"error": str(exc)}), 400
 
         # If filename looks like an OrcaSlicer temp name (e.g. 97188.0.gcode),
         # try to extract the real model name from gcode metadata
         if re.match(r"^\d+\.\d+\.gcode$", original_name) and original_name.endswith(".gcode"):
             model_name = parse_gcode_model_name(file_path)
             if model_name:
-                original_name = model_name + ".gcode"
-
-        copies = int(request.form.get("copies", 1))
-        priority = int(request.form.get("priority", 0))
-        notes = request.form.get("notes", "")
-        printer = request.form.get("printer", "")
-        if printer and not (is_admin() or _check_api_key()) and _is_staff_only_printer(printer):
-            return jsonify({"error": f"Printer '{printer}' is restricted to staff"}), 403
+                original_name = secure_filename(str(model_name))[:200] + ".gcode"
         meta = parse_gcode_metadata(file_path)
 
         job_id = job_queue.add_job(
@@ -1195,7 +1349,11 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 thumb_dir = os.path.join(job_queue.upload_dir, "thumbnails")
                 os.makedirs(thumb_dir, exist_ok=True)
                 uploaded_thumb_path = os.path.join(thumb_dir, f"{unique_name}.thumb.png")
-                thumb.save(uploaded_thumb_path)
+                try:
+                    _save_valid_thumbnail(thumb, uploaded_thumb_path)
+                except (OSError, ValueError) as exc:
+                    uploaded_thumb_path = None
+                    logger.warning("Discarded invalid uploaded thumbnail: %s", exc)
 
         if file_library:
             try:
@@ -1229,6 +1387,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     def _send_job_to_printer(job_id, printer_name):
         """Background task: upload file to printer and start print."""
+        generated_paths = set()
         try:
             job = job_queue.get_job(job_id)
             if not job:
@@ -1255,6 +1414,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 threemf_path = file_path + ".3mf"
                 try:
                     wrap_gcode_as_3mf(file_path, threemf_path)
+                    generated_paths.add(threemf_path)
                     file_path = threemf_path
                     remote_name = remote_name.rsplit(".", 1)[0] + ".3mf"
                     logger.info(f"Wrapped gcode as 3mf: {remote_name}")
@@ -1274,9 +1434,18 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             ams_mapping = build_3mf_ams_mapping(file_path, num_ams) if file_path.lower().endswith(".3mf") else None
             use_ams = True if ams_mapping else (None if (first_ext is None or first_ext < num_ams) else False)
             upload_path = sanitize_3mf_external_spool(file_path) if ams_mapping else file_path
+            if upload_path != file_path:
+                generated_paths.add(upload_path)
 
             # Upload the file to the printer
-            ok = printer.upload_file(upload_path, remote_name)
+            try:
+                ok = printer.upload_file(upload_path, remote_name)
+            finally:
+                for generated_path in generated_paths:
+                    try:
+                        os.unlink(generated_path)
+                    except OSError:
+                        pass
             if ok:
                 # Wait for file to be ready before starting print
                 time.sleep(2 if printer_type == "bambulab" else 0.5)
@@ -1296,6 +1465,12 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 job_queue.mark_failed(job_id)
             except Exception:
                 pass
+        finally:
+            for generated_path in generated_paths:
+                try:
+                    os.unlink(generated_path)
+                except OSError:
+                    pass
 
     @app.route(prefix + "/api/jobs/<int:job_id>/filaments")
     @app.route("/api/jobs/<int:job_id>/filaments")
@@ -1436,7 +1611,6 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             else:
                 type_match = (tray["type"].upper() == needed_type.upper()) if tray["type"] else False
                 tray_color = (tray["color"] or "")[:7]
-                color_match = tray_color.upper() == needed_color.upper() if needed_color and tray_color else True
                 match = type_match  # Type must match; color is informational
                 if not match:
                     all_match = False
@@ -1480,8 +1654,9 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             p = farm_manager.get_printer(pname)
             if not p:
                 return jsonify({"error": f"Printer '{pname}' not found"}), 404
-            if not p.is_connected():
-                return jsonify({"error": f"Printer '{pname}' not connected"}), 400
+            availability_error = _printer_availability_error(pname)
+            if availability_error:
+                return jsonify({"error": availability_error[0]}), availability_error[1]
             if not (is_admin() or _check_api_key()) and _is_staff_only_printer(pname):
                 return jsonify({"error": f"Printer '{pname}' is restricted to staff"}), 403
             plate_check = _check_build_plate_clear(pname)
@@ -1545,8 +1720,9 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             p = farm_manager.get_printer(pname)
             if not p:
                 return jsonify({"error": f"Printer '{pname}' not found"}), 404
-            if not p.is_connected():
-                return jsonify({"error": f"Printer '{pname}' not connected"}), 400
+            availability_error = _printer_availability_error(pname)
+            if availability_error:
+                return jsonify({"error": availability_error[0]}), availability_error[1]
             if not (is_admin() or _check_api_key()) and _is_staff_only_printer(pname):
                 return jsonify({"error": f"Printer '{pname}' is restricted to staff"}), 403
             plate_check = _check_build_plate_clear(pname)
@@ -1642,36 +1818,36 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     # ── File Library API ──────────────────────────────────
 
-        @app.route(prefix + "/api/jobs/bulk_delete", methods=["POST"])
-        @app.route("/api/jobs/bulk_delete", methods=["POST"])
-        @admin_required
-        def bulk_delete_jobs():
-            data = request.get_json(silent=True) or {}
-            ids = data.get("ids", [])
-            delete_lib = bool(data.get("delete_library", False))
-            if not ids or not isinstance(ids, list):
-                return jsonify({"ok": False, "error": "No ids provided"}), 400
-            deleted = 0
-            for job_id in ids:
-                try:
-                    job_id = int(job_id)
-                except (TypeError, ValueError):
-                    continue
-                job = job_queue.get_job(job_id)
-                if job and job["status"] == "printing" and job.get("printer_name"):
-                    printer = farm_manager.get_printer(job["printer_name"])
-                    if printer:
-                        printer.stop_print()
-                ok = job_queue.delete_job(job_id)
-                if ok:
-                    deleted += 1
-                    if delete_lib and file_library and job:
-                        file_path = job.get("file_path", "")
-                        if file_path:
-                            lib_file = file_library.find_by_path(file_path)
-                            if lib_file:
-                                file_library.delete_file(lib_file["id"])
-            return jsonify({"ok": True, "deleted": deleted})
+    @app.route(prefix + "/api/jobs/bulk_delete", methods=["POST"])
+    @app.route("/api/jobs/bulk_delete", methods=["POST"])
+    @admin_required
+    def bulk_delete_jobs():
+        data = request.get_json(silent=True) or {}
+        ids = data.get("ids", [])
+        delete_lib = bool(data.get("delete_library", False))
+        if not ids or not isinstance(ids, list):
+            return jsonify({"ok": False, "error": "No ids provided"}), 400
+        deleted = 0
+        for job_id in ids[:1000]:
+            try:
+                job_id = int(job_id)
+            except (TypeError, ValueError):
+                continue
+            job = job_queue.get_job(job_id)
+            if job and job["status"] == "printing" and job.get("printer_name"):
+                printer = farm_manager.get_printer(job["printer_name"])
+                if printer:
+                    printer.stop_print()
+            ok = job_queue.delete_job(job_id)
+            if ok:
+                deleted += 1
+                if delete_lib and file_library and job:
+                    file_path = job.get("file_path", "")
+                    if file_path:
+                        lib_file = file_library.find_by_path(file_path)
+                        if lib_file:
+                            file_library.delete_file(lib_file["id"])
+        return jsonify({"ok": True, "deleted": deleted})
 
     @app.route(prefix + "/api/library/files")
     @app.route("/api/library/files")
@@ -1682,7 +1858,10 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         folder_id = request.args.get("folder_id")
         if folder_id is not None:
             folder_id = int(folder_id)
-        files = file_library.get_files(folder_id)
+        files = [
+            {k: v for k, v in f.items() if k not in ("file_path", "stored_name")}
+            for f in file_library.get_files(folder_id)
+        ]
         folders = file_library.get_folders(folder_id)
         return jsonify({"files": files, "folders": folders})
 
@@ -1692,8 +1871,12 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     def library_search_files():
         if not file_library:
             return jsonify({"files": []})
-        q = request.args.get("q", "")
-        return jsonify({"files": file_library.search_files(q)})
+        q = request.args.get("q", "")[:200]
+        files = [
+            {k: v for k, v in f.items() if k not in ("file_path", "stored_name")}
+            for f in file_library.search_files(q)
+        ]
+        return jsonify({"files": files})
 
     @app.route(prefix + "/api/library/files/<int:file_id>")
     @app.route("/api/library/files/<int:file_id>")
@@ -1704,7 +1887,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         f = file_library.get_file(file_id)
         if not f:
             return jsonify({"error": "File not found"}), 404
-        return jsonify(f)
+        return jsonify({k: v for k, v in f.items() if k not in ("file_path", "stored_name")})
 
     @app.route(prefix + "/api/library/files/<int:file_id>/thumbnail")
     @app.route("/api/library/files/<int:file_id>/thumbnail")
@@ -1738,7 +1921,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/library/files/<int:file_id>/move", methods=["POST"])
     @app.route("/api/library/files/<int:file_id>/move", methods=["POST"])
-    @login_required
+    @admin_required
     def library_move_file(file_id):
         if not file_library:
             return jsonify({"error": "Library not available"}), 500
@@ -1793,7 +1976,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/library/folders", methods=["POST"])
     @app.route("/api/library/folders", methods=["POST"])
-    @login_required
+    @admin_required
     def library_create_folder():
         if not file_library:
             return jsonify({"error": "Library not available"}), 500
@@ -1812,7 +1995,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/library/folders/<int:folder_id>/rename", methods=["POST"])
     @app.route("/api/library/folders/<int:folder_id>/rename", methods=["POST"])
-    @login_required
+    @admin_required
     def library_rename_folder(folder_id):
         if not file_library:
             return jsonify({"error": "Library not available"}), 500
@@ -1822,7 +2005,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/library/folders/<int:folder_id>/move", methods=["POST"])
     @app.route("/api/library/folders/<int:folder_id>/move", methods=["POST"])
-    @login_required
+    @admin_required
     def library_move_folder(folder_id):
         if not file_library:
             return jsonify({"error": "Library not available"}), 500
@@ -1917,7 +2100,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/discover/add", methods=["POST"])
     @app.route("/api/discover/add", methods=["POST"])
-    @admin_required
+    @staff_session_required
     def discover_add():
         """Add a printer to the config and connect to it."""
         data = request.get_json(silent=True) or {}
@@ -1927,6 +2110,11 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
         if not name or not host:
             return jsonify({"ok": False, "message": "name and host are required"}), 400
+        if not _valid_printer_name(name):
+            return jsonify({
+                "ok": False,
+                "message": "Printer names may contain letters, numbers, spaces, dots, underscores, parentheses, and hyphens",
+            }), 400
 
         if printer_type == "klipper":
             # Klipper printer — only needs name, host, and optional moonraker_port/api_key
@@ -1940,8 +2128,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
             config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
             try:
-                with open(config_path) as f:
-                    config = yaml.safe_load(f) or {}
+                config = load_yaml_config(config_path)
                 if not config.get("printers"):
                     config["printers"] = []
 
@@ -1959,8 +2146,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 new_printer["orca_port"] = orca_port
                 config["printers"].append(new_printer)
 
-                with open(config_path, "w") as f:
-                    yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+                save_yaml_config(config_path, config)
                 # Update live config
                 app_config["printers"] = config["printers"]
 
@@ -1995,8 +2181,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
             config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
             try:
-                with open(config_path) as f:
-                    config = yaml.safe_load(f) or {}
+                config = load_yaml_config(config_path)
                 if not config.get("printers"):
                     config["printers"] = []
 
@@ -2016,8 +2201,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 new_printer["orca_port"] = orca_port
                 config["printers"].append(new_printer)
 
-                with open(config_path, "w") as f:
-                    yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+                save_yaml_config(config_path, config)
                 # Update live config
                 app_config["printers"] = config["printers"]
 
@@ -2043,7 +2227,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/discover/remove", methods=["POST"])
     @app.route("/api/discover/remove", methods=["POST"])
-    @admin_required
+    @staff_session_required
     def discover_remove():
         """Remove a printer from the config and disconnect."""
         data = request.get_json(silent=True) or {}
@@ -2061,8 +2245,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         # Remove from config
         config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
         try:
-            with open(config_path) as f:
-                config = yaml.safe_load(f) or {}
+            config = load_yaml_config(config_path)
             # Find the printer entry to get its orca_port before removing
             orca_port = None
             for p in (config.get("printers") or []):
@@ -2070,8 +2253,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                     orca_port = p.get("orca_port")
                     break
             config["printers"] = [p for p in (config.get("printers") or []) if p.get("name") != name]
-            with open(config_path, "w") as f:
-                yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+            save_yaml_config(config_path, config)
             app_config["printers"] = config["printers"]
 
             _remove_orca_vhost(name, orca_port)
@@ -2082,7 +2264,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/discover/rename", methods=["POST"])
     @app.route("/api/discover/rename", methods=["POST"])
-    @admin_required
+    @staff_session_required
     def discover_rename():
         """Rename a printer in the config and live state."""
         data = request.get_json(silent=True) or {}
@@ -2090,6 +2272,11 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         new_name = data.get("new_name", "").strip()
         if not old_name or not new_name:
             return jsonify({"ok": False, "message": "old_name and new_name are required"}), 400
+        if not _valid_printer_name(new_name):
+            return jsonify({
+                "ok": False,
+                "message": "Printer names may contain letters, numbers, spaces, dots, underscores, parentheses, and hyphens",
+            }), 400
         if old_name == new_name:
             return jsonify({"ok": True, "message": "Name unchanged"})
 
@@ -2127,16 +2314,14 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         # Update config file
         config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
         try:
-            with open(config_path) as f:
-                config = yaml.safe_load(f) or {}
+            config = load_yaml_config(config_path)
             orca_port = None
             for p in config.get("printers", []):
                 if p.get("name") == old_name:
                     p["name"] = new_name
                     orca_port = p.get("orca_port")
                     break
-            with open(config_path, "w") as f:
-                yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+            save_yaml_config(config_path, config)
             app_config["printers"] = config["printers"]
 
             # Recreate Apache vhost with new name
@@ -2191,14 +2376,15 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         data = request.get_json(silent=True) or {}
         config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
         try:
-            with open(config_path) as f:
-                file_config = yaml.safe_load(f) or {}
+            file_config = load_yaml_config(config_path)
 
             ad = file_config.get("active_directory", {})
-            ad["enabled"] = data.get("enabled", False)
+            ad["enabled"] = bool(data.get("enabled", False))
             ad["server"] = data.get("server", "").strip()
-            ad["port"] = int(data.get("port", 389))
-            ad["use_ssl"] = data.get("use_ssl", False)
+            ad["use_ssl"] = bool(data.get("use_ssl", True))
+            ad["port"] = int(data.get("port") or (636 if ad["use_ssl"] else 389))
+            if not 1 <= ad["port"] <= 65535:
+                return jsonify({"ok": False, "message": "AD port must be between 1 and 65535"}), 400
             ad["base_dn"] = data.get("base_dn", "").strip()
             ad["bind_user"] = data.get("bind_user", "").strip()
             # Only update password if not the mask placeholder
@@ -2209,8 +2395,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
             file_config["active_directory"] = ad
 
-            with open(config_path, "w") as f:
-                yaml.dump(file_config, f, default_flow_style=False, sort_keys=False)
+            save_yaml_config(config_path, file_config)
 
             # Update live config
             app_config["active_directory"] = ad
@@ -2280,11 +2465,9 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
         config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
         try:
-            with open(config_path) as f:
-                file_config = yaml.safe_load(f) or {}
+            file_config = load_yaml_config(config_path)
             file_config["student_access"] = access
-            with open(config_path, "w") as f:
-                yaml.dump(file_config, f, default_flow_style=False, sort_keys=False)
+            save_yaml_config(config_path, file_config)
             app_config["student_access"] = access
             return jsonify({"ok": True, "message": "Student access lists saved"})
         except Exception as e:
@@ -2319,8 +2502,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         data = request.get_json(silent=True) or {}
         config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
         try:
-            with open(config_path) as f:
-                file_config = yaml.safe_load(f) or {}
+            file_config = load_yaml_config(config_path)
 
             # Find the printer in config
             printer_found = False
@@ -2343,14 +2525,13 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             if not printer_found:
                 return jsonify({"ok": False, "message": f"Klipper printer '{name}' not found"}), 404
 
-            with open(config_path, "w") as f:
-                yaml.dump(file_config, f, default_flow_style=False, sort_keys=False)
+            save_yaml_config(config_path, file_config)
 
             # Update live config
             for p in app_config.get("printers", []):
                 if p.get("name") == name:
                     if data.get("enabled"):
-                        p["obico"] = file_config_obico = next(
+                        p["obico"] = next(
                             (pr.get("obico", {}) for pr in file_config["printers"] if pr.get("name") == name), {}
                         )
                     else:
@@ -2410,16 +2591,14 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         data = request.get_json(silent=True) or {}
         config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
         try:
-            with open(config_path) as f:
-                file_config = yaml.safe_load(f) or {}
+            file_config = load_yaml_config(config_path)
             ui = file_config.get("ui", {})
             if "timezone" in data:
                 ui["timezone"] = data["timezone"].strip()
             if "locale" in data:
                 ui["locale"] = data["locale"].strip()
             file_config["ui"] = ui
-            with open(config_path, "w") as f:
-                yaml.dump(file_config, f, default_flow_style=False, sort_keys=False)
+            save_yaml_config(config_path, file_config)
             app_config["ui"] = ui
             return jsonify({"ok": True})
         except Exception as e:
@@ -2444,16 +2623,14 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         data = request.get_json(silent=True) or {}
         config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
         try:
-            with open(config_path) as f:
-                file_config = yaml.safe_load(f) or {}
+            file_config = load_yaml_config(config_path)
 
             sm = file_config.get("spoolman", {})
             url = data.get("url", "").strip().rstrip("/")
             sm["url"] = url
             file_config["spoolman"] = sm
 
-            with open(config_path, "w") as f:
-                yaml.dump(file_config, f, default_flow_style=False, sort_keys=False)
+            save_yaml_config(config_path, file_config)
 
             app_config["spoolman"] = sm
 
@@ -2532,8 +2709,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             "settle_seconds": max(0.0, min(10.0, float(data.get("settle_seconds", 2.0)))),
         }
         try:
-            with open(os.environ.get("FARM_CONFIG", "config/config.yaml")) as f:
-                file_config = yaml.safe_load(f) or {}
+            file_config = load_yaml_config(config_path)
             plate_cfg = file_config.get("plate_detection", {})
             plate_cfg[name] = cfg
             file_config["plate_detection"] = plate_cfg
@@ -2548,8 +2724,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 captured_reference = "inspection_reference_1.jpg"
                 with open(os.path.join(_plate_detection_dir(name), captured_reference), "wb") as f:
                     f.write(frame)
-            with open(os.environ.get("FARM_CONFIG", "config/config.yaml"), "w") as f:
-                yaml.dump(file_config, f, default_flow_style=False, sort_keys=False)
+            save_yaml_config(config_path, file_config)
             app_config["plate_detection"] = plate_cfg
             message = "Build plate detection enabled with a live empty-plate reference" if captured_reference else "Build plate detection saved"
             return jsonify({
@@ -2727,6 +2902,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/camera/<name>/start", methods=["POST"])
     @app.route("/api/camera/<name>/start", methods=["POST"])
+    @login_required
     def camera_start(name):
         """Start camera stream for a printer."""
         if not camera_manager:
@@ -2745,11 +2921,18 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
                 return jsonify({"ok": False, "message": "No camera URL configured or detected for this Klipper printer"}), 400
             camera_manager.start_http_camera(name, camera_url)
         else:
-            camera_manager.start_camera(name, printer.host, printer.access_code)
+            camera_manager.start_camera(
+                name,
+                printer.host,
+                printer.access_code,
+                getattr(printer, "camera_port", 6000),
+                getattr(printer, "tls_fingerprints", {}).get("camera", ""),
+            )
         return jsonify({"ok": True, "message": f"Camera started for '{name}'"})
 
     @app.route(prefix + "/api/camera/<name>/stop", methods=["POST"])
     @app.route("/api/camera/<name>/stop", methods=["POST"])
+    @login_required
     def camera_stop(name):
         """Stop camera stream for a printer."""
         if not camera_manager:
@@ -2759,6 +2942,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/camera/<name>/snapshot")
     @app.route("/api/camera/<name>/snapshot")
+    @login_required
     def camera_snapshot(name):
         """Return the latest JPEG frame as an image."""
         if not camera_manager:
@@ -2771,6 +2955,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/camera/<name>/stream")
     @app.route("/api/camera/<name>/stream")
+    @login_required
     def camera_stream(name):
         """MJPEG stream — multipart/x-mixed-replace boundary push."""
         if not camera_manager:
@@ -2791,6 +2976,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/camera/status")
     @app.route("/api/camera/status")
+    @login_required
     def camera_status():
         """Get streaming status for all cameras."""
         if not camera_manager:
@@ -2799,6 +2985,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/camera/status/details")
     @app.route("/api/camera/status/details")
+    @login_required
     def camera_status_details():
         """Get detailed streaming/stale status for all cameras."""
         if not camera_manager:
@@ -2809,10 +2996,8 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     def _check_octoprint_api_key():
         """Validate X-Api-Key header against configured API key."""
-        if not api_key:
-            return True  # No key configured = open access
         key = request.headers.get("X-Api-Key", "")
-        return key == api_key
+        return bool(api_key and key and secrets.compare_digest(str(api_key), key))
 
     @app.route(prefix + "/api/version")
     @app.route("/api/version")
@@ -2889,13 +3074,21 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         unique_name = f"{uuid.uuid4().hex}_{original_name}"
         file_path = os.path.join(job_queue.upload_dir, unique_name)
         file.save(file_path)
+        try:
+            validate_print_file(file_path)
+        except InvalidPrintFile as exc:
+            try:
+                os.unlink(file_path)
+            except OSError:
+                pass
+            return jsonify({"error": str(exc)}), 400
 
         # If filename looks like an OrcaSlicer temp name (e.g. 97188.0.gcode),
         # try to extract the real model name from gcode metadata
         if re.match(r"^\d+\.\d+\.gcode$", original_name) and original_name.endswith(".gcode"):
             model_name = parse_gcode_model_name(file_path)
             if model_name:
-                original_name = model_name + ".gcode"
+                original_name = secure_filename(str(model_name))[:200] + ".gcode"
 
         # Check if OrcaSlicer wants to print immediately
         print_flag = request.form.get("print", "false").lower() == "true"
@@ -3044,16 +3237,14 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         data = request.get_json(silent=True) or {}
         config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
         try:
-            with open(config_path) as f:
-                file_config = yaml.safe_load(f) or {}
+            file_config = load_yaml_config(config_path)
 
             pool = file_config.get("pool", {})
             pool["enabled"] = bool(data.get("enabled", False))
             pool["printers"] = list(data.get("printers", []))
             file_config["pool"] = pool
 
-            with open(config_path, "w") as f:
-                yaml.dump(file_config, f, default_flow_style=False, sort_keys=False)
+            save_yaml_config(config_path, file_config)
 
             app_config["pool"] = pool
 
@@ -3068,11 +3259,12 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     @admin_required
     def notifications_get_config():
         n = app_config.get("notifications", {})
+        discord = {k: v for k, v in n.get("discord", {}).items() if k != "webhook_url"}
         return jsonify({
             "enabled": n.get("enabled", False),
             "events": n.get("events", {}),
             "email": {k: v for k, v in n.get("email", {}).items() if k != "password"},
-            "discord": n.get("discord", {}),
+            "discord": discord,
         })
 
     @app.route(prefix + "/api/notifications/config", methods=["POST"])
@@ -3082,8 +3274,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         data = request.get_json(silent=True) or {}
         config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
         try:
-            with open(config_path) as f:
-                file_config = yaml.safe_load(f) or {}
+            file_config = load_yaml_config(config_path)
 
             n = file_config.get("notifications", {})
             n["enabled"] = bool(data.get("enabled", False))
@@ -3108,12 +3299,12 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             discord_data = data.get("discord", {})
             discord = n.get("discord", {})
             discord["enabled"] = bool(discord_data.get("enabled", False))
-            discord["webhook_url"] = discord_data.get("webhook_url", discord.get("webhook_url", ""))
+            if discord_data.get("webhook_url"):
+                discord["webhook_url"] = discord_data["webhook_url"]
             n["discord"] = discord
 
             file_config["notifications"] = n
-            with open(config_path, "w") as f:
-                yaml.dump(file_config, f, default_flow_style=False, sort_keys=False)
+            save_yaml_config(config_path, file_config)
 
             app_config["notifications"] = n
             return jsonify({"ok": True, "message": "Notification settings saved."})
@@ -3139,43 +3330,20 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     # ── Software Update ───────────────────────────────────
 
-    def _repo_dir():
-        return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-
     @app.route(prefix + "/api/update/check", methods=["GET"])
     @app.route("/api/update/check", methods=["GET"])
-    @admin_required
+    @staff_session_required
     def update_check():
         """Check for available git updates without applying them."""
-        git = shutil.which("git")
-        if not git:
-            return jsonify({"ok": False, "message": "git not found on this system"})
-        repo = _repo_dir()
         try:
-            # Ensure git trusts this directory regardless of ownership
-            subprocess.run([git, "config", "--global", "--add", "safe.directory", repo],
-                           capture_output=True, timeout=10)
-            # Fetch latest refs from origin (no checkout)
-            fetch = subprocess.run([git, "-C", repo, "fetch", "origin"],
-                           capture_output=True, timeout=30, text=True)
-            if fetch.returncode != 0:
-                err = (fetch.stdout + fetch.stderr).strip()
-                return jsonify({"ok": False, "message": f"git fetch failed: {err or 'check network/auth'}"})
-            # Current short commit hash
-            cur = subprocess.run([git, "-C", repo, "rev-parse", "--short", "HEAD"],
-                                 capture_output=True, timeout=10, text=True)
-            current_commit = cur.stdout.strip()
-            # Commits on origin/main that are not in HEAD
-            log = subprocess.run(
-                [git, "-C", repo, "log", "HEAD..origin/main", "--oneline"],
-                capture_output=True, timeout=10, text=True,
+            result = json.loads(
+                _run_privileged_helper("update-check", timeout=90)
             )
-            commits = [l.strip() for l in log.stdout.strip().splitlines() if l.strip()]
             return jsonify({
                 "ok": True,
-                "current_commit": current_commit,
-                "updates_available": len(commits),
-                "commits": commits,
+                "current_commit": result.get("current_commit", ""),
+                "updates_available": int(result.get("updates_available", 0)),
+                "commits": result.get("commits", []),
             })
         except subprocess.TimeoutExpired:
             return jsonify({"ok": False, "message": "git fetch timed out"})
@@ -3185,28 +3353,49 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/update/apply", methods=["POST"])
     @app.route("/api/update/apply", methods=["POST"])
-    @admin_required
+    @staff_session_required
     def update_apply():
         """Run git pull and restart the service."""
-        git = shutil.which("git")
-        if not git:
-            return jsonify({"ok": False, "message": "git not found on this system"})
-        repo = _repo_dir()
+        states = farm_manager.get_all_states()
+        safe_statuses = {"IDLE", "FINISH", "FAILED"}
+        configured_names = {
+            str(printer.get("name", "")).strip()
+            for printer in app_config.get("printers", [])
+            if isinstance(printer, dict) and str(printer.get("name", "")).strip()
+        }
+        printer_blockers = [
+            f"{name} (missing)"
+            for name in sorted(configured_names - set(states))
+        ]
+        printer_blockers.extend(
+            f"{name} ({'offline' if not state.get('connected') else str(state.get('status', 'UNKNOWN')).upper()})"
+            for name, state in states.items()
+            if not state.get("connected")
+            or str(state.get("status", "")).upper() not in safe_statuses
+        )
+        busy_jobs = [
+            job
+            for job in job_queue.get_active_jobs()
+            if str(job.get("status", "")).lower()
+            in {"assigned", "uploading", "printing", "paused"}
+        ]
+        if printer_blockers or busy_jobs:
+            details = [f"printer {blocker}" for blocker in printer_blockers]
+            details.extend(f"job #{job.get('id')}" for job in busy_jobs)
+            return jsonify({
+                "ok": False,
+                "message": "Update refused because safe idle state could not be confirmed: "
+                + ", ".join(details),
+            }), 409
         try:
-            # Ensure git trusts this directory regardless of ownership
-            subprocess.run([git, "config", "--global", "--add", "safe.directory", repo],
-                           capture_output=True, timeout=10)
-            result = subprocess.run(
-                [git, "-C", repo, "pull", "--ff-only", "origin", "main"],
-                capture_output=True, timeout=60, text=True,
-            )
-            output = (result.stdout + result.stderr).strip()
-            if result.returncode != 0:
-                return jsonify({"ok": False, "message": output or "git pull failed"})
+            output = _run_privileged_helper("update-apply", timeout=360)
             # Restart service after the response is delivered
             def _delayed_restart():
                 time.sleep(2)
-                _sudo_cmd(["systemctl", "restart", "the-print-farm"])
+                try:
+                    _run_privileged_helper("restart-service", timeout=30)
+                except Exception as exc:
+                    logger.error("Delayed service restart failed: %s", exc)
             threading.Thread(target=_delayed_restart, daemon=True).start()
             return jsonify({"ok": True, "message": output, "restarting": True})
         except subprocess.TimeoutExpired:
@@ -3229,18 +3418,33 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         parse_metadata_fn=parse_gcode_metadata,
         wrap_gcode_fn=wrap_gcode_as_3mf,
         spoolman_client=spoolman_client,
+        plate_check_fn=_check_build_plate_clear,
     )
     app.register_blueprint(api_v1, url_prefix=prefix + "/api/v1")
     if prefix:
         app.register_blueprint(api_v1, url_prefix="/api/v1", name="api_v1_nopfx")
 
+    app.extensions["print_farm"] = {
+        "send_job": _send_job_to_printer,
+        "check_build_plate": _check_build_plate_clear,
+        "notify_plate_blocked": _notify_plate_blocked,
+    }
     return app
 
 
-def start_web_server(app, host="0.0.0.0", port=5000):
-    """Start Flask in a background daemon thread."""
+def start_web_server(app, host="127.0.0.1", port=5000):
+    """Start the production WSGI server in a background daemon thread."""
+    from waitress import serve
+
     thread = threading.Thread(
-        target=lambda: app.run(host=host, port=port, debug=False, use_reloader=False),
+        target=lambda: serve(
+            app,
+            host=host,
+            port=port,
+            threads=8,
+            channel_timeout=120,
+            clear_untrusted_proxy_headers=True,
+        ),
         daemon=True,
         name="web-ui",
     )

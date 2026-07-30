@@ -13,7 +13,7 @@ import ssl
 import struct
 import threading
 import time
-from typing import Dict, List, Optional
+from typing import List
 
 logger = logging.getLogger(__name__)
 
@@ -49,10 +49,11 @@ def discover_printers(timeout: float = 5.0) -> List[dict]:
         sock.bind(("", BAMBU_DISCOVERY_PORT))
 
         # Join multicast group on all interfaces
+        # Bambu discovery is multicast and intentionally listens on local interfaces.
         mreq = struct.pack(
             "4s4s",
             socket.inet_aton(BAMBU_MULTICAST_GROUP),
-            socket.inet_aton("0.0.0.0"),
+            socket.inet_aton("0.0.0.0"),  # nosec B104
         )
         try:
             sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)

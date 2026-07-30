@@ -9,8 +9,9 @@ Supports two roles based on OU container paths:
 from __future__ import annotations
 
 import logging
+import ssl
 
-from ldap3 import Server, Connection, ALL, SUBTREE
+from ldap3 import ALL, SUBTREE, Connection, Server, Tls
 from ldap3.core.exceptions import LDAPException
 
 logger = logging.getLogger(__name__)
@@ -19,9 +20,25 @@ logger = logging.getLogger(__name__)
 def _build_server(config: dict) -> Server:
     """Build an ldap3 Server from the AD config block."""
     host = config.get("server", "")
-    port = int(config.get("port", 389))
-    use_ssl = config.get("use_ssl", False)
-    return Server(host, port=port, use_ssl=use_ssl, get_info=ALL, connect_timeout=10)
+    use_ssl = bool(config.get("use_ssl", True))
+    if not use_ssl and not config.get("allow_insecure", False):
+        raise ValueError("Plaintext LDAP is disabled; use LDAPS or explicitly set allow_insecure")
+    port = int(config.get("port", 636 if use_ssl else 389))
+    tls = None
+    if use_ssl:
+        validate = ssl.CERT_REQUIRED if config.get("tls_validate", True) else ssl.CERT_NONE
+        tls = Tls(
+            validate=validate,
+            ca_certs_file=config.get("ca_certs_file") or None,
+        )
+    return Server(
+        host,
+        port=port,
+        use_ssl=use_ssl,
+        tls=tls,
+        get_info=ALL,
+        connect_timeout=10,
+    )
 
 
 def test_ad_connection(config: dict) -> dict:

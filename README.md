@@ -20,9 +20,9 @@ This README acts as a documentation index. Detailed information is split across 
 
 ## Requirements
 
-- Python 3.9+
+- Python 3.10+
 - Apache 2 with `mod_proxy`
-- Debian 11+ / Ubuntu 22.04+ / Raspberry Pi OS
+- Debian 12+ / Ubuntu 22.04+ / Raspberry Pi OS Bookworm
 - `isc-dhcp-client` and `openssl`, installed automatically by `setup.sh` and required for virtual printers
 - BambuLab P1/P1S firmware 01.08.02.00+ requires LAN-only mode and Developer Mode for local start/control commands
 - Spoolman optional

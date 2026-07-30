@@ -187,7 +187,9 @@ def parse_gcode_filaments(gcode_path: str) -> dict:
         used_filaments: list of {slot, type, color} for only the used slots
     """
     with open(gcode_path, "r", errors="replace") as f:
-        text = f.read()
+        text = f.read(128 * 1024 * 1024 + 1)
+    if len(text) > 128 * 1024 * 1024:
+        raise ValueError("G-code is too large to parse safely")
     meta = _parse_gcode_metadata(text)
     used_filaments = [
         fil for fil in meta["filaments"]
@@ -249,11 +251,21 @@ def wrap_gcode_as_3mf(gcode_path: str, output_path: str) -> str:
 
     Returns the md5 hex digest of the gcode content.
     """
+    # Bambu 3MF metadata requires an MD5 field; it is not used as a trust check.
+    digest = hashlib.md5(usedforsecurity=False)
+    metadata_bytes = bytearray()
     with open(gcode_path, "rb") as f:
-        gcode_data = f.read()
+        while True:
+            chunk = f.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+            if len(metadata_bytes) < 128 * 1024 * 1024:
+                remaining = 128 * 1024 * 1024 - len(metadata_bytes)
+                metadata_bytes.extend(chunk[:remaining])
 
-    gcode_text = gcode_data.decode("utf-8", errors="replace")
-    gcode_md5 = hashlib.md5(gcode_data).hexdigest().upper()
+    gcode_text = metadata_bytes.decode("utf-8", errors="replace")
+    gcode_md5 = digest.hexdigest().upper()
     meta = _parse_gcode_metadata(gcode_text)
 
     with zipfile.ZipFile(output_path, "w", zipfile.ZIP_STORED) as zf:
@@ -263,7 +275,7 @@ def wrap_gcode_as_3mf(gcode_path: str, output_path: str) -> str:
         zf.writestr("Metadata/slice_info.config", _build_slice_info(meta))
         zf.writestr("Metadata/model_settings.config", MODEL_SETTINGS)
         zf.writestr("Metadata/project_settings.config", PROJECT_SETTINGS)
-        zf.writestr("Metadata/plate_1.gcode", gcode_data)
+        zf.write(gcode_path, "Metadata/plate_1.gcode")
         zf.writestr("Metadata/plate_1.gcode.md5", gcode_md5)
 
     return gcode_md5

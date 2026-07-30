@@ -13,13 +13,13 @@ import logging.handlers
 import os
 import signal
 import sys
+import threading
 import time
 from pathlib import Path
 
 import yaml
 
 from .farm_manager import FarmManager
-from .gcode_to_3mf import wrap_gcode_as_3mf
 from .job_queue import JobQueue
 from .file_library import FileLibrary
 from .camera import CameraManager
@@ -53,15 +53,18 @@ def setup_logging(config: dict):
         maxBytes=log_config.get("max_size_mb", 10) * 1024 * 1024,
         backupCount=log_config.get("backup_count", 3),
     )
-    file_handler.setLevel(logging.DEBUG)
+    file_handler.setLevel(level)
     file_handler.setFormatter(logging.Formatter(
         "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     ))
 
     root = logging.getLogger()
-    root.setLevel(logging.DEBUG)
+    root.setLevel(level)
+    root.handlers.clear()
     root.addHandler(console)
     root.addHandler(file_handler)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("paho.mqtt").setLevel(logging.WARNING)
 
 
 def load_config(path: str) -> dict:
@@ -85,6 +88,7 @@ def _deduct_filament_usage(spoolman, job, farm):
 
         file_path = job.get("file_path", "")
         gcode_path = file_path
+        temporary_gcode_path = None
 
         # If a .3mf was uploaded directly, look for an embedded gcode inside it
         if file_path.lower().endswith(".3mf"):
@@ -94,21 +98,40 @@ def _deduct_filament_usage(spoolman, job, farm):
                 with _zf.ZipFile(file_path) as zf:
                     gcode_entries = [n for n in zf.namelist() if n.lower().endswith(".gcode")]
                     if gcode_entries:
-                        tmp = _tmp.NamedTemporaryFile(suffix=".gcode", delete=False)
-                        tmp.write(zf.read(gcode_entries[0]))
-                        tmp.flush()
-                        gcode_path = tmp.name
+                        entry = zf.getinfo(gcode_entries[0])
+                        if entry.file_size > 128 * 1024 * 1024:
+                            logger.warning("Embedded G-code is too large for Spoolman deduction")
+                            return
+                        with _tmp.NamedTemporaryFile(suffix=".gcode", delete=False) as tmp:
+                            temporary_gcode_path = tmp.name
+                            with zf.open(entry) as source:
+                                for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                                    tmp.write(chunk)
+                            tmp.flush()
+                        gcode_path = temporary_gcode_path
                     else:
                         logger.debug(f"No gcode inside {file_path}, skipping Spoolman deduction")
                         return
             except Exception as e:
+                if temporary_gcode_path:
+                    try:
+                        os.unlink(temporary_gcode_path)
+                    except OSError:
+                        pass
                 logger.debug(f"Could not extract gcode from {file_path}: {e}")
                 return
         elif not file_path.lower().endswith(".gcode"):
             logger.debug(f"Unsupported file type for Spoolman deduction: {file_path}")
             return
 
-        info = parse_gcode_filaments(gcode_path)
+        try:
+            info = parse_gcode_filaments(gcode_path)
+        finally:
+            if temporary_gcode_path:
+                try:
+                    os.unlink(temporary_gcode_path)
+                except OSError:
+                    pass
         used_filaments = info.get("used_filaments", [])
         if not used_filaments:
             return
@@ -320,7 +343,13 @@ def cmd_run(args, config: dict):
 
     # Start web UI
     web_cfg = config.get("web", {})
-    host = web_cfg.get("host", "0.0.0.0")
+    host = web_cfg.get("host", "127.0.0.1")
+    if host in ("0.0.0.0", "::") and not web_cfg.get("allow_remote_backend", False):  # nosec B104
+        logger.warning(
+            "Ignoring wildcard web.host; binding to 127.0.0.1 behind the reverse proxy. "
+            "Set web.allow_remote_backend=true only when direct backend access is required."
+        )
+        host = "127.0.0.1"
     port = web_cfg.get("port", 5000)
 
     # Camera manager — auto-start cameras for connected printers
@@ -352,7 +381,13 @@ def cmd_run(args, config: dict):
                     if camera_url:
                         camera_mgr.start_http_camera(name, camera_url)
                 else:
-                    camera_mgr.start_camera(name, cfg["host"], cfg["access_code"])
+                    camera_mgr.start_camera(
+                        name,
+                        cfg["host"],
+                        cfg["access_code"],
+                        cfg.get("camera_port", 6000),
+                        (cfg.get("tls_fingerprints") or {}).get("camera", ""),
+                    )
 
     # Spoolman integration (optional)
     spoolman = None
@@ -405,10 +440,39 @@ def cmd_run(args, config: dict):
 
     # Track previous printer status per job to detect transitions (e.g. RUNNING → PAUSED)
     _job_prev_status = {}
+    _pool_dispatching = set()
+    _pool_dispatch_lock = threading.Lock()
+    _pool_blocked_until = {}
+    web_services = app.extensions["print_farm"]
+
+    def _dispatch_pool_job(job_id, printer_name):
+        """Check, claim, and send one pool job without blocking farm monitoring."""
+        try:
+            plate_check = web_services["check_build_plate"](printer_name)
+            if not plate_check.get("ok"):
+                message = plate_check.get("message", "Build plate check failed")
+                _pool_blocked_until[(job_id, printer_name)] = time.monotonic() + 60
+                web_services["notify_plate_blocked"](printer_name, job_id, message)
+                logger.warning(
+                    "Pool dispatch blocked: job #%s -> %s: %s",
+                    job_id,
+                    printer_name,
+                    message,
+                )
+                return
+            if not queue.assign_job(job_id, printer_name):
+                logger.info("Pool dispatch claim lost: job #%s", job_id)
+                return
+            logger.info("Pool dispatch: job #%s -> %s", job_id, printer_name)
+            web_services["send_job"](job_id, printer_name)
+        except Exception:
+            logger.exception("Pool dispatch failed for job #%s on %s", job_id, printer_name)
+        finally:
+            with _pool_dispatch_lock:
+                _pool_dispatching.discard(printer_name)
 
     def _get_error_reason(state):
         """Extract a human-readable error reason from printer state."""
-        from .bambu_client import PrintState
         parts = []
         if state.print_error and state.print_error != 0:
             parts.append(f"error code 0x{state.print_error:08X}")
@@ -442,9 +506,11 @@ def cmd_run(args, config: dict):
             pool_cfg = config.get("pool", {})
             if pool_cfg.get("enabled"):
                 pool_list = pool_cfg.get("printers", [])
-                idle_printers = [
-                    p for p in farm.get_idle_printers() if p in pool_list
-                ]
+                with _pool_dispatch_lock:
+                    idle_printers = [
+                        p for p in farm.get_idle_printers()
+                        if p in pool_list and p not in _pool_dispatching
+                    ]
                 if idle_printers:
                     queued = queue.get_queued_jobs()
                     for job in queued:
@@ -454,56 +520,17 @@ def cmd_run(args, config: dict):
                         if job.get("printer_name"):
                             continue
                         printer_name = idle_printers.pop(0)
-                        printer = farm.get_printer(printer_name)
-                        if not printer:
+                        blocked_until = _pool_blocked_until.get((job["id"], printer_name), 0)
+                        if blocked_until > time.monotonic():
                             continue
-
-                        logger.info(f"Pool dispatch: job #{job['id']} → {printer_name}")
-                        queue.assign_job(job["id"], printer_name)
-
-                        file_path = job["file_path"]
-                        remote_name = job["filename"]
-                        printer_type = farm.get_printer_type(printer_name)
-
-                        if printer_type == "klipper" and job.get("original_name"):
-                            remote_name = job["original_name"]
-
-                        if printer_type == "bambulab" and remote_name.lower().endswith(".gcode"):
-                            threemf_path = file_path + ".3mf"
-                            try:
-                                wrap_gcode_as_3mf(file_path, threemf_path)
-                                file_path = threemf_path
-                                remote_name = remote_name.rsplit(".", 1)[0] + ".3mf"
-                                logger.info(f"Wrapped gcode as 3mf: {remote_name}")
-                            except Exception as e:
-                                logger.error(f"Failed to wrap gcode as 3mf: {e}")
-                                queue.mark_failed(job["id"])
-                                continue
-                        elif printer_type == "klipper" and remote_name.lower().endswith(".3mf"):
-                            logger.error(f"Cannot send .3mf to Klipper printer '{printer_name}'")
-                            queue.mark_failed(job["id"])
-                            continue
-
-                        from .bambu_client import build_3mf_ams_mapping, read_3mf_first_extruder, sanitize_3mf_external_spool
-                        num_ams = len(printer.state.ams_trays) if printer.state.ams_trays else 4
-                        first_ext = read_3mf_first_extruder(file_path) if file_path.lower().endswith(".3mf") else None
-                        ams_mapping = build_3mf_ams_mapping(file_path, num_ams) if file_path.lower().endswith(".3mf") else None
-                        use_ams = True if ams_mapping else (None if (first_ext is None or first_ext < num_ams) else False)
-                        upload_path = sanitize_3mf_external_spool(file_path) if ams_mapping else file_path
-
-                        ok = printer.upload_file(upload_path, remote_name)
-                        if ok:
-                            time.sleep(2)
-                            started = printer.start_print(remote_name, use_ams=use_ams, ams_mapping=ams_mapping)
-                            if started:
-                                queue.mark_printing(job["id"])
-                                logger.info(f"Started printing job #{job['id']} on {printer_name}")
-                            else:
-                                queue.mark_failed(job["id"])
-                                logger.error(f"Failed to start job #{job['id']} on {printer_name}")
-                        else:
-                            queue.mark_failed(job["id"])
-                            logger.error(f"Failed to upload job #{job['id']} to {printer_name}")
+                        with _pool_dispatch_lock:
+                            _pool_dispatching.add(printer_name)
+                        threading.Thread(
+                            target=_dispatch_pool_job,
+                            args=(job["id"], printer_name),
+                            daemon=True,
+                            name=f"pool-dispatch-{printer_name}",
+                        ).start()
 
             # Check for completed prints (only jobs in 'printing' state, not 'uploading')
             active = queue.get_active_jobs()

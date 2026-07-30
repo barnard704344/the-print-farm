@@ -8,19 +8,15 @@ and provides a unified interface for the web UI and job queue.
 import copy
 import logging
 import threading
-import time
 from typing import Dict, Optional, Union
 
-from .bambu_client import BambuClient, PrintState, PrintStatus
+from .bambu_client import BambuClient, PrintStatus
 from .klipper_client import KlipperClient
 
 logger = logging.getLogger(__name__)
 
 # Union type for all supported printer clients
 PrinterClient = Union[BambuClient, KlipperClient]
-FAILED_STATUS_CLEAR_SECONDS = 5.0
-
-
 def create_printer_client(cfg: dict) -> PrinterClient:
     """Factory: create the right client based on printer type in config."""
     printer_type = cfg.get("type", "bambulab").lower()
@@ -46,6 +42,7 @@ def create_printer_client(cfg: dict) -> PrinterClient:
             ftp_port=cfg.get("ftp_port", 990),
             camera_port=cfg.get("camera_port", 6000),
             ams_serial=cfg.get("ams_serial", ""),
+            tls_fingerprints=cfg.get("tls_fingerprints"),
         )
 
 
@@ -63,8 +60,6 @@ class FarmManager:
         self._ams_tray_configs: Dict[str, Dict[int, int]] = {}
         self._ams_tray_saver = None   # callable(printer, tray_id, spool_id)
         self._ams_tray_deleter = None  # callable(printer, tray_id)
-        self._failed_since: Dict[str, float] = {}
-
         for cfg in (printer_configs or []):
             name = cfg["name"]
             printer_type = cfg.get("type", "bambulab").lower()
@@ -107,17 +102,8 @@ class FarmManager:
         return self._printer_types.get(name, "bambulab")
 
     def _effective_status(self, name: str, client: PrinterClient) -> PrintStatus:
-        """Return farm-facing status, clearing stale FAILED after a short delay."""
-        status = client.state.status
-        if status != PrintStatus.FAILED:
-            self._failed_since.pop(name, None)
-            return status
-
-        now = time.monotonic()
-        first_seen = self._failed_since.setdefault(name, now)
-        if now - first_seen >= FAILED_STATUS_CLEAR_SECONDS:
-            return PrintStatus.IDLE
-        return status
+        """Return the printer's reported status without masking failures."""
+        return client.state.status
 
     def load_gate_configs(self, job_queue) -> None:
         """Load persisted MMU gate configs from the database into memory."""

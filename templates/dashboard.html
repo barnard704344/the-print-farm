@@ -1193,6 +1193,7 @@
             border-radius: 8px;
             cursor: pointer;
             transform-origin: center;
+            touch-action: manipulation;
         }
 
         .camera-placeholder {
@@ -1211,6 +1212,7 @@
         .camera-btn {
             position: absolute;
             top: 6px;
+            z-index: 2;
             padding: 2px 8px;
             font-size: 11px;
             background: rgba(0,0,0,0.6);
@@ -2051,17 +2053,12 @@
 
         <!-- Settings Tab (Admin only) -->
         <div class="tab-content" id="tab-settings">
-            <!-- API Key -->
+            <!-- API access -->
             <div class="setup-section" style="max-width:700px; margin-bottom:24px;">
-                <h3 style="margin-bottom:16px;">API Key</h3>
-                <p style="color:var(--text-muted); font-size:13px; margin-bottom:12px;">
-                    Use this key to connect OrcaSlicer, external scripts, or the REST API.
+                <h3 style="margin-bottom:16px;">API Access</h3>
+                <p style="color:var(--text-muted); font-size:13px;">
+                    The API key is stored only in the server configuration and is never sent to dashboard browsers.
                 </p>
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <input type="text" id="apiKeyDisplay" readonly class="ad-input" style="flex:1; font-family:monospace; letter-spacing:1px;">
-                    <button class="btn" onclick="copyApiKey()" title="Copy to clipboard" style="white-space:nowrap;">📋 Copy</button>
-                </div>
-                <div id="apiKeyCopied" style="font-size:12px; color:var(--accent); margin-top:4px; display:none;">Copied to clipboard</div>
             </div>
 
             <div class="setup-section" style="max-width:700px;">
@@ -2085,7 +2082,7 @@
                                 <div style="display:grid; grid-template-columns:1fr auto; gap:8px;">
                                     <div>
                                         <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Port</label>
-                                        <input type="number" id="adPort" placeholder="389" value="389" class="ad-input">
+                                        <input type="number" id="adPort" placeholder="636" value="636" class="ad-input">
                                     </div>
                                     <div>
                                         <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">SSL</label>
@@ -2535,7 +2532,7 @@
         <div class="camera-modal" onclick="event.stopPropagation()">
             <div class="camera-modal-title" id="cameraModalTitle"></div>
             <img id="cameraModalImg" src="" alt="Camera Feed">
-            <button class="camera-modal-rotate" id="cameraModalRotate" onclick="rotateCamera(currentCameraModalName)" title="Rotate camera feed">&#8635; 0&deg;</button>
+            <button class="camera-modal-rotate" id="cameraModalRotate" title="Rotate camera feed">&#8635; 0&deg;</button>
             <button class="camera-modal-close" onclick="closeCameraModal()">&times;</button>
         </div>
     </div>
@@ -3087,7 +3084,7 @@
                 }
                 const roleLabel = userRole === 'staff' ? 'Staff' : userRole === 'student' ? 'Student' : 'Admin';
                 const roleColor = isAdmin ? 'var(--accent)' : 'var(--info)';
-                const nameStr = displayName ? ` — ${displayName}` : '';
+                const nameStr = displayName ? ` — ${escapeHtml(displayName)}` : '';
                 area.innerHTML = `<span style="font-size:12px; color:${roleColor}; margin-right:8px;">${roleLabel}${nameStr}</span>
                     <button class="btn" onclick="doLogout()" style="font-size:12px; padding:4px 12px;">Logout</button>`;
             } else {
@@ -3196,19 +3193,6 @@
             updateAuthUI();
         }
 
-        // ── API Key Display ───────────────────────────────────
-        function loadApiKey() {
-            document.getElementById('apiKeyDisplay').value = '{{ api_key }}';
-        }
-        function copyApiKey() {
-            const key = document.getElementById('apiKeyDisplay').value;
-            navigator.clipboard.writeText(key).then(() => {
-                const msg = document.getElementById('apiKeyCopied');
-                msg.style.display = '';
-                setTimeout(() => msg.style.display = 'none', 2000);
-            });
-        }
-
         function updatePrintAccessUI() {
             const upload = document.getElementById('uploadArea');
             const notice = document.getElementById('printAccessNotice');
@@ -3272,10 +3256,10 @@
                     adEnabled = payload.enabled;
                     resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; Configuration saved</span>';
                 } else {
-                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(data.message)}</span>`;
                 }
             } catch (e) {
-                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(e.message)}</span>`;
             }
         }
 
@@ -3299,10 +3283,10 @@
                 if (data.ok) {
                     resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; Connection successful</span>';
                 } else {
-                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(data.message)}</span>`;
                 }
             } catch (e) {
-                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(e.message)}</span>`;
             }
         }
 
@@ -3338,10 +3322,10 @@
                     resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; Student access lists saved</span>';
                     await checkAuth();
                 } else {
-                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message || 'Save failed'}</span>`;
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(data.message || 'Save failed')}</span>`;
                 }
             } catch (e) {
-                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(e.message)}</span>`;
             }
         }
 
@@ -3404,10 +3388,10 @@
                 if (data.ok) {
                     resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; Obico configuration saved. Restart service to apply.</span>';
                 } else {
-                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(data.message)}</span>`;
                 }
             } catch (e) {
-                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(e.message)}</span>`;
             }
         }
 
@@ -3430,12 +3414,12 @@
                 });
                 const data = await res.json();
                 if (data.ok) {
-                    resultEl.innerHTML = `<span style="color:var(--accent);">&#10003; Connected — printer state: ${data.state || 'unknown'}</span>`;
+                    resultEl.innerHTML = `<span style="color:var(--accent);">&#10003; Connected — printer state: ${escapeHtml(data.state || 'unknown')}</span>`;
                 } else {
-                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(data.message)}</span>`;
                 }
             } catch (e) {
-                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(e.message)}</span>`;
             }
         }
 
@@ -3445,6 +3429,7 @@
             if (!url) return '';
             try {
                 const u = new URL(url);
+                if (!['http:', 'https:'].includes(u.protocol)) return '';
                 if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') {
                     u.hostname = window.location.hostname;
                 }
@@ -3489,13 +3474,13 @@
                 });
                 const data = await res.json();
                 if (data.ok) {
-                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; ' + data.message + '</span>';
+                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; ' + escapeHtml(data.message) + '</span>';
                     initSpoolmanTab();
                 } else {
-                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(data.message)}</span>`;
                 }
             } catch (e) {
-                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(e.message)}</span>`;
             }
         }
 
@@ -3522,14 +3507,14 @@
                     document.getElementById('spoolmanVersion').textContent = data.version || '?';
                     document.getElementById('spoolmanDbType').textContent = data.db_type || '?';
                     document.getElementById('spoolmanHealth').textContent = data.healthy ? 'Healthy' : 'Degraded';
-                    if (!silent) resultEl.innerHTML = `<span style="color:var(--accent);">&#10003; Connected to Spoolman v${data.version}</span>`;
+                    if (!silent) resultEl.innerHTML = `<span style="color:var(--accent);">&#10003; Connected to Spoolman v${escapeHtml(data.version)}</span>`;
                 } else {
                     infoEl.style.display = 'none';
-                    if (!silent) resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                    if (!silent) resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(data.message)}</span>`;
                 }
             } catch (e) {
                 infoEl.style.display = 'none';
-                if (!silent) resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+                if (!silent) resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(e.message)}</span>`;
             }
         }
 
@@ -3546,8 +3531,8 @@
                 (data.all_printers || []).forEach(name => {
                     const checked = poolSet.has(name) ? 'checked' : '';
                     html += `<label style="display:flex; align-items:center; gap:10px; cursor:pointer; padding:6px 0;">
-                        <input type="checkbox" class="pool-printer-cb" value="${name}" ${checked} style="width:16px; height:16px;">
-                        <span>${name}</span>
+                        <input type="checkbox" class="pool-printer-cb" value="${escapeHtml(name)}" ${checked} style="width:16px; height:16px;">
+                        <span>${escapeHtml(name)}</span>
                     </label>`;
                 });
                 container.innerHTML = html;
@@ -3566,12 +3551,12 @@
                 });
                 const data = await res.json();
                 if (data.ok) {
-                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; ' + data.message + '</span>';
+                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; ' + escapeHtml(data.message) + '</span>';
                 } else {
-                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(data.message)}</span>`;
                 }
             } catch (e) {
-                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(e.message)}</span>`;
             }
         }
 
@@ -3828,12 +3813,12 @@
                         renderPlateReferences(name, data.inspection_references || data.references || [], 'inspection');
                         updatePlateModeUI();
                     }
-                    resultEl.innerHTML = `<span style="color:var(--accent);">&#10003; ${data.message || 'Build plate detection saved'}</span>`;
+                    resultEl.innerHTML = `<span style="color:var(--accent);">&#10003; ${escapeHtml(data.message || 'Build plate detection saved')}</span>`;
                 } else {
-                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message || data.error || 'Save failed'}</span>`;
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(data.message || data.error || 'Save failed')}</span>`;
                 }
             } catch (e) {
-                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(e.message)}</span>`;
             }
         }
 
@@ -3855,10 +3840,10 @@
                     const label = phase === 'rest' ? 'resting-bed' : 'raised inspection';
                     resultEl.innerHTML = `<span style="color:var(--accent);">&#10003; Empty ${label} reference captured</span>`;
                 } else {
-                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message || 'Capture failed'}</span>`;
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(data.message || 'Capture failed')}</span>`;
                 }
             } catch (e) {
-                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(e.message)}</span>`;
             }
         }
 
@@ -3883,7 +3868,7 @@
                     ? `<span style="color:var(--accent);">&#10003; ${data.message || 'Bed moved'}</span>`
                     : `<span style="color:var(--danger);">&#10007; ${data.message || data.error || 'Could not move bed'}</span>`;
             } catch (e) {
-                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(e.message)}</span>`;
             }
         }
 
@@ -3918,16 +3903,16 @@
                         const score = check.score != null ? `${check.score.toFixed(1)} / ${check.threshold}` : 'no score';
                         const lineColor = check.ok ? 'var(--accent)' : (nonMatchingPosition ? 'var(--text-muted)' : 'var(--danger)');
                         const message = nonMatchingPosition ? 'Does not match current bed position' : (check.message || 'Test complete');
-                        return `<div style="color:${lineColor};">${ok} ${phase}: ${message} (${score})</div>`;
+                        return `<div style="color:${lineColor};">${ok} ${phase}: ${escapeHtml(message)} (${score})</div>`;
                     }).join('');
-                    resultEl.innerHTML = `<div style="color:${color};">${prefix} ${data.message || data.error || 'Test complete'}</div>${details}`;
+                    resultEl.innerHTML = `<div style="color:${color};">${prefix} ${escapeHtml(data.message || data.error || 'Test complete')}</div>${details}`;
                 } else {
                     const score = data.score != null ? ` Difference ${data.score.toFixed(1)} / limit ${data.threshold}` : '';
                     const phase = data.phase ? ` ${data.phase.charAt(0).toUpperCase() + data.phase.slice(1)} check.` : '';
-                    resultEl.innerHTML = `<span style="color:${color};">${prefix} ${phase} ${data.message || data.error || 'Test complete'}.${score}</span>`;
+                    resultEl.innerHTML = `<span style="color:${color};">${prefix} ${phase} ${escapeHtml(data.message || data.error || 'Test complete')}.${score}</span>`;
                 }
             } catch (e) {
-                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(e.message)}</span>`;
             }
         }
 
@@ -3949,11 +3934,11 @@
                     const count = check.count != null ? `${check.count} image${check.count === 1 ? '' : 's'}` : '';
                     const score = check.score != null ? ` (${check.score.toFixed(1)} / ${check.threshold})` : '';
                     const lineColor = check.ok ? 'var(--accent)' : 'var(--danger)';
-                    return `<div style="color:${lineColor};">${ok} ${phase}: ${check.message || 'Reference check complete'} ${count}${score}</div>`;
+                    return `<div style="color:${lineColor};">${ok} ${phase}: ${escapeHtml(check.message || 'Reference check complete')} ${count}${score}</div>`;
                 }).join('');
-                resultEl.innerHTML = `<div style="color:${color};">${prefix} ${data.message || data.error || 'Reference check complete'}</div>${details}`;
+                resultEl.innerHTML = `<div style="color:${color};">${prefix} ${escapeHtml(data.message || data.error || 'Reference check complete')}</div>${details}`;
             } catch (e) {
-                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(e.message)}</span>`;
             }
         }
 
@@ -3977,7 +3962,7 @@
                     .filter(score => score != null);
                 const baselineScore = scores.length ? Math.min(...scores) : data.score;
                 if (baselineScore == null) {
-                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message || data.error || 'Could not tune baseline'}</span>`;
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(data.message || data.error || 'Could not tune baseline')}</span>`;
                     return;
                 }
                 const tuned = Math.max(8, Math.min(80, Math.ceil(baselineScore + 6)));
@@ -3987,7 +3972,7 @@
                 await savePlateDetectionConfig();
                 resultEl.innerHTML = `<span style="color:var(--accent);">&#10003; Tuned empty baseline. Limit set to ${tuned} from best matching difference ${baselineScore.toFixed(1)}.</span>`;
             } catch (e) {
-                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(e.message)}</span>`;
             }
         }
 
@@ -4035,7 +4020,7 @@
                     window._uiTimezone = tz;
                     resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; Saved</span>';
                 } else {
-                    resultEl.innerHTML = `<span style="color:var(--danger);">${data.message || 'Error'}</span>`;
+                    resultEl.innerHTML = `<span style="color:var(--danger);">${escapeHtml(data.message || 'Error')}</span>`;
                 }
             } catch (e) {
                 resultEl.textContent = 'Failed to save';
@@ -4107,12 +4092,12 @@
                 });
                 const data = await res.json();
                 if (data.ok) {
-                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; ' + data.message + '</span>';
+                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; ' + escapeHtml(data.message) + '</span>';
                 } else {
-                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(data.message)}</span>`;
                 }
             } catch (e) {
-                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(e.message)}</span>`;
             }
         }
 
@@ -4124,12 +4109,12 @@
                 const res = await fetch(BASE + '/api/notifications/test/email', { method: 'POST' });
                 const data = await res.json();
                 if (data.ok) {
-                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; ' + data.message + '</span>';
+                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; ' + escapeHtml(data.message) + '</span>';
                 } else {
-                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(data.message)}</span>`;
                 }
             } catch (e) {
-                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(e.message)}</span>`;
             }
         }
 
@@ -4141,12 +4126,12 @@
                 const res = await fetch(BASE + '/api/notifications/test/discord', { method: 'POST' });
                 const data = await res.json();
                 if (data.ok) {
-                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; ' + data.message + '</span>';
+                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; ' + escapeHtml(data.message) + '</span>';
                 } else {
-                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(data.message)}</span>`;
                 }
             } catch (e) {
-                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(e.message)}</span>`;
             }
         }
 
@@ -4165,7 +4150,7 @@
                 const res = await fetch(BASE + '/api/update/check');
                 const data = await res.json();
                 if (!data.ok) {
-                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(data.message)}</span>`;
                     return;
                 }
                 if (data.current_commit) {
@@ -4176,12 +4161,12 @@
                 } else {
                     resultEl.innerHTML = `<span style="color:var(--warning);">${data.updates_available} update(s) available</span>`;
                     applyBtn.style.display = '';
-                    const items = data.commits.map(c => `<li style="margin-bottom:4px; font-family:monospace; font-size:12px;">${c}</li>`).join('');
+                    const items = data.commits.map(c => `<li style="margin-bottom:4px; font-family:monospace; font-size:12px;">${escapeHtml(c)}</li>`).join('');
                     commitListEl.innerHTML = `<ul style="margin:0; padding-left:20px; color:var(--text-muted);">${items}</ul>`;
                     commitListEl.style.display = 'block';
                 }
             } catch (e) {
-                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(e.message)}</span>`;
             } finally {
                 checkBtn.disabled = false;
             }
@@ -4203,11 +4188,11 @@
                     resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; Update applied — service is restarting. Page will reload shortly…</span>';
                     setTimeout(() => location.reload(), 8000);
                 } else {
-                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${data.message}</span>`;
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(data.message)}</span>`;
                     applyBtn.disabled = false;
                 }
             } catch (e) {
-                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${e.message}</span>`;
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(e.message)}</span>`;
                 applyBtn.disabled = false;
             }
         }
@@ -4227,11 +4212,11 @@
                 const checkData = await checkRes.json();
                 if (!checkData.ok || !checkData.username) return;
 
-                // Step 2: Send the verified username to Flask to create session
+                // Step 2: Ask Flask to consume the proxy-verified identity header.
                 const loginRes = await fetch(BASE + '/api/auth/sso', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: checkData.username }),
+                    body: '{}',
                 });
                 if (loginRes.ok) {
                     const loginData = await loginRes.json();
@@ -4257,15 +4242,15 @@
             section.style.display = '';
             tbody.innerHTML = entries.map(([name, p]) => `
                 <tr style="border-bottom:1px solid var(--border);">
-                    <td style="padding:8px;"><strong>${name}</strong></td>
-                    <td style="padding:8px;"><code style="user-select:all;">${p.virtual_ip}</code></td>
-                    <td style="padding:8px;"><code style="user-select:all;">${p.serial || '—'}</code>
-                        ${p.serial ? `<button class="btn" style="font-size:10px;margin-left:6px;" onclick="copyText('${p.serial}')">Copy</button>` : ''}
+                    <td style="padding:8px;"><strong>${escapeHtml(name)}</strong></td>
+                    <td style="padding:8px;"><code style="user-select:all;">${escapeHtml(p.virtual_ip)}</code></td>
+                    <td style="padding:8px;"><code style="user-select:all;">${escapeHtml(p.serial || '—')}</code>
+                        ${p.serial ? `<button class="btn" style="font-size:10px;margin-left:6px;" onclick="copyText(${jsArg(p.serial)})">Copy</button>` : ''}
                     </td>
-                    <td style="padding:8px;"><code style="user-select:all;">${p.access_code || '—'}</code>
-                        ${p.access_code ? `<button class="btn" style="font-size:10px;margin-left:6px;" onclick="copyText('${p.access_code}')">Copy</button>` : ''}
+                    <td style="padding:8px;"><code style="user-select:all;">${escapeHtml(p.access_code || '—')}</code>
+                        ${p.access_code ? `<button class="btn" style="font-size:10px;margin-left:6px;" onclick="copyText(${jsArg(p.access_code)})">Copy</button>` : ''}
                     </td>
-                    <td style="padding:8px;"><button class="btn" style="font-size:11px;" onclick="copyText('${p.virtual_ip}')">Copy IP</button></td>
+                    <td style="padding:8px;"><button class="btn" style="font-size:11px;" onclick="copyText(${jsArg(p.virtual_ip)})">Copy IP</button></td>
                 </tr>`).join('');
         }
 
@@ -4274,7 +4259,6 @@
             try {
                 const res = await fetch(BASE + '/api/farm/status');
                 const data = await res.json();
-                const apiKey = '{{ api_key }}';
                 const tbody = document.getElementById('orca-printer-table');
                 if (!tbody) return;
                 let rows = '';
@@ -4282,7 +4266,7 @@
                 rows += `<tr style="border-bottom:1px solid var(--border);">
                     <td style="padding:8px;"><strong>General Queue</strong><br><span style="font-size:11px;color:var(--text-muted);">Any available printer</span></td>
                     <td style="padding:8px;"><code style="user-select:all;">${location.hostname}</code></td>
-                    <td style="padding:8px;"><code style="user-select:all;font-size:11px;">${apiKey}</code></td>
+                    <td style="padding:8px;"><span style="font-size:11px;color:var(--text-muted);">Use the key from server config</span></td>
                     <td style="padding:8px;"><button class="btn" style="font-size:11px;" onclick="copyText('${location.hostname}')">Copy</button></td>
                 </tr>`;
                 // Per-printer rows — test port reachability first
@@ -4290,6 +4274,8 @@
                 const portChecks = await Promise.allSettled(
                     printerEntries.map(([, p]) =>
                         fetch(`http://${location.hostname}:${p.orca_port}/api/version`, {
+                            mode: 'no-cors',
+                            cache: 'no-store',
                             signal: AbortSignal.timeout(3000)
                         }).then(() => true, () => false)
                     )
@@ -4301,10 +4287,10 @@
                     if (!reachable) { blocked.push(`${name} (port ${p.orca_port})`); continue; }
                     const hostname = `${location.hostname}:${p.orca_port}`;
                     rows += `<tr style="border-bottom:1px solid var(--border);">
-                        <td style="padding:8px;"><strong>${name}</strong><br><span style="font-size:11px;color:var(--text-muted);">${p.type || ''}</span></td>
-                        <td style="padding:8px;"><code style="user-select:all;">${hostname}</code></td>
-                        <td style="padding:8px;"><code style="user-select:all;font-size:11px;">${apiKey}</code></td>
-                        <td style="padding:8px;"><button class="btn" style="font-size:11px;" onclick="copyText('${hostname}')">Copy</button></td>
+                        <td style="padding:8px;"><strong>${escapeHtml(name)}</strong><br><span style="font-size:11px;color:var(--text-muted);">${escapeHtml(p.type || '')}</span></td>
+                        <td style="padding:8px;"><code style="user-select:all;">${escapeHtml(hostname)}</code></td>
+                        <td style="padding:8px;"><span style="font-size:11px;color:var(--text-muted);">Use the key from server config</span></td>
+                        <td style="padding:8px;"><button class="btn" style="font-size:11px;" onclick="copyText(${jsArg(hostname)})">Copy</button></td>
                     </tr>`;
                 }
                 tbody.innerHTML = rows;
@@ -4338,7 +4324,7 @@
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 tab.classList.add('active');
                 document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
-                if (tab.dataset.tab === 'settings') { loadApiKey(); loadADConfig(); loadStudentAccessConfig(); populateObicoPrinterDropdown(); populatePlatePrinterDropdown(); loadSpoolmanConfig(); loadPoolConfig(); loadNotificationConfig(); loadUiConfig(); }
+                if (tab.dataset.tab === 'settings') { loadADConfig(); loadStudentAccessConfig(); populateObicoPrinterDropdown(); populatePlatePrinterDropdown(); loadSpoolmanConfig(); loadPoolConfig(); loadNotificationConfig(); loadUiConfig(); }
                 if (tab.dataset.tab === 'library') refreshLibrary();
             });
         });
@@ -4402,7 +4388,6 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Api-Key': '{{ api_key }}',
                 },
                 body: body ? JSON.stringify(body) : undefined,
             });
@@ -4453,18 +4438,20 @@
         }
 
         function renderTemperatureTiles(name, p, isAdmin, isBambu, isKlipper) {
+            const nameArg = jsArg(name);
+            const safeId = escapeHtml(String(name).replace(/[^A-Za-z0-9_.-]/g, '_'));
             if (isKlipper) {
                 const hasToolchanger = isKlipperToolchanger(p);
                 const toolTiles = hasToolchanger ? '' : klipperToolsForDisplay(p).map((tool, idx) => `
                     <div class="temp-item klipper-tool-temp" data-tool-index="${idx}">
-                        <div class="temp-label">${tool.name || `T${idx}`}</div>
+                        <div class="temp-label">${escapeHtml(tool.name || `T${idx}`)}</div>
                         <div class="temp-value" data-field="tool-temp">${formatTemp(tool.temperature)}</div>
                         <div class="temp-target" data-field="tool-target">/ ${formatTemp(tool.target)}</div>
                         <div class="temp-warning" data-field="tool-warning">${tool.docked ? 'Docked' : '&nbsp;'}</div>
                         ${isAdmin ? `<div class="temp-control">
-                            <input type="number" class="temp-input" id="tool-${idx}-${name}" placeholder="°C" min="0" max="300" ${tool.docked ? 'disabled' : ''}>
-                            <button class="temp-set-btn" onclick="setKlipperToolTemp('${name}', ${idx}, '${tool.object || 'extruder'}')" ${tool.docked ? 'disabled title="Tool is docked"' : ''}>Set</button>
-                            <button class="temp-off-btn" onclick="setTemp('${name}','nozzle_temp',0,{heater:'${tool.object || 'extruder'}'})">Off</button>
+                            <input type="number" class="temp-input" id="tool-${idx}-${safeId}" placeholder="°C" min="0" max="300" ${tool.docked ? 'disabled' : ''}>
+                            <button class="temp-set-btn" onclick="setKlipperToolTemp(${nameArg}, ${idx}, ${jsArg(tool.object || 'extruder')})" ${tool.docked ? 'disabled title="Tool is docked"' : ''}>Set</button>
+                            <button class="temp-off-btn" onclick="setTemp(${nameArg},'nozzle_temp',0,{heater:${jsArg(tool.object || 'extruder')}})">Off</button>
                         </div>` : ''}
                     </div>
                 `).join('');
@@ -4475,9 +4462,9 @@
                         <div class="temp-value" data-field="bed-temp">${formatTemp(p.bed_temper)}</div>
                         <div class="temp-target" data-field="bed-target">/ ${formatTemp(p.bed_target_temper)}</div>
                         ${isAdmin ? `<div class="temp-control">
-                            <input type="number" class="temp-input" id="bed-${name}" placeholder="°C" min="0" max="120">
-                            <button class="temp-set-btn" onclick="setBedTemp('${name}')">Set</button>
-                            <button class="temp-off-btn" onclick="setTemp('${name}','bed_temp',0)">Off</button>
+                            <input type="number" class="temp-input" id="bed-${safeId}" placeholder="°C" min="0" max="120">
+                            <button class="temp-set-btn" onclick="setBedTemp(${nameArg})">Set</button>
+                            <button class="temp-off-btn" onclick="setTemp(${nameArg},'bed_temp',0)">Off</button>
                         </div>` : ''}
                     </div>
                 `;
@@ -4489,9 +4476,9 @@
                     <div class="temp-value" data-field="nozzle-temp">${formatTemp(p.nozzle_temper)}</div>
                     <div class="temp-target" data-field="nozzle-target">/ ${formatTemp(p.nozzle_target_temper)}</div>
                     ${isAdmin ? `<div class="temp-control">
-                        <input type="number" class="temp-input" id="nozzle-${name}" placeholder="°C" min="0" max="300">
-                        <button class="temp-set-btn" onclick="setNozzleTemp('${name}')">Set</button>
-                        <button class="temp-off-btn" onclick="setTemp('${name}','nozzle_temp',0)">Off</button>
+                        <input type="number" class="temp-input" id="nozzle-${safeId}" placeholder="°C" min="0" max="300">
+                        <button class="temp-set-btn" onclick="setNozzleTemp(${nameArg})">Set</button>
+                        <button class="temp-off-btn" onclick="setTemp(${nameArg},'nozzle_temp',0)">Off</button>
                     </div>` : ''}
                 </div>
                 <div class="temp-item">
@@ -4499,9 +4486,9 @@
                     <div class="temp-value" data-field="bed-temp">${formatTemp(p.bed_temper)}</div>
                     <div class="temp-target" data-field="bed-target">/ ${formatTemp(p.bed_target_temper)}</div>
                     ${isAdmin ? `<div class="temp-control">
-                        <input type="number" class="temp-input" id="bed-${name}" placeholder="°C" min="0" max="120">
-                        <button class="temp-set-btn" onclick="setBedTemp('${name}')">Set</button>
-                        <button class="temp-off-btn" onclick="setTemp('${name}','bed_temp',0)">Off</button>
+                        <input type="number" class="temp-input" id="bed-${safeId}" placeholder="°C" min="0" max="120">
+                        <button class="temp-set-btn" onclick="setBedTemp(${nameArg})">Set</button>
+                        <button class="temp-off-btn" onclick="setTemp(${nameArg},'bed_temp',0)">Off</button>
                     </div>` : ''}
                 </div>
                 <div class="temp-item">
@@ -4516,7 +4503,7 @@
         let availablePrinters = [];  // Track available printers for manual assign
 
         function renderPrinterCard(name, p) {
-            const status = p.status.toLowerCase();
+            const status = String(p.status || 'unknown').toLowerCase().replace(/[^a-z_]/g, '');
             const connected = p.connected;
             const connClass = connected ? 'conn-online' : 'conn-offline';
             const statusLabel = connected ? p.status : 'OFFLINE';
@@ -4529,37 +4516,36 @@
 
             const isRunning = status === 'running';
             const isPaused = status === 'paused' || status === 'pause_filament';
+            const safeName = escapeHtml(name);
+            const nameArg = jsArg(name);
+            const safeType = escapeHtml(pType);
+            const percent = clampNumber(p.mc_percent, 0, 100);
 
             return `
-                <div class="printer-card ${cardClass}" data-printer="${name}" data-type="${pType}">
+                <div class="printer-card ${cardClass}" data-printer="${safeName}" data-type="${safeType}">
                     <div class="printer-header">
                         <span class="printer-name">
-                            <span class="conn-badge ${connClass}"></span><span class="printer-display-name">${name}</span>${typeBadge}
-                            ${isAdmin ? `<button class="printer-rename-btn" onclick="renamePrinter('${name}')" title="Rename printer">&#9998;</button>` : ''}
+                            <span class="conn-badge ${connClass}"></span><span class="printer-display-name">${safeName}</span>${typeBadge}
+                            ${isAdmin ? `<button class="printer-rename-btn" onclick="renamePrinter(${nameArg})" title="Rename printer">&#9998;</button>` : ''}
                         </span>
                         <div class="printer-header-actions">
-                            <span class="printer-status ${statusBadge}" data-field="status">${statusLabel}</span>
-                            ${isAuthenticated ? `<button class="btn printer-card-action" onclick="openPrinterDetails('${name}')" title="View printer details">Details</button>` : ''}
-                            ${isAdmin ? `<button class="printer-remove-btn" onclick="removePrinter('${name}')" title="Remove printer">&times;</button>` : ''}
+                            <span class="printer-status ${statusBadge}" data-field="status">${escapeHtml(statusLabel)}</span>
+                            ${isAuthenticated ? `<button class="btn printer-card-action" onclick="openPrinterDetails(${nameArg})" title="View printer details">Details</button>` : ''}
+                            ${isAdmin ? `<button class="printer-remove-btn" onclick="removePrinter(${nameArg})" title="Remove printer">&times;</button>` : ''}
                         </div>
                     </div>
                     ${isAdmin ? `<div class="staff-only-toggle" style="display:flex;align-items:center;gap:6px;padding:2px 8px;font-size:11px;">
                         <label style="display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--text-muted);">
-                            <input type="checkbox" ${p.staff_only ? 'checked' : ''} onchange="toggleStaffOnly('${name}', this.checked)"> Staff only
+                            <input type="checkbox" ${p.staff_only ? 'checked' : ''} onchange="toggleStaffOnly(${nameArg}, this.checked)"> Staff only
                         </label>
                     </div>` : ''}
-                    ${p.orca_port ? `<div class="printer-orca-port" style="padding:2px 8px;font-size:10px;color:var(--text-muted);">OrcaSlicer: <span style="color:var(--accent);user-select:all;cursor:text;">${location.hostname}:${p.orca_port}</span></div>` : ''}
-                    <div class="printer-job" data-field="job">${p.subtask_name || 'No active job'}</div>
+                    ${p.orca_port ? `<div class="printer-orca-port" style="padding:2px 8px;font-size:10px;color:var(--text-muted);">OrcaSlicer: <span style="color:var(--accent);user-select:all;cursor:text;">${escapeHtml(location.hostname)}:${clampNumber(p.orca_port, 1, 65535)}</span></div>` : ''}
+                    <div class="printer-job" data-field="job">${escapeHtml(p.subtask_name || 'No active job')}</div>
                     <div class="progress-bar-container">
-                        <div class="progress-bar" data-field="progress" style="width:${isRunning || isPaused ? p.mc_percent : 0}%"></div>
+                        <div class="progress-bar" data-field="progress" style="width:${isRunning || isPaused ? percent : 0}%"></div>
                     </div>
-                    <div class="camera-section" id="cam-${name}">
-                        ${cameraStreaming[name]
-                            ? `<img class="camera-feed" src="${BASE}/api/camera/${encodeURIComponent(name)}/snapshot?t=${Date.now()}" alt="Camera" onclick="openCameraModal('${name}')" style="transform:${cameraRotationStyle(name)}">
-                               <button class="camera-btn camera-rotate-btn" onclick="event.stopPropagation();rotateCamera('${name}')" title="Rotate camera feed">&#8635; ${getCameraRotation(name)}&deg;</button>
-                               <button class="camera-btn camera-stop-btn" onclick="event.stopPropagation();toggleCamera('${name}',false)">&#x25A0; Stop</button>`
-                            : `<div class="camera-placeholder" onclick="toggleCamera('${name}',true)">&#x1F4F7; Start Camera</div>`
-                        }
+                    <div class="camera-section" id="cam-${safeName}">
+                        ${cameraSectionMarkup(name, cameraStreaming[name])}
                     </div>
                     <div class="printer-meta">
                         <span data-field="percent">${isRunning ? p.mc_percent + '%' : '--'}</span>
@@ -4643,22 +4629,22 @@
         function renderMmuSection(name, p) {
             if (!p.has_mmu || !p.mmu || !p.mmu.enabled) return '';
             const mmu = p.mmu;
+            const nameArg = jsArg(name);
             const gates = (mmu.gates || []).map(g => {
                 const isActive = g.gate === mmu.gate;
                 // gate_status: 0=empty, 1=unknown, 2=loaded
                 const isEmpty = g.status === 0;
-                const swatchColor = g.color || (g.status === 2 ? '#888' : '#333');
+                const swatchColor = safeCssColor(g.color || (g.status === 2 ? '#888' : '#333'), '#333333');
                 const label = `T${g.gate}`;
                 const material = g.material || g.filament_name || (g.status === 2 ? '?' : '');
-                const safeColor = (g.color && g.color.startsWith('#')) ? g.color : '#333333';
-                const safeMat = (material || 'PLA').replace(/'/g, "\\'");
+                const safeColor = safeCssColor(g.color, '#333333');
                 return `
-                    <div class="mmu-gate ${isActive ? 'active' : ''} ${isEmpty ? 'empty' : ''}" data-printer="${name}" data-gate="${g.gate}"
-                         title="Gate ${g.gate}${material ? ' · ' + material : ''}${g.temperature ? ' · ' + g.temperature + '°C' : ''}${!isEmpty ? ' · Click to configure' : ''}"
-                         ${!isEmpty ? `onclick="event.stopPropagation();openGateConfig('${name}', ${g.gate}, '${safeMat}', '${safeColor}', ${g.spool_id || -1})"` : ''}>
+                    <div class="mmu-gate ${isActive ? 'active' : ''} ${isEmpty ? 'empty' : ''}" data-printer="${escapeHtml(name)}" data-gate="${Number(g.gate)}"
+                         title="${escapeHtml(`Gate ${g.gate}${material ? ' · ' + material : ''}${g.temperature ? ' · ' + g.temperature + '°C' : ''}${!isEmpty ? ' · Click to configure' : ''}`)}"
+                         ${!isEmpty ? `onclick="event.stopPropagation();openGateConfig(${nameArg}, ${Number(g.gate)}, ${jsArg(material || 'PLA')}, ${jsArg(safeColor)}, ${Number(g.spool_id) || -1})"` : ''}>
                         <div class="mmu-gate-swatch" style="background:${isEmpty ? '#333' : swatchColor}"></div>
                         <div class="mmu-gate-label">${label}</div>
-                        ${!isEmpty && material ? `<div class="mmu-gate-material">${material}</div>` : ''}
+                        ${!isEmpty && material ? `<div class="mmu-gate-material">${escapeHtml(material)}</div>` : ''}
                         ${!isEmpty ? '<div class="mmu-gate-edit">&#9998;</div>' : ''}
                     </div>
                 `;
@@ -4669,17 +4655,17 @@
             const toolLabel = mmu.tool >= 0 ? `T${mmu.tool}` : 'None';
             const tcCount = mmu.num_toolchanges || 0;
             const encoderFlow = mmu.encoder && mmu.encoder.flow_rate != null ? ` · Flow: ${mmu.encoder.flow_rate}%` : '';
-            const unitLabel = mmu.unit_name ? ` <span class="mmu-header-info">(${mmu.unit_name})</span>` : '';
+            const unitLabel = mmu.unit_name ? ` <span class="mmu-header-info">(${escapeHtml(mmu.unit_name)})</span>` : '';
 
             return `
-                <div class="mmu-section" data-field="mmu" onclick="openHappyHareModal('${name}')" title="Click to open Happy Hare controls">
+                <div class="mmu-section" data-field="mmu" onclick="openHappyHareModal(${nameArg})" title="Click to open Happy Hare controls">
                     <div class="mmu-header">
                         <span>🔀 MMU${unitLabel} · ${mmu.num_gates} gates</span>
                         <span>Tool: ${toolLabel}</span>
                     </div>
                     <div class="mmu-gates">${gates}</div>
                     <div class="mmu-status-row">
-                        <span class="mmu-tag ${filTag}">${filState}</span>
+                        <span class="mmu-tag ${filTag}">${escapeHtml(filState)}</span>
                         <span>Changes: ${tcCount}${encoderFlow}</span>
                         ${mmu.runout ? '<span style="color:var(--danger)">⚠ Runout</span>' : ''}
                     </div>
@@ -4700,13 +4686,13 @@
             const actionLabel = o.action_on_failure ? `Action: ${o.action_on_failure}` : '';
             const scoreLabel = score != null ? `${score}%` : '—';
             const printName = o.current_print ? (o.current_print.filename || `#${o.current_print.id || ''}`) : '';
-            const printInfo = printName ? `<span style="opacity:.7">${printName}</span>` : '';
+            const printInfo = printName ? `<span style="opacity:.7">${escapeHtml(printName)}</span>` : '';
 
             return `
                 <div class="obico-section" data-field="obico">
                     <div class="obico-header">
                         <span>🤖 Obico AI · ${watchIcon}</span>
-                        <span>${actionLabel}</span>
+                        <span>${escapeHtml(actionLabel)}</span>
                     </div>
                     <div class="obico-meter">
                         <div class="obico-bar ${barClass}" style="width:${score != null ? score : 0}%"></div>
@@ -4721,7 +4707,8 @@
 
         function renderAdaptiveFlowSection(name, p) {
             if (!p.adaptive_flow || !p.adaptive_flow.url) return '';
-            const url = p.adaptive_flow.url;
+            const url = safeHttpUrl(p.adaptive_flow.url);
+            if (!url) return '';
             return `
                 <div style="padding:6px 10px;background:#1a1c24;border-radius:6px;margin-top:6px;display:flex;align-items:center;justify-content:space-between;">
                     <span style="font-size:.82rem;">🌊 <a href="${url}" target="_blank" rel="noopener" style="color:#5bc0de;text-decoration:none;">Klipper Adaptive Flow</a></span>
@@ -4749,10 +4736,10 @@
                 const s = _spoolSummary(spoolData);
                 return `
                     <div class="spool-assign-row has-spool">
-                        <div class="spool-assign-swatch" style="background:${s.colorHex}"></div>
+                        <div class="spool-assign-swatch" style="background:${safeCssColor(s.colorHex)}"></div>
                         <div class="spool-assign-info">
-                            <div class="spool-name">${label}: ${s.vendor ? s.vendor + ' ' : ''}${s.fName}</div>
-                            <div class="spool-meta">${s.mat}${s.remaining ? ' · ' + s.remaining + ' left' : ''} · Spool #${spoolData.id}</div>
+                            <div class="spool-name">${escapeHtml(label)}: ${s.vendor ? escapeHtml(s.vendor) + ' ' : ''}${escapeHtml(s.fName)}</div>
+                            <div class="spool-meta">${escapeHtml(s.mat)}${s.remaining ? ' · ' + escapeHtml(s.remaining) + ' left' : ''} · Spool #${Number(spoolData.id)}</div>
                         </div>
                         <button class="spool-assign-btn" onclick="event.stopPropagation();openSpoolPicker(${assignArgs})">Change</button>
                         <button class="spool-assign-btn danger" onclick="event.stopPropagation();unassignSpool(${unassignArgs},${spoolData.id})">✕</button>
@@ -4760,7 +4747,7 @@
             }
             return `
                 <div class="spool-assign-row">
-                    <span style="color:var(--text-muted)">${label}: No spool assigned</span>
+                    <span style="color:var(--text-muted)">${escapeHtml(label)}: No spool assigned</span>
                     <button class="spool-assign-btn" onclick="event.stopPropagation();openSpoolPicker(${assignArgs})" style="margin-left:auto;">Assign Spool</button>
                 </div>`;
         }
@@ -4798,16 +4785,16 @@
 
         function renderFanRows(name, fans) {
             return fans.map(fan => {
-                const pct = Math.round(fan.speed * 100);
+                const pct = clampNumber(Math.round(fan.speed * 100), 0, 100);
                 const icon = fan.type === 'heater_fan' ? '🔥' : '🌀';
-                const displayName = fan.name.replace(/_/g, ' ');
-                const safeName = String(name).replace(/'/g, "\\'");
-                const safeObject = String(fan.object).replace(/'/g, "\\'");
+                const displayName = escapeHtml(String(fan.name || '').replace(/_/g, ' '));
+                const safeName = jsArg(name);
+                const safeObject = jsArg(fan.object);
                 if (fan.controllable && isAdmin) {
                     return `<div class="fanled-row">
                         <span class="fanled-name">${icon} ${displayName}</span>
                         <input type="range" class="fanled-slider" min="0" max="100" value="${pct}"
-                            onchange="setKlipperFan('${safeName}','${safeObject}',this.value/100)"
+                            onchange="setKlipperFan(${safeName},${safeObject},this.value/100)"
                             title="${pct}%">
                         <span class="fanled-pct">${pct}%</span>
                     </div>`;
@@ -4826,15 +4813,15 @@
             const stateLabel = docked ? 'Docked' : tool.active ? 'Active' : 'Ready';
             const stateClass = docked ? 'warn' : '';
             const heater = tool.object || 'extruder';
-            const safeName = String(name).replace(/'/g, "\\'");
-            const safeTool = String(toolName).replace(/'/g, "\\'");
-            const safeHeater = String(heater).replace(/'/g, "\\'");
+            const safeName = jsArg(name);
+            const safeTool = jsArg(toolName);
+            const safeHeater = jsArg(heater);
             const fanHtml = renderFanRows(name, fansForTool(p, tool));
             return `
-                <div class="toolhead-group ${tool.active ? 'active' : ''} ${docked ? 'docked' : ''}" data-tool-index="${idx}" data-tool-name="${safeTool}">
+                <div class="toolhead-group ${tool.active ? 'active' : ''} ${docked ? 'docked' : ''}" data-tool-index="${idx}" data-tool-name="${escapeHtml(toolName)}">
                     <div class="toolhead-header">
                         <div>
-                            <div class="toolhead-name">${toolName}</div>
+                            <div class="toolhead-name">${escapeHtml(toolName)}</div>
                             <div class="toolhead-state ${stateClass}" data-field="tool-warning">${stateLabel}</div>
                         </div>
                         <div class="toolhead-temp">
@@ -4843,8 +4830,8 @@
                         </div>
                         ${isAdmin ? `<div class="toolhead-control">
                             <input type="number" class="temp-input" id="tool-${idx}-${name}" placeholder="°C" min="0" max="300" ${docked ? 'disabled' : ''}>
-                            <button class="temp-set-btn" onclick="setKlipperToolTemp('${safeName}', ${idx}, '${safeHeater}')" ${docked ? 'disabled title="Tool is docked"' : ''}>Set</button>
-                            <button class="temp-off-btn" onclick="setTemp('${safeName}','nozzle_temp',0,{heater:'${safeHeater}'})">Off</button>
+                            <button class="temp-set-btn" onclick="setKlipperToolTemp(${safeName}, ${idx}, ${safeHeater})" ${docked ? 'disabled title="Tool is docked"' : ''}>Set</button>
+                            <button class="temp-off-btn" onclick="setTemp(${safeName},'nozzle_temp',0,{heater:${safeHeater}})">Off</button>
                         </div>` : ''}
                     </div>
                     ${fanHtml}
@@ -4852,36 +4839,37 @@
                         printerName: name,
                         label: 'Spool',
                         spoolData,
-                        assignArgs: `'${safeName}','${safeTool}'`,
-                        unassignArgs: `'${safeName}','${safeTool}'`,
+                        assignArgs: `${safeName},${safeTool}`,
+                        unassignArgs: `${safeName},${safeTool}`,
                     })}
                 </div>`;
         }
 
         function renderAmsSection(name, p) {
             if (p.has_ams && p.ams_trays && p.ams_trays.length > 0) {
+                const nameArg = jsArg(name);
                 const trays = p.ams_trays.map(t => {
-                    const swatchColor = t.color || '#333';
+                    const swatchColor = safeCssColor(t.color || '#333', '#333333');
                     const activeClass = t.active ? 'active' : '';
                     const emptyClass = !t.loaded ? 'empty' : '';
                     if (isAdmin) {
                         return `
                             <div class="ams-tray ${activeClass} ${emptyClass}"
-                                 onclick="event.stopPropagation();${t.loaded ? `amsLoadTray('${name}', ${t.id})` : ''}"
+                                 onclick="event.stopPropagation();${t.loaded ? `amsLoadTray(${nameArg}, ${Number(t.id)})` : ''}"
                                  title="${t.loaded ? `Click to load · Right-click to configure` : 'Empty slot'}"
-                                 oncontextmenu="event.stopPropagation();${t.loaded ? `event.preventDefault();openTrayConfig('${name}', ${t.id}, ${t.slot}, '${(t.type||'').replace(/'/g,"\\'")}', '${t.color||'#333333'}', '${t.nozzle_temp_min}', '${t.nozzle_temp_max}')` : ''}">
+                                 oncontextmenu="event.stopPropagation();${t.loaded ? `event.preventDefault();openTrayConfig(${nameArg}, ${Number(t.id)}, ${Number(t.slot)}, ${jsArg(t.type || '')}, ${jsArg(safeCssColor(t.color, '#333333'))}, ${jsArg(t.nozzle_temp_min)}, ${jsArg(t.nozzle_temp_max)})` : ''}">
                                 <div class="ams-tray-swatch" style="background:${t.loaded ? swatchColor : '#333'}"></div>
-                                <div class="ams-tray-type">${t.type || '—'}</div>
+                                <div class="ams-tray-type">${escapeHtml(t.type || '—')}</div>
                                 <div class="ams-tray-slot">#${t.slot + 1}</div>
                                 ${t.loaded && t.remain >= 0 ? `<div class="ams-tray-remain">${t.remain}%</div>` : ''}
-                                ${t.loaded ? `<div class="ams-tray-edit" onclick="event.stopPropagation();openTrayConfig('${name}', ${t.id}, ${t.slot}, '${(t.type||'').replace(/'/g,"\\'")}', '${t.color||'#333333'}', '${t.nozzle_temp_min}', '${t.nozzle_temp_max}')" title="Configure filament">&#9998;</div>` : ''}
+                                ${t.loaded ? `<div class="ams-tray-edit" onclick="event.stopPropagation();openTrayConfig(${nameArg}, ${Number(t.id)}, ${Number(t.slot)}, ${jsArg(t.type || '')}, ${jsArg(safeCssColor(t.color, '#333333'))}, ${jsArg(t.nozzle_temp_min)}, ${jsArg(t.nozzle_temp_max)})" title="Configure filament">&#9998;</div>` : ''}
                             </div>
                         `;
                     } else {
                         return `
-                            <div class="ams-tray ${activeClass} ${emptyClass}" title="${t.loaded ? t.type + ' · ' + (t.color || '') : 'Empty slot'}">
+                            <div class="ams-tray ${activeClass} ${emptyClass}" title="${escapeHtml(t.loaded ? t.type + ' · ' + (t.color || '') : 'Empty slot')}">
                                 <div class="ams-tray-swatch" style="background:${t.loaded ? swatchColor : '#333'}"></div>
-                                <div class="ams-tray-type">${t.type || '—'}</div>
+                                <div class="ams-tray-type">${escapeHtml(t.type || '—')}</div>
                                 <div class="ams-tray-slot">#${t.slot + 1}</div>
                                 ${t.loaded && t.remain >= 0 ? `<div class="ams-tray-remain">${t.remain}%</div>` : ''}
                             </div>
@@ -4893,16 +4881,16 @@
                 const externalActive = p.ams_tray_now === 254;
 
                 return `
-                    <div class="ams-section" data-field="ams" onclick="openAmsModal('${name}')" title="Click to open AMS details" style="cursor:pointer">
+                    <div class="ams-section" data-field="ams" onclick="openAmsModal(${nameArg})" title="Click to open AMS details" style="cursor:pointer">
                         <div class="ams-header">
                             <span>AMS${p.ams_serial ? ` <span style="font-size:10px;color:var(--text-muted)">(${p.ams_serial})</span>` : ''}${humLabel}</span>
                             <span>${p.ams_tray_now < 254 ? `Tray ${p.ams_tray_now + 1}` : p.ams_tray_now === 254 ? 'External' : 'None'}</span>
                         </div>
                         <div class="ams-trays">${trays}</div>
                         ${isAdmin ? `<div class="ams-external ${externalActive ? 'active' : ''}" onclick="event.stopPropagation()">
-                            <span onclick="amsLoadTray('${name}', 254)" style="cursor:pointer">🔗 External Spool${externalActive ? ' (active)' : ''}</span>
+                            <span onclick="amsLoadTray(${nameArg}, 254)" style="cursor:pointer">🔗 External Spool${externalActive ? ' (active)' : ''}</span>
                             <span style="margin-left:auto;">
-                                <button class="btn" onclick="amsLoadTray('${name}', 255)" style="font-size:10px;padding:2px 8px;">Unload</button>
+                                <button class="btn" onclick="amsLoadTray(${nameArg}, 255)" style="font-size:10px;padding:2px 8px;">Unload</button>
                             </span>
                         </div>` : `<div class="ams-external ${externalActive ? 'active' : ''}" onclick="event.stopPropagation()">>
                             <span>🔗 External Spool${externalActive ? ' (active)' : ''}</span>
@@ -4932,16 +4920,16 @@
                             printerName: name,
                             label: 'Spool',
                             spoolData,
-                            assignArgs: `'${name}'`,
-                            unassignArgs: `'${name}',''`,
+                            assignArgs: `${jsArg(name)}`,
+                            unassignArgs: `${jsArg(name)},${jsArg('')}`,
                         });
                     } else {
                         spoolHtml = renderSpoolAssignmentRow({
                             printerName: name,
                             label: 'Spool',
                             spoolData: null,
-                            assignArgs: `'${name}'`,
-                            unassignArgs: `'${name}',''`,
+                            assignArgs: `${jsArg(name)}`,
+                            unassignArgs: `${jsArg(name)},${jsArg('')}`,
                         });
                     }
                 }
@@ -5252,22 +5240,26 @@
             await apiPost(`${BASE}/api/printer/${encodeURIComponent(name)}/${endpoint}`, { temp, ...extra });
         }
 
+        function printerDomId(name) {
+            return String(name).replace(/[^A-Za-z0-9_.-]/g, '_');
+        }
+
         function setNozzleTemp(name) {
-            const input = document.getElementById(`nozzle-${name}`);
+            const input = document.getElementById(`nozzle-${printerDomId(name)}`);
             const temp = parseInt(input?.value) || 0;
             if (temp > 300) { alert('Max nozzle temp is 300°C'); return; }
             setTemp(name, 'nozzle_temp', temp);
         }
 
         function setKlipperToolTemp(name, toolIndex, heater) {
-            const input = document.getElementById(`tool-${toolIndex}-${name}`);
+            const input = document.getElementById(`tool-${toolIndex}-${printerDomId(name)}`);
             const temp = parseInt(input?.value) || 0;
             if (temp > 300) { alert('Max hotend temp is 300°C'); return; }
             setTemp(name, 'nozzle_temp', temp, { heater });
         }
 
         function setBedTemp(name) {
-            const input = document.getElementById(`bed-${name}`);
+            const input = document.getElementById(`bed-${printerDomId(name)}`);
             const temp = parseInt(input?.value) || 0;
             if (temp > 120) { alert('Max bed temp is 120°C'); return; }
             setTemp(name, 'bed_temp', temp);
@@ -5335,7 +5327,7 @@
                 _allSpoolsCache = data.data || [];
                 renderSpoolPickerList(_allSpoolsCache);
             } catch (e) {
-                document.getElementById('spoolPickerList').innerHTML = `<p style="color:var(--danger)">Failed to load spools: ${e.message}</p>`;
+                document.getElementById('spoolPickerList').innerHTML = `<p style="color:var(--danger)">Failed to load spools: ${escapeHtml(e.message)}</p>`;
             }
         }
 
@@ -5368,7 +5360,7 @@
                 const vendor = fil.vendor ? fil.vendor.name + ' ' : '';
                 const mat = fil.material || '?';
                 const fName = fil.name || mat;
-                const colorHex = fil.color_hex ? '#' + fil.color_hex : '#888';
+                const colorHex = safeCssColor(fil.color_hex ? '#' + fil.color_hex : '#888');
                 const remaining = s.remaining_weight != null ? Math.round(s.remaining_weight) + 'g left' : '';
                 const loc = s.location || '';
                 const isCurrent = s.id === currentId;
@@ -5380,8 +5372,8 @@
                          onclick="pickSpool(${s.id})">
                         <div style="width:20px;height:20px;border-radius:50%;background:${colorHex};border:2px solid rgba(255,255,255,0.15);flex-shrink:0;"></div>
                         <div style="flex:1;min-width:0;">
-                            <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${vendor}${fName}</div>
-                            <div style="font-size:11px;color:var(--text-muted);">${mat}${remaining ? ' · ' + remaining : ''}${locInfo} · #${s.id}</div>
+                            <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(vendor)}${escapeHtml(fName)}</div>
+                            <div style="font-size:11px;color:var(--text-muted);">${escapeHtml(mat)}${remaining ? ' · ' + escapeHtml(remaining) : ''}${escapeHtml(locInfo)} · #${Number(s.id)}</div>
                         </div>
                         ${isCurrent ? '<span style="color:var(--accent);font-size:11px;font-weight:600;flex-shrink:0;">Current</span>' : ''}
                     </div>`;
@@ -5405,7 +5397,7 @@
                 closeSpoolPicker();
                 refreshPrinters();
             } catch (e) {
-                resultEl.innerHTML = `<span style="color:var(--danger)">Error: ${e.message}</span>`;
+                resultEl.innerHTML = `<span style="color:var(--danger)">Error: ${escapeHtml(e.message)}</span>`;
             }
         }
 
@@ -5439,7 +5431,7 @@
                 }
                 refreshPrinters();
             } catch (e) {
-                alert(`Failed: ${e.message}`);
+                alert(`Failed: ${escapeHtml(e.message)}`);
             }
         }
 
@@ -5584,14 +5576,14 @@
                 dropdown.innerHTML = '<div style="padding:8px 12px;font-size:12px;color:var(--text-muted);">No spools found</div>';
             } else {
                 dropdown.innerHTML = matches.map(s => {
-                    const hex = s.filament?.color_hex ? '#' + s.filament.color_hex : '#888';
+                    const hex = safeCssColor(s.filament?.color_hex ? '#' + s.filament.color_hex : '#888');
                     const name = s.filament?.name || `Spool #${s.id}`;
                     const mat = s.filament?.material || '';
                     const rem = s.remaining_weight != null ? `${Math.round(s.remaining_weight)}g` : '';
                     return `<div onclick="_traySelectSpool(${s.id})" style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;font-size:12px;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background=''">
                         <span style="width:12px;height:12px;border-radius:50%;background:${hex};flex-shrink:0;display:inline-block;"></span>
-                        <span style="flex:1;">${name}</span>
-                        <span style="color:var(--text-muted);font-size:11px;">${[mat,rem].filter(Boolean).join(' · ')}</span>
+                        <span style="flex:1;">${escapeHtml(name)}</span>
+                        <span style="color:var(--text-muted);font-size:11px;">${escapeHtml([mat,rem].filter(Boolean).join(' · '))}</span>
                     </div>`;
                 }).join('');
             }
@@ -5686,7 +5678,7 @@
                     if (window._amsPrinterName === name) _amsRenderOverview(name);
                 }, 900);
             } catch (e) {
-                resultEl.innerHTML = `<span class="test-fail">&#10007; Error: ${e.message}</span>`;
+                resultEl.innerHTML = `<span class="test-fail">&#10007; Error: ${escapeHtml(e.message)}</span>`;
             }
         }
 
@@ -5782,7 +5774,7 @@
 
             // Hide manual fields, show info
             manualFields.style.display = 'none';
-            infoEl.innerHTML = `<strong>${vendor ? vendor + ' — ' : ''}${fil.name || mat}</strong> · ${colorHex} · ${spool.remaining_weight != null ? Math.round(spool.remaining_weight) + 'g remaining' : ''}`;
+            infoEl.innerHTML = `<strong>${escapeHtml(vendor ? vendor + ' — ' : '')}${escapeHtml(fil.name || mat)}</strong> · ${escapeHtml(colorHex)} · ${escapeHtml(spool.remaining_weight != null ? Math.round(spool.remaining_weight) + 'g remaining' : '')}`;
         }
 
         function closeGateConfig() {
@@ -5813,7 +5805,7 @@
                 if (spoolId > 0) params.SPOOL_ID = String(spoolId);
                 const resp = await hhFetch(`/api/v1/printers/${encodeURIComponent(name)}/happyhare/run`, {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json', 'X-Api-Key': hhApiKey()},
+                    headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({macro: 'MMU_GATE_MAP', params}),
                 });
                 resultEl.innerHTML = '<span class="test-ok">&#10003; Gate updated!</span>';
@@ -5832,7 +5824,7 @@
                 }
                 setTimeout(closeGateConfig, 1200);
             } catch (e) {
-                resultEl.innerHTML = `<span class="test-fail">&#10007; Error: ${e.message}</span>`;
+                resultEl.innerHTML = `<span class="test-fail">&#10007; Error: ${escapeHtml(e.message)}</span>`;
             }
         }
 
@@ -5873,16 +5865,30 @@
             applyCameraRotation(name);
         }
 
+        function cameraSectionMarkup(name, streaming) {
+            const safeName = escapeHtml(name);
+            if (!streaming) {
+                return `<div class="camera-placeholder" data-camera-action="start" data-camera-name="${safeName}">&#x1F4F7; Start Camera</div>`;
+            }
+            return `<img class="camera-feed"
+                        src="${BASE}/api/camera/${encodeURIComponent(name)}/snapshot?t=${Date.now()}"
+                        alt="Camera"
+                        data-camera-action="open"
+                        data-camera-name="${safeName}"
+                        style="transform:${cameraRotationStyle(name)}">
+                    <button class="camera-btn camera-rotate-btn"
+                        data-camera-action="rotate"
+                        data-camera-name="${safeName}"
+                        title="Rotate camera feed">&#8635; ${getCameraRotation(name)}&deg;</button>
+                    <button class="camera-btn camera-stop-btn"
+                        data-camera-action="stop"
+                        data-camera-name="${safeName}">&#x25A0; Stop</button>`;
+        }
+
         function updateCameraSectionDOM(name, streaming) {
             const section = document.getElementById(`cam-${name}`);
             if (!section) return;
-            if (streaming) {
-                section.innerHTML = `<img class="camera-feed" src="${BASE}/api/camera/${encodeURIComponent(name)}/snapshot?t=${Date.now()}" alt="Camera" onclick="openCameraModal('${name}')" style="transform:${cameraRotationStyle(name)}">
-                    <button class="camera-btn camera-rotate-btn" onclick="event.stopPropagation();rotateCamera('${name}')" title="Rotate camera feed">&#8635; ${getCameraRotation(name)}&deg;</button>
-                    <button class="camera-btn camera-stop-btn" onclick="event.stopPropagation();toggleCamera('${name}',false)">&#x25A0; Stop</button>`;
-            } else {
-                section.innerHTML = `<div class="camera-placeholder" onclick="toggleCamera('${name}',true)">&#x1F4F7; Start Camera</div>`;
-            }
+            section.innerHTML = cameraSectionMarkup(name, streaming);
         }
 
         async function toggleCamera(name, start) {
@@ -5942,6 +5948,35 @@
             img.style.transform = 'rotate(0deg)';
             currentCameraModalName = null;
         }
+
+        document.addEventListener('click', event => {
+            const control = event.target.closest('[data-camera-action]');
+            if (!control) return;
+            const name = control.dataset.cameraName;
+            if (!name) return;
+
+            event.preventDefault();
+            event.stopPropagation();
+            switch (control.dataset.cameraAction) {
+                case 'open':
+                    openCameraModal(name);
+                    break;
+                case 'rotate':
+                    rotateCamera(name);
+                    break;
+                case 'start':
+                    toggleCamera(name, true);
+                    break;
+                case 'stop':
+                    toggleCamera(name, false);
+                    break;
+            }
+        });
+
+        document.getElementById('cameraModalRotate').addEventListener('click', event => {
+            event.stopPropagation();
+            rotateCamera(currentCameraModalName);
+        });
 
         document.addEventListener('keydown', e => {
             if (e.key === 'Escape') closeCameraModal();
@@ -6099,7 +6134,7 @@
         }
 
         function renderJobRow(job, weekId) {
-            const status = job.status;
+            const status = String(job.status || 'unknown').toLowerCase().replace(/[^a-z_]/g, '');
             const isOwner = isAuthenticated && userName && job.submitted_by === userName;
             const canUseJobActions = isAdmin || (isOwner && printAllowed);
             const canCancel = canUseJobActions && (status === 'queued' || status === 'uploading' || status === 'printing');
@@ -6110,10 +6145,10 @@
             let assignBtn = '';
             if (canAssign && job.printer_name) {
                 // Job is pre-assigned to a specific printer (uploaded via per-printer port)
-                assignBtn = `<button class="btn btn-success" onclick="sendToAssigned(${job.id}, '${job.printer_name}')">Send to ${job.printer_name}</button>`;
+                assignBtn = `<button class="btn btn-success" onclick="sendToAssigned(${Number(job.id)}, ${jsArg(job.printer_name)})">Send to ${escapeHtml(job.printer_name)}</button>`;
             } else if (canAssign && availablePrinters.length > 0) {
                 const checkboxes = availablePrinters.map(p =>
-                    `<label><input type="checkbox" value="${p.name}"> ${p.name} <span class="send-dropdown-status">(${p.status.toLowerCase()})</span></label>`
+                    `<label><input type="checkbox" value="${escapeHtml(p.name)}"> ${escapeHtml(p.name)} <span class="send-dropdown-status">(${escapeHtml(String(p.status || '').toLowerCase())})</span></label>`
                 ).join('');
                 assignBtn = `<div class="send-dropdown" id="send-dd-${job.id}">
                     <button class="btn send-dropdown-btn" onclick="toggleSendDropdown(${job.id})">Send to…</button>
@@ -6132,7 +6167,7 @@
             let reprintBtn = '';
             if (canReprint && availablePrinters.length > 0) {
                 const reprintCheckboxes = availablePrinters.map(p =>
-                    `<label><input type="checkbox" value="${p.name}"> ${p.name} <span class="send-dropdown-status">(${p.status.toLowerCase()})</span></label>`
+                    `<label><input type="checkbox" value="${escapeHtml(p.name)}"> ${escapeHtml(p.name)} <span class="send-dropdown-status">(${escapeHtml(String(p.status || '').toLowerCase())})</span></label>`
                 ).join('');
                 reprintBtn = `<div class="send-dropdown" id="reprint-dd-${job.id}">
                         <button class="btn send-dropdown-btn" onclick="toggleReprintDropdown(${job.id})" title="Create reprint(s) and send immediately">Reprint to…</button>
@@ -6150,10 +6185,10 @@
                 <tr>
                     ${isAdmin ? `<td><input type="checkbox" class="job-select-cb" data-id="${job.id}" data-week="${weekId || ''}" onchange="onJobCheckboxChange()"></td>` : ''}
                     <td>${job.id}</td>
-                    <td title="${job.original_name}">${job.original_name}</td>
-                    <td><span class="job-status job-${status}">${status}</span></td>
-                    <td>${job.printer_name || '--'}</td>
-                    <td>${job.submitted_by || '--'}</td>
+                    <td title="${escapeHtml(job.original_name)}">${escapeHtml(job.original_name)}</td>
+                    <td><span class="job-status job-${status}">${escapeHtml(status)}</span></td>
+                    <td>${escapeHtml(job.printer_name || '--')}</td>
+                    <td>${escapeHtml(job.submitted_by || '--')}</td>
                     <td>${job.copies_done}/${job.copies_total}</td>
                     <td>${formatDuration(job.print_time_seconds)}</td>
                     <td>${priorityLabels[job.priority] || job.priority}</td>
@@ -6873,6 +6908,29 @@
             return d.innerHTML;
         }
 
+        function jsArg(value) {
+            return escapeHtml(JSON.stringify(String(value ?? '')));
+        }
+
+        function clampNumber(value, min, max) {
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? Math.max(min, Math.min(max, parsed)) : min;
+        }
+
+        function safeCssColor(value, fallback = '#888888') {
+            const color = String(value || '');
+            return /^#[0-9a-fA-F]{3,8}$/.test(color) ? color : fallback;
+        }
+
+        function safeHttpUrl(value) {
+            try {
+                const url = new URL(String(value || ''), location.origin);
+                return ['http:', 'https:'].includes(url.protocol) ? escapeHtml(url.href) : '';
+            } catch (_) {
+                return '';
+            }
+        }
+
         setInterval(refreshPrinters, 2000);
         setInterval(refreshJobs, 5000);
         setInterval(refreshCameraStatus, 10000);
@@ -6920,8 +6978,8 @@
                     resultsEl.innerHTML = all.map((p, i) => `
                         <div class="discovered-item" onclick="selectDiscovered(${i})">
                             <div class="discovered-info">
-                                <div class="discovered-name">${p.name || 'Unknown Printer'} ${p.type === 'klipper' ? '<span style="font-size:9px;background:#ff6600;color:#fff;padding:1px 5px;border-radius:3px;">Klipper</span>' : ''}</div>
-                                <div class="discovered-detail">${p.host} · ${p.model || (p.type === 'klipper' ? 'Klipper' : 'BambuLab')} ${p.serial ? '· SN: ' + p.serial : ''}</div>
+                                <div class="discovered-name">${escapeHtml(p.name || 'Unknown Printer')} ${p.type === 'klipper' ? '<span style="font-size:9px;background:#ff6600;color:#fff;padding:1px 5px;border-radius:3px;">Klipper</span>' : ''}</div>
+                                <div class="discovered-detail">${escapeHtml(p.host)} · ${escapeHtml(p.model || (p.type === 'klipper' ? 'Klipper' : 'BambuLab'))} ${p.serial ? '· SN: ' + escapeHtml(p.serial) : ''}</div>
                             </div>
                             <button class="btn btn-primary" style="flex-shrink:0">Select</button>
                         </div>
@@ -7009,14 +7067,14 @@
                             const s = data.state;
                             detail = ` — ${s.software_version || 'Klipper'}`;
                         }
-                        resultEl.innerHTML = `<span class="test-ok">&#10003; ${data.message}${detail}</span>`;
+                        resultEl.innerHTML = `<span class="test-ok">&#10003; ${escapeHtml(data.message)}${detail}</span>`;
                         document.getElementById('btnAdd').disabled = false;
                     } else {
                         resultEl.innerHTML = `<span class="test-fail">&#10007; ${apiErrorMessage(data, 'Connection test failed')}</span>`;
                         document.getElementById('btnAdd').disabled = true;
                     }
                 } catch (err) {
-                    resultEl.innerHTML = `<span class="test-fail">&#10007; ${err.message}</span>`;
+                    resultEl.innerHTML = `<span class="test-fail">&#10007; ${escapeHtml(err.message)}</span>`;
                 }
                 btnTest.disabled = false;
             } else {
@@ -7043,14 +7101,14 @@
                             if (s.nozzle_temper) detail += `, Nozzle: ${s.nozzle_temper}°C`;
                             if (s.bed_temper) detail += `, Bed: ${s.bed_temper}°C`;
                         }
-                        resultEl.innerHTML = `<span class="test-ok">&#10003; ${data.message}${detail}</span>`;
+                        resultEl.innerHTML = `<span class="test-ok">&#10003; ${escapeHtml(data.message)}${detail}</span>`;
                         document.getElementById('btnAdd').disabled = false;
                     } else {
                         resultEl.innerHTML = `<span class="test-fail">&#10007; ${apiErrorMessage(data, 'Connection test failed')}</span>`;
                         document.getElementById('btnAdd').disabled = true;
                     }
                 } catch (err) {
-                    resultEl.innerHTML = `<span class="test-fail">&#10007; ${err.message}</span>`;
+                    resultEl.innerHTML = `<span class="test-fail">&#10007; ${escapeHtml(err.message)}</span>`;
                 }
                 btnTest.disabled = false;
             }
@@ -7104,7 +7162,7 @@
                     btnAdd.disabled = false;
                 }
             } catch (err) {
-                document.getElementById('wizTestResult').innerHTML = `<span class="test-fail">${err.message}</span>`;
+                document.getElementById('wizTestResult').innerHTML = `<span class="test-fail">${escapeHtml(err.message)}</span>`;
                 btnAdd.disabled = false;
             }
         }
@@ -7140,16 +7198,7 @@
         }
 
         // ── Happy Hare Modal ─────────────────────────────────
-        let _hhApiKey = null;
-        function hhApiKey() {
-            if (!_hhApiKey) {
-                _hhApiKey = '{{ api_key }}';
-            }
-            return _hhApiKey;
-        }
-
         async function hhFetch(url, opts = {}) {
-            opts.headers = Object.assign({'X-Api-Key': hhApiKey()}, opts.headers || {});
             const res = await fetch(BASE + url, opts);
             if (!res.ok) {
                 let msg = `HTTP ${res.status}`;
@@ -7242,12 +7291,12 @@
             const printState = mmu.print_state || '—';
 
             html += `<div class="hh-status-banner">
-                <div class="hh-status-item"><span class="hh-status-label">Filament</span><span class="hh-status-val ${filClass}">${filState}</span></div>
+                <div class="hh-status-item"><span class="hh-status-label">Filament</span><span class="hh-status-val ${filClass}">${escapeHtml(filState)}</span></div>
                 <div class="hh-status-item"><span class="hh-status-label">Tool</span><span class="hh-status-val">${toolLabel}</span></div>
                 <div class="hh-status-item"><span class="hh-status-label">Gate</span><span class="hh-status-val">${gateLabel}</span></div>
                 <div class="hh-status-item"><span class="hh-status-label">Status</span><span class="hh-status-val ${homedClass}">${homedIcon}</span></div>
-                <div class="hh-status-item"><span class="hh-status-label">Servo</span><span class="hh-status-val">${servoLabel}</span></div>
-                <div class="hh-status-item"><span class="hh-status-label">Print State</span><span class="hh-status-val">${printState}</span></div>
+                <div class="hh-status-item"><span class="hh-status-label">Servo</span><span class="hh-status-val">${escapeHtml(servoLabel)}</span></div>
+                <div class="hh-status-item"><span class="hh-status-label">Print State</span><span class="hh-status-val">${escapeHtml(printState)}</span></div>
                 <div class="hh-status-item"><span class="hh-status-label">Tool Changes</span><span class="hh-status-val">${mmu.num_toolchanges || 0}</span></div>
                 ${mmu.runout ? '<div class="hh-status-item"><span class="hh-status-label">Runout</span><span class="hh-status-val red">⚠ RUNOUT</span></div>' : ''}
                 ${mmu.is_paused ? '<div class="hh-status-item"><span class="hh-status-label">State</span><span class="hh-status-val yellow">⏸ PAUSED</span></div>' : ''}
@@ -7261,7 +7310,7 @@
                 const isActive = g.gate === mmu.gate;
                 const isEmpty = g.status === 0;
                 const isLoaded = g.status === 2;
-                const swatchColor = g.color || (isLoaded ? '#888' : '#333');
+                const swatchColor = safeCssColor(g.color || (isLoaded ? '#888' : '#333'));
                 const statusClass = isLoaded ? 'loaded' : isEmpty ? 'empty' : 'unknown';
                 const material = g.material || g.filament_name || '';
                 // Show TTG mapping if different from default
@@ -7271,7 +7320,7 @@
                     <div class="hh-gate-status-dot ${statusClass}"></div>
                     <div class="hh-gate-swatch-lg ${statusClass}" style="background:${isEmpty ? '#333' : swatchColor}"></div>
                     <div class="hh-gate-tool">T${g.gate}</div>
-                    ${material ? `<div class="hh-gate-mat">${material}</div>` : '<div class="hh-gate-mat" style="opacity:.3">—</div>'}
+                    ${material ? `<div class="hh-gate-mat">${escapeHtml(material)}</div>` : '<div class="hh-gate-mat" style="opacity:.3">—</div>'}
                     ${ttgLabel ? `<div class="hh-gate-ttg">${ttgLabel}</div>` : ''}
                     ${g.temperature ? `<div class="hh-gate-mat">${g.temperature}°</div>` : ''}
                 </div>`;
@@ -7283,7 +7332,7 @@
             const filDirection = mmu.filament_direction || 0; // 1=loading, -1=unloading
             const bowdenProgress = mmu.bowden_progress || -1;
             const activeMat = mmu.active_filament || {};
-            const activeColor = activeMat.color ? `#${activeMat.color}` : 'var(--accent)';
+            const activeColor = activeMat.color ? safeCssColor(`#${activeMat.color}`, '#40c080') : '#40c080';
             const lineActive = filLoaded || filDirection !== 0 || action !== 'Idle';
             const lineReverse = filDirection < 0;
             const lineClass = lineActive ? `active${lineReverse ? ' reverse' : ''}` : '';
@@ -7338,7 +7387,7 @@
             html += `<div class="hh-panel">
                 <div class="hh-panel-title">System</div>
                 <div class="hh-panel-grid">
-                    <div class="hh-panel-item"><div class="hh-panel-item-label">Action</div><div class="hh-panel-item-val">${action}</div></div>
+                    <div class="hh-panel-item"><div class="hh-panel-item-label">Action</div><div class="hh-panel-item-val">${escapeHtml(action)}</div></div>
                     <div class="hh-panel-item"><div class="hh-panel-item-label">Sync Drive</div><div class="hh-panel-item-val">${mmu.sync_drive ? 'Yes' : 'No'}</div></div>
                     <div class="hh-panel-item"><div class="hh-panel-item-label">Clog Detection</div><div class="hh-panel-item-val">${mmu.clog_detection === 2 ? 'Auto' : mmu.clog_detection === 1 ? 'On' : 'Off'}</div></div>
                     <div class="hh-panel-item"><div class="hh-panel-item-label">Endless Spool</div><div class="hh-panel-item-val">${mmu.endless_spool ? 'On' : 'Off'}</div></div>
@@ -7400,7 +7449,7 @@
             } catch (err) {
                 if (resDiv) {
                     resDiv.className = 'hh-result error';
-                    resDiv.textContent = `✗ ${err.message}`;
+                    resDiv.textContent = `✗ ${escapeHtml(err.message)}`;
                 }
             }
         }
@@ -7414,7 +7463,7 @@
                 renderHhMacros(printerName, data.data);
                 window._hhMacrosLoaded = true;
             } catch (err) {
-                container.innerHTML = `<div class="hh-result error">${err.message}</div>`;
+                container.innerHTML = `<div class="hh-result error">${escapeHtml(err.message)}</div>`;
             }
         }
 
@@ -7429,14 +7478,14 @@
             for (const cat of catList) {
                 const macros = cat.macros;
                 if (!macros || macros.length === 0) continue;
-                html += `<div class="hh-category"><div class="hh-category-title">${cat.name}</div><div class="hh-macro-grid">`;
+                html += `<div class="hh-category"><div class="hh-category-title">${escapeHtml(cat.name)}</div><div class="hh-macro-grid">`;
                 for (const m of macros) {
                     const hasP = m.params && m.params.length > 0;
                     const mid = 'hh_m_' + (macroIdx++);
                     window._hhMacroCache[mid] = m;
-                    html += `<div class="hh-macro-btn ${hasP ? 'has-params' : ''}" data-hh-mid="${mid}" data-hh-printer="${printerName}" onclick="hhMacroClick(this)">
-                        <div class="hh-macro-name">${m.name}</div>
-                        ${m.description ? `<div class="hh-macro-desc">${m.description}</div>` : ''}
+                    html += `<div class="hh-macro-btn ${hasP ? 'has-params' : ''}" data-hh-mid="${mid}" data-hh-printer="${escapeHtml(printerName)}" onclick="hhMacroClick(this)">
+                        <div class="hh-macro-name">${escapeHtml(m.name)}</div>
+                        ${m.description ? `<div class="hh-macro-desc">${escapeHtml(m.description)}</div>` : ''}
                     </div>`;
                 }
                 html += '</div></div>';
@@ -7461,11 +7510,11 @@
 
         function openHhParamsDialog(printerName, macro) {
             const dlg = document.getElementById('hhParamsDialog');
-            let html = `<h3>${macro.name}</h3>`;
-            if (macro.description) html += `<div class="hh-param-desc">${macro.description}</div>`;
+            let html = `<h3>${escapeHtml(macro.name)}</h3>`;
+            if (macro.description) html += `<div class="hh-param-desc">${escapeHtml(macro.description)}</div>`;
             for (const p of macro.params) {
-                html += `<label>${p}${macro.param_defaults && macro.param_defaults[p] != null ? ` <span style="opacity:.5">(default: ${macro.param_defaults[p]})</span>` : ''}</label>`;
-                html += `<input type="text" id="hh-param-${p}" placeholder="${p}">`;
+                html += `<label>${escapeHtml(p)}${macro.param_defaults && macro.param_defaults[p] != null ? ` <span style="opacity:.5">(default: ${escapeHtml(macro.param_defaults[p])})</span>` : ''}</label>`;
+                html += `<input type="text" id="hh-param-${escapeHtml(p)}" placeholder="${escapeHtml(p)}">`;
             }
             const paramKey = 'hh_p_' + Date.now();
             window._hhMacroCache[paramKey] = {printerName, macroName: macro.name, params: macro.params};
@@ -7506,7 +7555,7 @@
             try {
                 const data = await hhFetch(`/api/v1/printers/${encodeURIComponent(printerName)}/happyhare/run`, {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json', 'X-Api-Key': hhApiKey()},
+                    headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({macro: macroName, params: params}),
                 });
                 if (!data.ok) throw new Error(data.error || 'Command failed');
@@ -7515,7 +7564,7 @@
                 setTimeout(() => { resDiv.textContent = ''; resDiv.className = ''; }, 4000);
             } catch (err) {
                 resDiv.className = 'hh-result error';
-                resDiv.textContent = `✗ ${err.message}`;
+                resDiv.textContent = `✗ ${escapeHtml(err.message)}`;
             }
         }
 
@@ -7591,8 +7640,7 @@
 
         async function _amsLoadTraySpools(printerName) {
             try {
-                const res = await fetch(BASE + `/api/v1/printers/${encodeURIComponent(printerName)}/ams/trays`,
-                    { headers: { 'X-Api-Key': hhApiKey() } });
+                const res = await fetch(BASE + `/api/v1/printers/${encodeURIComponent(printerName)}/ams/trays`);
                 if (res.ok) {
                     const data = await res.json();
                     const map = {};
@@ -7632,14 +7680,14 @@
             // Status Banner
             html += `<div class="ams-pop-banner">
                 <div class="ams-pop-stat"><span class="ams-pop-stat-label">Active Tray</span><span class="ams-pop-stat-val ${activeTray || isExternal ? 'green' : ''}">${activeTrayLabel}</span></div>
-                <div class="ams-pop-stat"><span class="ams-pop-stat-label">Material</span><span class="ams-pop-stat-val">${activeMaterial}</span></div>
+                <div class="ams-pop-stat"><span class="ams-pop-stat-label">Material</span><span class="ams-pop-stat-val">${escapeHtml(activeMaterial)}</span></div>
                 <div class="ams-pop-stat"><span class="ams-pop-stat-label">Loaded</span><span class="ams-pop-stat-val">${loadedCount} / ${trays.length}</span></div>
                 <div class="ams-pop-stat"><span class="ams-pop-stat-label">AMS Units</span><span class="ams-pop-stat-val">${units.length || Math.ceil(trays.length / 4)}</span></div>
             </div>`;
 
             // Filament Path
             const feeding = activeTray || isExternal;
-            const activeColor = activeTray ? (activeTray.color || 'var(--accent)') : 'var(--accent)';
+            const activeColor = activeTray ? safeCssColor(activeTray.color, '#40c080') : '#40c080';
             html += `<div class="ams-pop-filpath">
                 <div class="ams-pop-filpath-seg">
                     <div class="ams-pop-filpath-label">${isExternal ? 'External' : activeTray ? `AMS ${activeTray.unit + 1}` : 'AMS'}</div>
@@ -7673,7 +7721,7 @@
                     </div>
                     <div class="ams-pop-trays">`;
                 unitTrays.forEach(t => {
-                    const sw = t.loaded ? (t.color || '#888') : '#333';
+                    const sw = t.loaded ? safeCssColor(t.color, '#888888') : '#333';
                     const activeClass = t.active ? 'active' : '';
                     const emptyClass = !t.loaded ? 'empty' : '';
                     const bblClass = t.is_bbl ? 'bbl' : '';
@@ -7681,21 +7729,21 @@
                     const remainCol = _amsRemainColor(remainPct);
                     const tempRange = (t.nozzle_temp_min && t.nozzle_temp_min !== '0') ? `${t.nozzle_temp_min}-${t.nozzle_temp_max}°C` : '';
                     const spool = traySpools[t.id];
-                    const spoolHex = spool?.filament?.color_hex ? '#' + spool.filament.color_hex : null;
+                    const spoolHex = spool?.filament?.color_hex ? safeCssColor('#' + spool.filament.color_hex) : null;
                     const spoolName = spool ? (spool.filament?.name || `Spool #${spool.id}`) : null;
                     const spoolRem = spool?.remaining_weight != null ? `${Math.round(spool.remaining_weight)}g` : '';
 
                     // Admin: click to configure. Non-admin: click to load.
                     const clickAttr = t.loaded
                         ? (isAdmin
-                            ? `onclick="openTrayConfig('${printerName}',${t.id},${t.slot},'${(t.type||'').replace(/'/g,"\\'")}','${t.color||'#333333'}','${t.nozzle_temp_min}','${t.nozzle_temp_max}')"`
-                            : `onclick="amsLoadTray('${printerName}',${t.id})"`)
+                            ? `onclick="openTrayConfig(${jsArg(printerName)},${Number(t.id)},${Number(t.slot)},${jsArg(t.type || '')},${jsArg(safeCssColor(t.color, '#333333'))},${jsArg(t.nozzle_temp_min)},${jsArg(t.nozzle_temp_max)})"`
+                            : `onclick="amsLoadTray(${jsArg(printerName)},${Number(t.id)})"`)
                         : '';
 
                     const spoolRow = spool
                         ? `<div class="ams-pop-tray-spool has-spool">
                                 ${spoolHex ? `<span class="ams-pop-tray-spool-dot" style="background:${spoolHex}"></span>` : '🧵'}
-                                <span class="ams-pop-tray-spool-name">${spoolName}</span>
+                                <span class="ams-pop-tray-spool-name">${escapeHtml(spoolName)}</span>
                                 ${spoolRem ? `<span class="ams-pop-tray-spool-rem">${spoolRem}</span>` : ''}
                            </div>`
                         : (isAdmin && t.loaded
@@ -7706,7 +7754,7 @@
                             title="${t.loaded ? (isAdmin ? 'Click to configure / link spool' : 'Click to load') : 'Empty slot'}">
                         <div class="ams-pop-swatch ${bblClass}" style="background:${sw}"></div>
                         <div class="ams-pop-tray-info">
-                            <div class="ams-pop-tray-type">${t.type || '—'}</div>
+                            <div class="ams-pop-tray-type">${escapeHtml(t.type || '—')}</div>
                             <div class="ams-pop-tray-slot">Slot ${t.slot + 1}</div>
                             ${tempRange ? `<div class="ams-pop-tray-temps">${tempRange}</div>` : ''}
                         </div>
@@ -7719,20 +7767,20 @@
             html += '</div>';
 
             // External Spool
-            const extColor = vt.tray_color ? `#${vt.tray_color.substring(0, 6)}` : '#666';
+            const extColor = vt.tray_color ? safeCssColor(`#${vt.tray_color.substring(0, 6)}`, '#666666') : '#666';
             const extType = vt.tray_type || 'Unknown';
             html += `<div class="ams-pop-external ${isExternal ? 'active' : ''}">
                 <div class="ams-pop-ext-swatch" style="background:${extColor}"></div>
                 <div class="ams-pop-ext-info">
                     <div class="ams-pop-ext-label">🔗 External Spool ${isExternal ? '(Active)' : ''}</div>
-                    <div class="ams-pop-ext-type">${extType}${vt.nozzle_temp_min && vt.nozzle_temp_min !== '0' ? ` · ${vt.nozzle_temp_min}-${vt.nozzle_temp_max}°C` : ''}</div>
+                    <div class="ams-pop-ext-type">${escapeHtml(extType)}${vt.nozzle_temp_min && vt.nozzle_temp_min !== '0' ? ` · ${escapeHtml(vt.nozzle_temp_min)}-${escapeHtml(vt.nozzle_temp_max)}°C` : ''}</div>
                 </div>
-                ${isAdmin ? `<button class="ams-pop-action-btn" onclick="amsLoadTray('${printerName}', 254)" style="font-size:11px;padding:6px 10px;">Load External</button>` : ''}
+                ${isAdmin ? `<button class="ams-pop-action-btn" onclick="amsLoadTray(${jsArg(printerName)}, 254)" style="font-size:11px;padding:6px 10px;">Load External</button>` : ''}
             </div>`;
 
             if (isAdmin) {
                 html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
-                    <button class="ams-pop-action-btn" onclick="amsLoadTray('${printerName}', 255)">⏏ Unload Filament</button>
+                    <button class="ams-pop-action-btn" onclick="amsLoadTray(${jsArg(printerName)}, 255)">⏏ Unload Filament</button>
                 </div>`;
             }
 

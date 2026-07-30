@@ -12,12 +12,14 @@ Provides a proper RESTful interface with:
 import logging
 import os
 import re
+import secrets
 import threading
-import time
 import uuid
 
 from flask import Blueprint, jsonify, request, session
 from werkzeug.utils import secure_filename
+
+from .file_validation import InvalidPrintFile, validate_print_file
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +52,8 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
                   api_key=None, config=None, file_library=None,
                   send_job_fn=None, parse_filaments_fn=None,
                   parse_model_name_fn=None, parse_metadata_fn=None,
-                  wrap_gcode_fn=None, spoolman_client=None):
+                  wrap_gcode_fn=None, spoolman_client=None,
+                  plate_check_fn=None):
     """
     Create and return the /api/v1 Blueprint.
 
@@ -74,15 +77,61 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
     # ── Authentication ────────────────────────────────────
 
     def _check_api_key():
-        if not api_key:
-            return True  # No key configured = open access
-        return request.headers.get("X-Api-Key", "") == api_key
+        supplied = request.headers.get("X-Api-Key", "")
+        return bool(api_key and supplied and secrets.compare_digest(str(api_key), supplied))
 
     def _is_admin():
         return session.get("role") == "staff" or session.get("admin") is True
 
     def _is_authenticated():
         return session.get("role") in ("staff", "student") or session.get("admin") is True
+
+    def _normalise_access_name(value):
+        return re.sub(r"\s+", " ", str(value or "").strip()).lower()
+
+    def _has_print_access():
+        if _check_api_key() or _is_admin():
+            return True
+        if session.get("role") != "student":
+            return False
+        access = app_config.get("student_access", {})
+        names = {
+            _normalise_access_name(session.get("username")),
+            _normalise_access_name(session.get("display_name")),
+        }
+        names.discard("")
+        allowed = {_normalise_access_name(v) for v in access.get("allowlist", [])}
+        banned = {_normalise_access_name(v) for v in access.get("banlist", [])}
+        return bool(names.intersection(allowed) and not names.intersection(banned))
+
+    def _is_job_owner(job):
+        return bool(
+            job
+            and session.get("username")
+            and job.get("submitted_by") == session.get("username")
+        )
+
+    def _staff_only_printer(name):
+        return any(
+            p.get("name") == name and bool(p.get("staff_only"))
+            for p in app_config.get("printers", [])
+        )
+
+    def _public_job(job):
+        if not job:
+            return job
+        visible = dict(job)
+        visible.pop("file_path", None)
+        visible.pop("filename", None)
+        return visible
+
+    def _public_library_file(file_info):
+        if not file_info:
+            return file_info
+        visible = dict(file_info)
+        visible.pop("file_path", None)
+        visible.pop("stored_name", None)
+        return visible
 
     @bp.before_request
     def require_api_key():
@@ -91,16 +140,59 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
             return _error("Invalid or missing API key", 401, "AUTH_REQUIRED")
 
     def _admin_only(f):
-        """Decorator: require staff/admin role (session) or just API key if no session."""
+        """Require a staff session or the configured integration key."""
         from functools import wraps
         @wraps(f)
         def decorated(*args, **kwargs):
-            # API key alone grants full access (for external integrations)
-            # If session is active, require admin role
-            if _is_authenticated() and not _is_admin():
-                return _error("Admin privileges required", 403, "ADMIN_REQUIRED")
+            if not (_check_api_key() or _is_admin()):
+                return _error("Staff privileges required", 403, "ADMIN_REQUIRED")
             return f(*args, **kwargs)
         return decorated
+
+    def _print_access_only(f):
+        from functools import wraps
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if not _has_print_access():
+                return _error("Print access has not been granted", 403, "PRINT_ACCESS_REQUIRED")
+            return f(*args, **kwargs)
+        return decorated
+
+    def _owner_or_admin(f):
+        from functools import wraps
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if _check_api_key() or _is_admin():
+                return f(*args, **kwargs)
+            job = job_queue.get_job(kwargs.get("job_id"))
+            if not _has_print_access() or not _is_job_owner(job):
+                return _error("Not authorised for this job", 403, "JOB_ACCESS_DENIED")
+            return f(*args, **kwargs)
+        return decorated
+
+    def _validate_print_target(name):
+        printer = farm_manager.get_printer(name)
+        if not printer:
+            return "Printer not found", 404, "PRINTER_NOT_FOUND"
+        if not printer.is_connected():
+            return "Printer is not connected", 409, "PRINTER_OFFLINE"
+        if _staff_only_printer(name) and not (_check_api_key() or _is_admin()):
+            return "Printer is restricted to staff", 403, "STAFF_ONLY_PRINTER"
+        status = getattr(getattr(printer, "state", None), "status", None)
+        status_value = getattr(status, "value", str(status or "")).upper()
+        if status_value not in ("IDLE", "FINISH"):
+            return f"Printer is not idle ({status_value or 'unknown'})", 409, "PRINTER_BUSY"
+        if any(j.get("printer_name") == name for j in job_queue.get_active_jobs()):
+            return "Printer already has an active job", 409, "PRINTER_BUSY"
+        if plate_check_fn:
+            plate_check = plate_check_fn(name)
+            if not plate_check.get("ok"):
+                return (
+                    plate_check.get("message", "Build plate check failed"),
+                    409,
+                    "BUILD_PLATE_BLOCKED",
+                )
+        return None
 
     # ── Server Info ───────────────────────────────────────
 
@@ -135,6 +227,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         return _ok(states.get(name))
 
     @bp.route("/printers/<name>/command", methods=["POST"])
+    @_admin_only
     def printer_command(name):
         """
         Send a command to a printer.
@@ -152,51 +245,64 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         cmd = data.get("command", "").lower()
 
         if cmd == "pause":
-            printer.pause_print()
-            return _ok({"command": "pause", "printer": name})
+            ok = printer.pause_print()
+            return _ok({"command": "pause", "printer": name}) if ok else _error("Printer rejected command", 502)
 
         elif cmd == "resume":
-            printer.resume_print()
-            return _ok({"command": "resume", "printer": name})
+            ok = printer.resume_print()
+            return _ok({"command": "resume", "printer": name}) if ok else _error("Printer rejected command", 502)
 
         elif cmd == "stop":
-            printer.stop_print()
-            return _ok({"command": "stop", "printer": name})
+            ok = printer.stop_print()
+            return _ok({"command": "stop", "printer": name}) if ok else _error("Printer rejected command", 502)
 
         elif cmd == "emergency_stop":
             if hasattr(printer, "emergency_stop"):
-                printer.emergency_stop()
+                ok = printer.emergency_stop()
             else:
-                printer.stop_print()
-            return _ok({"command": "emergency_stop", "printer": name})
+                ok = printer.stop_print()
+            return _ok({"command": "emergency_stop", "printer": name}) if ok else _error("Printer rejected command", 502)
 
         elif cmd == "light":
             state = data.get("state", "toggle")
             if hasattr(printer, "set_chamber_light"):
-                printer.set_chamber_light(state)
-            return _ok({"command": "light", "state": state, "printer": name})
+                ok = printer.set_chamber_light(state)
+                return _ok({"command": "light", "state": state, "printer": name}) if ok else _error("Printer rejected command", 502)
+            return _error("Printer does not support chamber light control", 400)
 
         elif cmd == "set_bed_temp":
             temp = data.get("temperature")
             if temp is None:
                 return _error("'temperature' is required", 400)
-            printer.set_bed_temperature(int(temp))
-            return _ok({"command": "set_bed_temp", "temperature": int(temp), "printer": name})
+            try:
+                temp = int(temp)
+            except (TypeError, ValueError):
+                return _error("'temperature' must be an integer", 400)
+            if not 0 <= temp <= 130:
+                return _error("Bed temperature must be between 0 and 130 C", 400)
+            ok = printer.set_bed_temperature(temp)
+            return _ok({"command": "set_bed_temp", "temperature": temp, "printer": name}) if ok else _error("Printer rejected command", 502)
 
         elif cmd == "set_nozzle_temp":
             temp = data.get("temperature")
             if temp is None:
                 return _error("'temperature' is required", 400)
-            printer.set_nozzle_temperature(int(temp))
-            return _ok({"command": "set_nozzle_temp", "temperature": int(temp), "printer": name})
+            try:
+                temp = int(temp)
+            except (TypeError, ValueError):
+                return _error("'temperature' must be an integer", 400)
+            if not 0 <= temp <= 350:
+                return _error("Nozzle temperature must be between 0 and 350 C", 400)
+            ok = printer.set_nozzle_temperature(temp)
+            return _ok({"command": "set_nozzle_temp", "temperature": temp, "printer": name}) if ok else _error("Printer rejected command", 502)
 
         elif cmd == "unload_filament":
-            printer.unload_filament()
-            return _ok({"command": "unload_filament", "printer": name})
+            ok = printer.unload_filament()
+            return _ok({"command": "unload_filament", "printer": name}) if ok else _error("Printer rejected command", 502)
 
         elif cmd == "load_filament":
-            printer.load_filament()
-            return _ok({"command": "load_filament", "printer": name})
+            ok = printer.load_filament()
+            return _ok({"command": "load_filament", "printer": name}) if ok else _error("Printer rejected command", 502)
 
         else:
             return _error(f"Unknown command: {cmd}", 400, "UNKNOWN_COMMAND")
@@ -204,7 +310,10 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
     # ── Happy Hare (MMU) ─────────────────────────────────
 
     # Known Happy Hare macro prefixes
-    _HH_PREFIXES = ("MMU_", "_MMU_", "MMU ")
+    _HH_PREFIXES = ("MMU_", "_MMU_")
+    _HH_MACRO_RE = re.compile(r"^_?MMU_[A-Z0-9_]+$")
+    _HH_PARAM_KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,31}$")
+    _HH_PARAM_VALUE_RE = re.compile(r"^[A-Za-z0-9_.+#:/-]{1,128}$")
 
     # Categorised Happy Hare macros with descriptions and parameters
     _HH_MACRO_INFO = {
@@ -319,6 +428,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         })
 
     @bp.route("/printers/<name>/happyhare/run", methods=["POST"])
+    @_admin_only
     def happyhare_run(name):
         """
         Execute a Happy Hare macro on a Klipper printer.
@@ -343,18 +453,20 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
 
         # Security: only allow Happy Hare macros
         upper_macro = macro.upper()
-        if not any(upper_macro.startswith(p) for p in _HH_PREFIXES):
+        if not _HH_MACRO_RE.fullmatch(upper_macro):
             return _error("Only Happy Hare macros (MMU_*) are allowed", 403, "MACRO_NOT_ALLOWED")
 
         # Build gcode command with parameters
         params = data.get("params", {})
+        if not isinstance(params, dict) or len(params) > 16:
+            return _error("'params' must be an object with at most 16 values", 400)
         gcode = upper_macro
         for key, val in params.items():
-            # Sanitise parameter names and values
-            safe_key = "".join(c for c in str(key).upper() if c.isalnum() or c == '_')
+            safe_key = str(key).upper().strip()
             safe_val = str(val).strip()
-            if safe_key and safe_val:
-                gcode += f" {safe_key}={safe_val}"
+            if not _HH_PARAM_KEY_RE.fullmatch(safe_key) or not _HH_PARAM_VALUE_RE.fullmatch(safe_val):
+                return _error(f"Invalid Happy Hare parameter: {key}", 400, "INVALID_MACRO_PARAMETER")
+            gcode += f" {safe_key}={safe_val}"
 
         ok = printer.send_gcode(gcode)
         if ok:
@@ -388,7 +500,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
             limit: max results (default 100)
         """
         status_filter = request.args.get("status")
-        limit = request.args.get("limit", 100, type=int)
+        limit = max(1, min(request.args.get("limit", 100, type=int), 500))
 
         if status_filter == "queued":
             jobs = job_queue.get_queued_jobs()
@@ -397,8 +509,14 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         else:
             jobs = job_queue.get_all_jobs(limit=limit)
 
-        stats = job_queue.get_stats()
-        return _ok(jobs, meta={"stats": stats, "count": len(jobs)})
+        if not (_check_api_key() or _is_admin()):
+            jobs = [job for job in jobs if _is_job_owner(job)]
+        jobs = [_public_job(job) for job in jobs]
+        stats = job_queue.get_stats() if (_check_api_key() or _is_admin()) else None
+        meta = {"count": len(jobs)}
+        if stats is not None:
+            meta["stats"] = stats
+        return _ok(jobs, meta=meta)
 
     @bp.route("/jobs/<int:job_id>", methods=["GET"])
     def get_job(job_id):
@@ -406,9 +524,12 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         job = job_queue.get_job(job_id)
         if not job:
             return _error("Job not found", 404, "JOB_NOT_FOUND")
-        return _ok(job)
+        if not (_check_api_key() or _is_admin() or _is_job_owner(job)):
+            return _error("Not authorised for this job", 403, "JOB_ACCESS_DENIED")
+        return _ok(_public_job(job))
 
     @bp.route("/jobs", methods=["POST"])
+    @_print_access_only
     def create_job():
         """
         Upload a file and create a new print job.
@@ -427,21 +548,44 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         if not file.filename or not _allowed_file(file.filename):
             return _error("Invalid file type. Allowed: .gcode, .3mf", 400, "INVALID_FILE_TYPE")
 
+        try:
+            copies = int(request.form.get("copies", 1))
+            priority = int(request.form.get("priority", 0))
+        except (TypeError, ValueError):
+            return _error("'copies' and 'priority' must be integers", 400, "INVALID_JOB_OPTIONS")
+        if not 1 <= copies <= 100:
+            return _error("'copies' must be between 1 and 100", 400, "INVALID_COPIES")
+        if not -100 <= priority <= 100:
+            return _error("'priority' must be between -100 and 100", 400, "INVALID_PRIORITY")
+
+        printer_name = request.form.get("printer", "").strip()
+        if printer_name:
+            target_error = _validate_print_target(printer_name)
+            if target_error:
+                return _error(*target_error)
+
         original_name = secure_filename(file.filename)
+        if not original_name:
+            return _error("Invalid filename", 400, "INVALID_FILENAME")
         unique_name = f"{uuid.uuid4().hex}_{original_name}"
         file_path = os.path.join(job_queue.upload_dir, unique_name)
         file.save(file_path)
+        try:
+            validate_print_file(file_path)
+        except InvalidPrintFile as exc:
+            try:
+                os.unlink(file_path)
+            except OSError:
+                pass
+            return _error(str(exc), 400, "INVALID_PRINT_FILE")
 
         # Extract real model name from OrcaSlicer temp filenames
         if parse_model_name_fn and re.match(r"^\d+\.\d+\.gcode$", original_name):
             model_name = parse_model_name_fn(file_path)
             if model_name:
-                original_name = model_name + ".gcode"
+                original_name = secure_filename(str(model_name))[:200] + ".gcode"
 
-        copies = int(request.form.get("copies", 1))
-        priority = int(request.form.get("priority", 0))
-        notes = request.form.get("notes", "")
-        printer_name = request.form.get("printer", "")
+        notes = request.form.get("notes", "")[:2000]
         submitted_by = session.get("username", "api")
         try:
             meta = parse_metadata_fn(file_path) if parse_metadata_fn else {}
@@ -482,7 +626,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
                 t.start()
 
         job = job_queue.get_job(job_id)
-        return _ok(job, 201)
+        return _ok(_public_job(job), 201)
 
     @bp.route("/jobs/<int:job_id>", methods=["DELETE"])
     @_admin_only
@@ -501,6 +645,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         return "", 204
 
     @bp.route("/jobs/<int:job_id>/cancel", methods=["POST"])
+    @_owner_or_admin
     def cancel_job(job_id):
         """Cancel a queued or active job."""
         job = job_queue.get_job(job_id)
@@ -521,9 +666,11 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         if not ok:
             return _error("Job not found or cannot be requeued", 404)
         job = job_queue.get_job(job_id)
-        return _ok(job)
+        return _ok(_public_job(job))
 
     @bp.route("/jobs/<int:job_id>/reprint", methods=["POST"])
+    @_print_access_only
+    @_owner_or_admin
     def reprint_job(job_id):
         """Create a new copy of a job, optionally sending to one or more printers."""
         data = request.get_json(silent=True) or {}
@@ -535,9 +682,9 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
 
         # Validate all target printers first when immediate send is requested
         for pname in printer_names:
-            printer = farm_manager.get_printer(pname)
-            if not printer:
-                return _error(f"Printer '{pname}' not found", 404, "PRINTER_NOT_FOUND")
+            target_error = _validate_print_target(pname)
+            if target_error:
+                return _error(*target_error)
 
         new_id = job_queue.reprint_job(job_id)
         if new_id is None:
@@ -546,7 +693,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         # Backward-compatible behavior: create queued copy only
         if not printer_names:
             job = job_queue.get_job(new_id)
-            return _ok(job, 201)
+            return _ok(_public_job(job), 201)
 
         results = []
         first = printer_names[0]
@@ -566,7 +713,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
             results.append({"printer": pname, "job_id": clone_id, "ok": bool(ok2)})
 
         job = job_queue.get_job(new_id)
-        return _ok({"job": job, "results": results, "all_ok": all(r["ok"] for r in results)}, 201)
+        return _ok({"job": _public_job(job), "results": results, "all_ok": all(r["ok"] for r in results)}, 201)
 
     @bp.route("/jobs/<int:job_id>/assign", methods=["POST"])
     @_admin_only
@@ -593,8 +740,9 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
 
         results = []
         for i, pname in enumerate(printer_names):
-            if not farm_manager.get_printer(pname):
-                results.append({"printer": pname, "ok": False, "error": "Printer not found"})
+            target_error = _validate_print_target(pname)
+            if target_error:
+                results.append({"printer": pname, "ok": False, "error": target_error[0]})
                 continue
             if i == 0:
                 ok = job_queue.assign_job(job_id, pname)
@@ -611,6 +759,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         return _ok(results)
 
     @bp.route("/jobs/<int:job_id>/filaments", methods=["GET"])
+    @_owner_or_admin
     def job_filaments(job_id):
         """Get filament requirements parsed from the G-code."""
         job = job_queue.get_job(job_id)
@@ -636,7 +785,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         if not file_library:
             return _ok({"files": [], "folders": []})
         folder_id = request.args.get("folder_id", type=int)
-        files = file_library.get_files(folder_id)
+        files = [_public_library_file(f) for f in file_library.get_files(folder_id)]
         folders = file_library.get_folders(folder_id)
         return _ok({"files": files, "folders": folders})
 
@@ -646,7 +795,8 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         if not file_library:
             return _ok({"files": []})
         q = request.args.get("q", "")
-        return _ok({"files": file_library.search_files(q)})
+        files = [_public_library_file(f) for f in file_library.search_files(q[:200])]
+        return _ok({"files": files})
 
     @bp.route("/library/files/<int:file_id>", methods=["GET"])
     def library_get_file(file_id):
@@ -656,9 +806,10 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         f = file_library.get_file(file_id)
         if not f:
             return _error("File not found", 404, "FILE_NOT_FOUND")
-        return _ok(f)
+        return _ok(_public_library_file(f))
 
     @bp.route("/library/files/<int:file_id>", methods=["PATCH"])
+    @_admin_only
     def library_move_file(file_id):
         """Move a file to a different folder. Body: {"folder_id": <id|null>}"""
         if not file_library:
@@ -678,6 +829,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         return _ok(result)
 
     @bp.route("/library/files/<int:file_id>/print", methods=["POST"])
+    @_print_access_only
     def library_print_file(file_id):
         """Create a new print job from a library file."""
         if not file_library:
@@ -700,7 +852,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         )
         file_library.increment_print_count(file_id)
         job = job_queue.get_job(new_job_id)
-        return _ok(job, 201)
+        return _ok(_public_job(job), 201)
 
     # ── Library Folders ──────────────────────────────────
 
@@ -713,6 +865,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         return _ok({"folders": file_library.get_folders(parent_id)})
 
     @bp.route("/library/folders", methods=["POST"])
+    @_admin_only
     def library_create_folder():
         """Create a folder. Body: {"name": "...", "parent_id": <optional>}"""
         if not file_library:
@@ -726,6 +879,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         return _ok(result, 201)
 
     @bp.route("/library/folders/<int:folder_id>", methods=["PATCH"])
+    @_admin_only
     def library_rename_folder(folder_id):
         """Rename a folder. Body: {"name": "new name"}"""
         if not file_library:
@@ -765,7 +919,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         """Get the latest camera snapshot (JPEG)."""
         if not camera_manager:
             return _error("Camera manager not available", 500)
-        frame = camera_manager.get_latest_frame(name)
+        frame = camera_manager.get_frame(name)
         if frame is None:
             return _error("No snapshot available", 404, "NO_SNAPSHOT")
         from flask import Response
@@ -830,6 +984,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
 
     @bp.route("/spoolman/spools", methods=["POST"])
     @_spoolman_required
+    @_admin_only
     def spoolman_create_spool():
         """Create a spool in Spoolman. Body: Spoolman spool schema."""
         data = request.get_json(silent=True) or {}
@@ -840,6 +995,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
 
     @bp.route("/spoolman/spools/<int:spool_id>", methods=["PATCH"])
     @_spoolman_required
+    @_admin_only
     def spoolman_update_spool(spool_id):
         """Update a spool in Spoolman."""
         data = request.get_json(silent=True) or {}
@@ -860,6 +1016,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
 
     @bp.route("/spoolman/spools/<int:spool_id>/use", methods=["POST"])
     @_spoolman_required
+    @_admin_only
     def spoolman_use_spool(spool_id):
         """
         Consume filament from a spool.
@@ -965,6 +1122,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
 
     @bp.route("/spoolman/printers/<name>/tools/<tool_name>/spools/<int:spool_id>", methods=["PUT"])
     @_spoolman_required
+    @_admin_only
     def spoolman_assign_spool_to_tool(name, tool_name, spool_id):
         """Assign a spool to a specific Klipper toolhead."""
         if not farm_manager.get_printer(name):
@@ -981,6 +1139,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
 
     @bp.route("/spoolman/printers/<name>/tools/<tool_name>/spools/<int:spool_id>", methods=["DELETE"])
     @_spoolman_required
+    @_admin_only
     def spoolman_remove_spool_from_tool(name, tool_name, spool_id):
         """Remove a spool assignment from a specific Klipper toolhead."""
         if not farm_manager.get_printer(name):
@@ -994,6 +1153,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
 
     @bp.route("/spoolman/printers/<name>/spools/<int:spool_id>", methods=["PUT"])
     @_spoolman_required
+    @_admin_only
     def spoolman_assign_spool_to_printer(name, spool_id):
         """Assign a spool to a printer by setting its location in Spoolman."""
         if not farm_manager.get_printer(name):
@@ -1005,6 +1165,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
 
     @bp.route("/spoolman/printers/<name>/spools/<int:spool_id>", methods=["DELETE"])
     @_spoolman_required
+    @_admin_only
     def spoolman_remove_spool_from_printer(name, spool_id):
         """Remove a spool's printer assignment (clear its location)."""
         result = spoolman_client.update_spool(spool_id, {"location": ""})
@@ -1047,6 +1208,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
     @bp.route("/printers/<name>/ams/trays/<int:tray_id>/spool/<int:spool_id>",
               methods=["PUT"])
     @_spoolman_required
+    @_admin_only
     def ams_assign_spool_to_tray(name, tray_id, spool_id):
         """Assign a Spoolman spool to an AMS tray (persisted locally)."""
         if not farm_manager.get_printer(name):
@@ -1060,6 +1222,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
 
     @bp.route("/printers/<name>/ams/trays/<int:tray_id>/spool", methods=["DELETE"])
     @_spoolman_required
+    @_admin_only
     def ams_unassign_spool_from_tray(name, tray_id):
         """Remove the Spoolman spool assignment for an AMS tray."""
         if not farm_manager.get_printer(name):

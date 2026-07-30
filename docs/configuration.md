@@ -22,17 +22,18 @@ Settings tab provides:
 - Check for Updates
 - Apply Update and Restart
 
-For one-click restart from the web UI, grant service user permission:
+`setup.sh` installs a root-owned deployment helper with a fixed configuration.
+The service can invoke that helper only for validated update, Apache, OrcaSlicer,
+and service-restart operations. Do not grant the service account direct
+passwordless access to `systemctl`, file-writing tools, Git, or Apache commands.
 
-```bash
-www-data ALL=(root) NOPASSWD: /usr/bin/systemctl restart the-print-farm.service
-```
+Legacy installations should rerun `sudo bash setup.sh --restart` while printers
+are idle. The script replaces older broad sudoers rules and validates the new
+configuration before restarting. Both setup and the web updater refuse an
+ordinary restart while print activity is detected.
 
-Add as sudoers drop-in with mode 440.
-
-New installs run this automatically via setup.sh.
-
-Use the manual sudoers rule above only for legacy installs that were set up before this automation was added.
+The live configuration is stored at `/etc/the-print-farm/config.yaml` with mode
+`0600`; `config/config.yaml` remains as a symlink for compatibility.
 
 ## Printer Pool
 

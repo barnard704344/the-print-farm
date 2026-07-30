@@ -32,14 +32,18 @@ import hashlib
 import json
 import logging
 import os
+import re
 import socket
 import ssl
 import struct
 import subprocess
+import tempfile
 import threading
 import time
 from pathlib import Path
 from typing import Optional
+
+from .file_validation import validate_print_file
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +52,9 @@ MQTT_PORT = 8883
 FTP_PORT = 990
 SSDP_PORT = 2021
 SSDP_ADDR = "239.255.255.250"
+MAX_MQTT_PACKET_BYTES = 1024 * 1024
+MAX_FTP_COMMAND_BYTES = 8192
+MAX_VIRTUAL_UPLOAD_BYTES = 1024 * 1024 * 1024
 
 # How often to push state to connected Orca clients (seconds)
 STATE_PUSH_INTERVAL = 2.0
@@ -219,7 +226,7 @@ def _setup_macvlan_dhcp(printer_name: str, nic: str) -> Optional[str]:
     if not os.path.exists(noop_script):
         with open(noop_script, "w") as f:
             f.write("#!/bin/sh\nexit 0\n")
-        os.chmod(noop_script, 0o755)
+    os.chmod(noop_script, 0o700)
     r = subprocess.run(
         ["dhclient", "-1", "-v", "-lf", lease_file, "-pf", pid_file,
          "-sf", noop_script, iface],
@@ -433,6 +440,13 @@ class _MQTTClientHandler:
                 ptype = (packet_type_byte >> 4) & 0x0F
                 remaining = _read_remaining_length(self._conn)
                 if remaining is None:
+                    break
+                if remaining > MAX_MQTT_PACKET_BYTES:
+                    logger.warning(
+                        "[%s] Closing MQTT client with oversized packet: %s bytes",
+                        self._server.name,
+                        remaining,
+                    )
                     break
                 body = _read_bytes(self._conn, remaining) if remaining > 0 else b""
                 if body is None:
@@ -648,6 +662,9 @@ class _ImplicitFTPSHandler:
                 if not b:
                     return None
                 buf += b
+                if len(buf) > MAX_FTP_COMMAND_BYTES:
+                    self._send("500 Command line too long")
+                    return None
                 if buf.endswith(b"\n"):
                     return buf.decode("utf-8", errors="replace").strip()
         except (OSError, ssl.SSLError):
@@ -758,18 +775,34 @@ class _ImplicitFTPSHandler:
         if not data_conn:
             self._send("425 Can't open data connection")
             return
+        temp_path = None
+        size = 0
         try:
-            buf = b""
-            while True:
-                chunk = data_conn.recv(65536)
-                if not chunk:
-                    break
-                buf += chunk
+            fd, temp_path = tempfile.mkstemp(
+                prefix=".virtual-upload-",
+                dir=self._server.uploads_dir,
+            )
+            with os.fdopen(fd, "wb") as output:
+                while True:
+                    chunk = data_conn.recv(65536)
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    if size > MAX_VIRTUAL_UPLOAD_BYTES:
+                        raise ValueError("Upload exceeds the 1 GiB limit")
+                    output.write(chunk)
+                output.flush()
+                os.fsync(output.fileno())
             try:
                 data_conn.unwrap()
             except Exception:
                 pass
-        except (OSError, ssl.SSLError) as e:
+        except (OSError, ssl.SSLError, ValueError) as e:
+            if temp_path:
+                try:
+                    os.unlink(temp_path)
+                except OSError:
+                    pass
             self._send(f"426 Connection closed: {e}")
             return
         finally:
@@ -778,16 +811,25 @@ class _ImplicitFTPSHandler:
             except Exception:
                 pass
 
-        if not buf:
+        if not size:
+            if temp_path:
+                try:
+                    os.unlink(temp_path)
+                except OSError:
+                    pass
             self._send("550 Empty file")
             return
 
         # Save file and queue the job
         basename = os.path.basename(filename) or filename
         try:
-            self._server.receive_file(basename, buf)
+            self._server.receive_file(basename, temp_path, size)
             self._send("226 Transfer complete")
         except Exception as e:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
             logger.error(f"[{self._server.name}] FTP STOR failed: {e}")
             self._send(f"550 {e}")
 
@@ -829,14 +871,27 @@ class VirtualFTPServer:
         self._ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
         self._server_sock: Optional[socket.socket] = None
 
-    def receive_file(self, filename: str, data: bytes):
+    def receive_file(self, filename: str, temp_path: str, size: int):
         """Save uploaded file and add it to the job queue."""
-        import hashlib
-        h = hashlib.md5(data).hexdigest()
+        filename = re.sub(r"[^A-Za-z0-9_. -]", "_", os.path.basename(filename))[:240]
+        if not filename or not filename.lower().endswith((".gcode", ".3mf")):
+            raise ValueError("Only .gcode and .3mf uploads are accepted")
+        digest = hashlib.sha256()
+        with open(temp_path, "rb") as source:
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(chunk)
+        h = digest.hexdigest()
         dest = os.path.join(self.uploads_dir, f"{h}_{filename}")
-        with open(dest, "wb") as f:
-            f.write(data)
-        logger.info(f"[{self.name}] Received upload: {filename} ({len(data)} bytes) → {dest}")
+        os.replace(temp_path, dest)
+        try:
+            validate_print_file(dest)
+        except Exception:
+            try:
+                os.unlink(dest)
+            except OSError:
+                pass
+            raise
+        logger.info(f"[{self.name}] Received upload: {filename} ({size} bytes) -> {dest}")
         # Queue the job (unassigned — staff assigns via web UI)
         try:
             try:
@@ -854,6 +909,10 @@ class VirtualFTPServer:
             logger.info(f"[{self.name}] Queued job from Orca upload: {filename}")
         except Exception as e:
             logger.error(f"[{self.name}] Failed to queue job: {e}")
+            try:
+                os.unlink(dest)
+            except OSError:
+                pass
 
     def serve_forever(self):
         try:

@@ -106,7 +106,7 @@ Jobs enter the queue unassigned and can be sent to any printer from the dashboar
 
 - Each printer gets a dedicated Apache VirtualHost on its own port (5001, 5002, …)
 - Apache proxies `/api` requests on that port to Flask's per-printer OctoPrint-compatible routes
-- Each vhost includes `Header always set Access-Control-Allow-Origin "*"` so the dashboard's port-reachability probe (a cross-origin fetch) succeeds and printers are never falsely shown as firewall-blocked
+- The dashboard uses an opaque browser request to test port reachability without enabling wildcard CORS
 - The `setup.sh` script auto-configures ports for all printers in `config.yaml`
 - Adding, removing, or renaming printers from the dashboard automatically manages Apache vhosts
 - Jobs uploaded via a per-printer port are assigned to that printer but **not auto-sent** — send them manually from the Job Queue tab when the printer is ready

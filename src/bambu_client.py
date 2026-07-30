@@ -11,11 +11,13 @@ Protocol reference (Bambu LAN mode):
 - TLS on port 8883 with self-signed cert
 """
 
-import ftplib
+# Bambu's file-transfer protocol is implicit FTPS, not plaintext FTP.
+import ftplib  # nosec B402
 import hashlib
-import io
 import json
 import logging
+import os
+import shutil
 import socket
 import ssl
 import threading
@@ -26,6 +28,8 @@ from enum import Enum
 from typing import Callable, Optional
 
 import paho.mqtt.client as mqtt
+
+from .tls_trust import verify_peer_certificate
 
 
 class ImplicitFTPS(ftplib.FTP_TLS):
@@ -140,31 +144,40 @@ def sanitize_3mf_external_spool(path: str) -> str:
 
     sanitized_path = path[:-4] + ".external.3mf"
     changed = False
+    gcode_digest = None
 
-    with zipfile.ZipFile(path, "r") as src, zipfile.ZipFile(sanitized_path, "w", zipfile.ZIP_DEFLATED) as dst:
-        gcode_bytes = None
+    with zipfile.ZipFile(path, "r") as src, zipfile.ZipFile(sanitized_path, "w") as dst:
         for info in src.infolist():
-            data = src.read(info.filename)
             if info.filename == "Metadata/plate_1.gcode":
-                text = data.decode("utf-8", errors="replace")
-                lines = []
-                for line in text.splitlines(keepends=True):
-                    stripped = line.lstrip()
-                    if stripped.startswith(("M620", "M621")):
-                        line = "; external spool: disabled AMS command: " + line
-                        changed = True
-                    lines.append(line)
-                data = "".join(lines).encode("utf-8")
-                gcode_bytes = data
+                if info.file_size > 128 * 1024 * 1024:
+                    raise ValueError("Embedded G-code is too large to sanitize safely")
+                digest = hashlib.md5(usedforsecurity=False)
+                with src.open(info) as source, dst.open(info, "w") as output:
+                    for line in source:
+                        stripped = line.lstrip()
+                        if stripped.startswith((b"M620", b"M621")):
+                            line = b"; external spool: disabled AMS command: " + line
+                            changed = True
+                        output.write(line)
+                        digest.update(line)
+                gcode_digest = digest.hexdigest()
             elif info.filename == "Metadata/plate_1.gcode.md5":
                 # Rewritten after plate_1.gcode so the checksum matches.
                 continue
-            dst.writestr(info, data)
+            else:
+                with src.open(info) as source, dst.open(info, "w") as output:
+                    shutil.copyfileobj(source, output, length=1024 * 1024)
 
-        if gcode_bytes is not None:
-            dst.writestr("Metadata/plate_1.gcode.md5", hashlib.md5(gcode_bytes).hexdigest())
+        if gcode_digest is not None:
+            dst.writestr("Metadata/plate_1.gcode.md5", gcode_digest)
 
-    return sanitized_path if changed else path
+    if changed:
+        return sanitized_path
+    try:
+        os.unlink(sanitized_path)
+    except OSError:
+        pass
+    return path
 
 
 class PrintStatus(Enum):
@@ -244,7 +257,7 @@ class BambuClient:
 
     def __init__(self, name: str, host: str, access_code: str, serial: str,
                  port: int = 8883, ftp_port: int = 990, camera_port: int = 6000,
-                 ams_serial: str = ""):
+                 ams_serial: str = "", tls_fingerprints: Optional[dict] = None):
         self.name = name
         self.host = host
         self.access_code = access_code
@@ -253,6 +266,7 @@ class BambuClient:
         self.port = port
         self.ftp_port = ftp_port
         self.camera_port = camera_port
+        self.tls_fingerprints = tls_fingerprints or {}
 
         self._client: Optional[mqtt.Client] = None
         self._connected = threading.Event()
@@ -298,6 +312,7 @@ class BambuClient:
         self._client.on_connect = self._handle_connect
         self._client.on_message = self._handle_message
         self._client.on_disconnect = self._handle_disconnect
+        self._client.on_socket_open = self._verify_mqtt_socket
 
         logger.info(f"[{self.name}] Connecting to {self.host}:{self.port}...")
         try:
@@ -313,6 +328,15 @@ class BambuClient:
 
         logger.info(f"[{self.name}] Connected successfully")
         return True
+
+    def _verify_mqtt_socket(self, _client, _userdata, sock):
+        """Pin the live MQTT socket before Paho sends the CONNECT credentials."""
+        verify_peer_certificate(
+            self.host,
+            self.port,
+            sock.getpeercert(binary_form=True),
+            self.tls_fingerprints.get("mqtt"),
+        )
 
     def disconnect(self):
         if hasattr(self, '_stop_event'):
@@ -621,6 +645,12 @@ class BambuClient:
 
             ftp = ImplicitFTPS(context=ssl_ctx)
             ftp.connect(self.host, self.ftp_port, timeout=30)
+            verify_peer_certificate(
+                self.host,
+                self.ftp_port,
+                ftp.sock.getpeercert(binary_form=True),
+                self.tls_fingerprints.get("ftp"),
+            )
             ftp.login("bblp", self.access_code)
             ftp.prot_p()
 

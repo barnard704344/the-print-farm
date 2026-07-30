@@ -645,7 +645,9 @@ on next page load.
 
 ## Software Update
 
-Admin only. Used by the Settings tab update controls.
+Authenticated staff session only. The OrcaSlicer/API integration key cannot
+invoke deployment updates. These endpoints are used by the Settings tab update
+controls.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -678,8 +680,11 @@ Admin only. Used by the Settings tab update controls.
 **Notes:**
 
 - Requires git on the host
-- New installs configure service-user restart permission automatically via setup.sh
-- Legacy installs may require a manual sudoers rule; if missing, the endpoint can still pull code but restart will fail
+- `setup.sh` installs a narrow root-owned helper for fetching, fast-forwarding,
+  reconciling deployment files, installing dependencies, and restarting
+- Updates are rejected when the working tree contains local changes
+- Legacy installs must rerun `sudo bash setup.sh --restart`; do not grant the
+  service account direct passwordless access to Git, `systemctl`, or file tools
 
 ---
 
@@ -687,7 +692,7 @@ Admin only. Used by the Settings tab update controls.
 
 These endpoints mimic OctoPrint's API so OrcaSlicer can connect to The Print Farm as a network printer.
 
-Each per-printer port (5001, 5002, …) is served by a dedicated Apache VirtualHost that proxies `/api` requests to Flask. These vhosts include `Header always set Access-Control-Allow-Origin "*"` so the dashboard's cross-origin port-reachability probes succeed from any network. The general queue on port 80 is always reachable without this header.
+Each per-printer port (5001, 5002, …) is served by a dedicated Apache VirtualHost that proxies `/api` requests to Flask. The vhosts do not enable wildcard CORS; the dashboard uses an opaque request when probing whether a port is reachable. The general queue is served through the main Apache vhost.
 
 ### Generic Endpoints
 

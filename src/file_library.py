@@ -9,14 +9,19 @@ import base64
 import logging
 import os
 import re
-import shutil
 import sqlite3
 import threading
 import zipfile
 from datetime import datetime, timezone
 from typing import Optional
 
+from .image_validation import save_normalized_image
+
 logger = logging.getLogger(__name__)
+
+MAX_GCODE_READ_BYTES = 64 * 1024 * 1024
+MAX_TOOLPATH_MOVES = 200000
+MAX_THUMBNAIL_BYTES = 10 * 1024 * 1024
 
 
 class FileLibrary:
@@ -294,6 +299,22 @@ class FileLibrary:
             if not row:
                 conn.close()
                 return {"ok": False, "error": "File not found"}
+            jobs_table = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'jobs'"
+            ).fetchone()
+            if jobs_table:
+                active_reference = conn.execute(
+                    """SELECT id FROM jobs
+                       WHERE file_path = ? AND status IN ('queued', 'uploading', 'printing')
+                       LIMIT 1""",
+                    (row["file_path"],),
+                ).fetchone()
+                if active_reference:
+                    conn.close()
+                    return {
+                        "ok": False,
+                        "error": "File is referenced by an active or queued job",
+                    }
             conn.execute("DELETE FROM files WHERE id = ?", (file_id,))
             conn.commit()
             conn.close()
@@ -387,11 +408,23 @@ class FileLibrary:
             for candidate in ["Metadata/plate_1.png", "Metadata/top_1.png",
                               "Metadata/thumbnail.png", "Thumbnails/thumbnail.png"]:
                 if candidate in z.namelist():
+                    info = z.getinfo(candidate)
+                    if info.file_size > MAX_THUMBNAIL_BYTES:
+                        logger.warning("Skipping oversized archive thumbnail: %s bytes", info.file_size)
+                        continue
                     thumb_name = f"{stored_name}.thumb.png"
                     thumb_path = os.path.join(self.storage_dir, "thumbnails", thumb_name)
-                    with z.open(candidate) as src, open(thumb_path, "wb") as dst:
-                        dst.write(src.read())
-                    return thumb_path
+                    with z.open(candidate) as src:
+                        payload = src.read(MAX_THUMBNAIL_BYTES + 1)
+                    try:
+                        save_normalized_image(
+                            payload,
+                            thumb_path,
+                            max_bytes=MAX_THUMBNAIL_BYTES,
+                        )
+                        return thumb_path
+                    except (OSError, ValueError):
+                        continue
         return None
 
     def _extract_gcode_thumbnail(self, file_path: str, stored_name: str) -> Optional[str]:
@@ -443,11 +476,14 @@ class FileLibrary:
             return None
 
         try:
-            png_data = base64.b64decode(best_b64)
+            png_data = base64.b64decode(best_b64, validate=True)
             thumb_name = f"{stored_name}.thumb.png"
             thumb_path = os.path.join(self.storage_dir, "thumbnails", thumb_name)
-            with open(thumb_path, "wb") as f:
-                f.write(png_data)
+            save_normalized_image(
+                png_data,
+                thumb_path,
+                max_bytes=MAX_THUMBNAIL_BYTES,
+            )
             return thumb_path
         except Exception as e:
             logger.debug(f"Failed to decode thumbnail for {stored_name}: {e}")
@@ -513,6 +549,7 @@ class FileLibrary:
             return None
 
         moves = []
+        move_limit_reached = False
         cx, cy, cz = 0.0, 0.0, 0.0
         last_e = 0.0
         absolute_xyz = True
@@ -594,28 +631,25 @@ class FileLibrary:
                         )
                         for seg in arc_segs:
                             moves.append((*seg, current_feature))
+                            if len(moves) >= MAX_TOOLPATH_MOVES:
+                                move_limit_reached = True
+                                break
                     else:
                         moves.append((cx, cy, cz, nx, ny, nz, current_feature))
+                        move_limit_reached = len(moves) >= MAX_TOOLPATH_MOVES
             cx, cy, cz = nx, ny, nz
+            if move_limit_reached:
+                break
 
         if not moves:
             return None
 
-        # Downsample only when needed; keep a very high global detail ceiling for all files.
-        max_moves = 800000
-        if len(moves) > max_moves:
-            step = len(moves) / max_moves
-            sampled = []
-            i = 0.0
-            while int(i) < len(moves):
-                sampled.append(moves[int(i)])
-                i += step
-            moves = sampled
-
-        # Compute bounds for centering
-        all_x = [m[0] for m in moves] + [m[3] for m in moves]
-        all_y = [m[1] for m in moves] + [m[4] for m in moves]
-        all_z = [m[2] for m in moves] + [m[5] for m in moves]
+        min_x = min(min(m[0], m[3]) for m in moves)
+        min_y = min(min(m[1], m[4]) for m in moves)
+        min_z = min(min(m[2], m[5]) for m in moves)
+        max_x = max(max(m[0], m[3]) for m in moves)
+        max_y = max(max(m[1], m[4]) for m in moves)
+        max_z = max(max(m[2], m[5]) for m in moves)
 
         # Pack as flat arrays for compact transfer: [x1,y1,z1,x2,y2,z2, ...]
         positions = []
@@ -635,8 +669,8 @@ class FileLibrary:
             "features": features,
             "feature_names": {v: k for k, v in feat_map.items()},
             "bounds": {
-                "min": [round(min(all_x), 2), round(min(all_y), 2), round(min(all_z), 2)],
-                "max": [round(max(all_x), 2), round(max(all_y), 2), round(max(all_z), 2)],
+                "min": [round(min_x, 2), round(min_y, 2), round(min_z, 2)],
+                "max": [round(max_x, 2), round(max_y, 2), round(max_z, 2)],
             },
             "count": len(moves),
         }
@@ -833,20 +867,21 @@ class FileLibrary:
         logger.info(f"Generated 3D toolpath thumbnail for {stored_name}")
         return thumb_path
 
-    def _read_gcode_lines(self, file_path: str, max_bytes: Optional[int] = None) -> list:
+    def _read_gcode_lines(self, file_path: str, max_bytes: Optional[int] = MAX_GCODE_READ_BYTES) -> list:
         """Read gcode lines from a .gcode, .3mf, or .gcode.3mf file.
 
-        When *max_bytes* is None (the default) the entire file is read so that
-        every layer of the print is available for thumbnail generation and the
-        interactive 3-D viewer.  Pass an explicit value only when a hard upper
-        bound on memory consumption is required.
+        Reads are bounded by default so archive expansion and large G-code files
+        cannot exhaust the web process.
         """
         if file_path.endswith(".3mf"):
             try:
                 with zipfile.ZipFile(file_path) as z:
                     if "Metadata/plate_1.gcode" in z.namelist():
                         with z.open("Metadata/plate_1.gcode") as gf:
-                            raw = gf.read(max_bytes) if max_bytes is not None else gf.read()
+                            raw = gf.read(max_bytes + 1) if max_bytes is not None else gf.read()
+                            if max_bytes is not None and len(raw) > max_bytes:
+                                logger.warning("G-code preview truncated at %s bytes", max_bytes)
+                                raw = raw[:max_bytes]
                             return raw.decode("utf-8", errors="replace").split("\n")
             except Exception:
                 return []

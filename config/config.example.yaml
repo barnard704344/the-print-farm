@@ -17,6 +17,10 @@ printers: []
 #    mqtt_port: 8883
 #    ftp_port: 990
 #    camera_port: 6000
+#    tls_fingerprints:           # optional explicit SHA-256 pins; otherwise TOFU is used
+#      mqtt: ''
+#      ftp: ''
+#      camera: ''
 #    staff_only: false          # optional — restrict to staff users
 #
 # ── Klipper Printer (via Moonraker) ──
@@ -29,10 +33,12 @@ printers: []
 #    staff_only: false
 
 web:
-  host: 0.0.0.0
+  host: 127.0.0.1            # Apache is the public-facing reverse proxy
   port: 5000
   api_key: CHANGE_ME            # used by OrcaSlicer and API access
   admin_password: ''            # legacy single-password mode (ignored when local_users set)
+  max_upload_mb: 1024
+  session_cookie_secure: false   # set true after enabling HTTPS on Apache
 
 queue:
   upload_dir: ./uploads
@@ -55,11 +61,11 @@ plate_detection: {}
 # When AD is also enabled, local users are checked first.
 local_users: []
 #  - username: admin
-#    password: CHANGE_ME
+#    password_hash: scrypt:...   # generate with werkzeug.security.generate_password_hash
 #    role: staff                 # staff = admin access
 #    display_name: Administrator
 #  - username: student1
-#    password: CHANGE_ME
+#    password_hash: scrypt:...
 #    role: student
 
 # ── Student Print Access ─────────────────────────────────
@@ -75,8 +81,10 @@ student_access:
 active_directory:
   enabled: false
 #  server: 10.0.0.1
-#  port: 389
-#  use_ssl: false
+#  port: 636
+#  use_ssl: true
+#  tls_validate: true
+#  ca_certs_file: /etc/ssl/certs/ca-certificates.crt
 #  base_dn: DC=example,DC=local
 #  bind_user: CN=svc_account,OU=Service,DC=example,DC=local
 #  bind_password: CHANGE_ME
