@@ -4856,11 +4856,9 @@
                     const activeClass = t.active ? 'active' : '';
                     const emptyClass = !t.loaded ? 'empty' : '';
                     if (isAdmin) {
-                        const configureAction = t.is_bbl
-                            ? ''
-                            : `openTrayConfig(${nameArg}, ${Number(t.id)}, ${Number(t.slot)}, ${jsArg(t.type || '')}, ${jsArg(safeCssColor(t.color, '#333333'))}, ${jsArg(t.nozzle_temp_min)}, ${jsArg(t.nozzle_temp_max)})`;
+                        const configureAction = `openTrayConfig(${nameArg}, ${Number(t.id)}, ${Number(t.slot)}, ${jsArg(t.type || '')}, ${jsArg(safeCssColor(t.color, '#333333'))}, ${jsArg(t.nozzle_temp_min)}, ${jsArg(t.nozzle_temp_max)})`;
                         const trayTitle = t.is_bbl
-                            ? 'Bambu RFID filament — colour and type are supplied by the tag'
+                            ? 'Bambu RFID filament — click to override the tag colour or type'
                             : (t.loaded ? 'Click to configure filament' : 'Empty slot');
                         return `
                             <div class="ams-tray ${activeClass} ${emptyClass}"
@@ -4871,7 +4869,7 @@
                                 <div class="ams-tray-type">${escapeHtml(t.type || '—')}</div>
                                 <div class="ams-tray-slot">#${t.slot + 1}</div>
                                 ${t.loaded && t.remain >= 0 ? `<div class="ams-tray-remain">${t.remain}%</div>` : ''}
-                                ${t.loaded && !t.is_bbl ? `<div class="ams-tray-edit" onclick="event.stopPropagation();${configureAction}" title="Configure filament">&#9998;</div>` : ''}
+                                ${t.loaded ? `<div class="ams-tray-edit" onclick="event.stopPropagation();${configureAction}" title="Configure filament">&#9998;</div>` : ''}
                             </div>
                         `;
                     } else {
@@ -7751,7 +7749,7 @@
                     // Admin: click to configure. Non-admin: click to load.
                     const clickAttr = t.loaded
                         ? (isAdmin
-                            ? (t.is_bbl ? '' : `onclick="openTrayConfig(${jsArg(printerName)},${Number(t.id)},${Number(t.slot)},${jsArg(t.type || '')},${jsArg(safeCssColor(t.color, '#333333'))},${jsArg(t.nozzle_temp_min)},${jsArg(t.nozzle_temp_max)})"`)
+                            ? `onclick="openTrayConfig(${jsArg(printerName)},${Number(t.id)},${Number(t.slot)},${jsArg(t.type || '')},${jsArg(safeCssColor(t.color, '#333333'))},${jsArg(t.nozzle_temp_min)},${jsArg(t.nozzle_temp_max)})"`
                             : `onclick="amsLoadTray(${jsArg(printerName)},${Number(t.id)})"`)
                         : '';
 
@@ -7761,12 +7759,12 @@
                                 <span class="ams-pop-tray-spool-name">${escapeHtml(spoolName)}</span>
                                 ${spoolRem ? `<span class="ams-pop-tray-spool-rem">${spoolRem}</span>` : ''}
                            </div>`
-                        : (isAdmin && t.loaded && !t.is_bbl
+                        : (isAdmin && t.loaded
                             ? `<div class="ams-pop-tray-spool">+ Link spool</div>`
                             : '');
 
                     html += `<div class="ams-pop-tray ${activeClass} ${emptyClass}" ${clickAttr}
-                            title="${t.is_bbl ? 'Bambu RFID filament — colour and type are supplied by the tag' : (t.loaded ? (isAdmin ? 'Click to configure / link spool' : 'Click to load') : 'Empty slot')}">
+                            title="${t.is_bbl && isAdmin ? 'Bambu RFID filament — click to override the tag colour or type' : (t.loaded ? (isAdmin ? 'Click to configure / link spool' : 'Click to load') : 'Empty slot')}">
                         <div class="ams-pop-swatch ${bblClass}" style="background:${sw}"></div>
                         <div class="ams-pop-tray-info">
                             <div class="ams-pop-tray-type">${escapeHtml(t.type || '—')}</div>
