@@ -6413,7 +6413,10 @@
 
                 // Track available printers for manual job assignment (all connected, not actively printing)
                 availablePrinters = Object.entries(data.printers)
-                    .filter(([_, p]) => p.connected && p.status !== 'RUNNING' && p.status !== 'PAUSED')
+                    .filter(([_, p]) =>
+                        p.connected
+                        && ['IDLE', 'FINISH'].includes(String(p.status || '').toUpperCase())
+                    )
                     .filter(([_, p]) => isAdmin || !p.staff_only)
                     .map(([name, p]) => ({ name, status: p.status }));
             } catch (err) {
