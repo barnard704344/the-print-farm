@@ -3,7 +3,19 @@
 This file records notable user-facing, security, deployment, and compatibility
 changes to The Print Farm.
 
+## Unreleased
+
+### Documentation
+
+- Audited the complete documentation set against `v1.0.11`, including
+  authentication boundaries, native and Docker updates, failed-printer
+  readiness, camera rotation, optional Spoolman behaviour, and AMS controls for
+  tagged and generic filament.
+- Added the missing `v1.0.10` history and current release/image references.
+
 ## v1.0.11 - 2026-07-31 - Lightweight printer readiness
+
+Commit: `6d2a829`
 
 ### Changed
 
@@ -17,6 +29,31 @@ changes to The Print Farm.
 
 - Corrected printer-name escaping in generated dashboard actions so Details,
   AMS popups, tray configuration, and manual AMS colour selection are clickable.
+
+## v1.0.10 - 2026-07-31 - Readiness and integration fixes
+
+Commit: `f8eb611`
+
+### Changed
+
+- Made Spoolman genuinely optional: saving an empty address disables its
+  printer-card assignment controls without affecting normal filament, AMS, or
+  MMU operation.
+- Read Bambu AMS tag data when supplied by the printer while allowing staff to
+  override tray type, colour, and temperatures for both RFID-tagged and generic
+  filament.
+- Added the configurable failed-printer cooldown. A connected failed printer
+  returns to Ready after the delay but jobs are never resent automatically.
+- Excluded failed printers from manual job targets until their cooldown expires
+  or the printer reports a non-failed state.
+
+### Fixed
+
+- Scoped Apache API proxy rules to The Print Farm and its dedicated OrcaSlicer
+  ports so unrelated applications on the same web server keep ownership of
+  their own `/api` routes.
+- Reconciled the native setup/update path with the privileged helper and
+  fast-forward-only Git workflow.
 
 ## v1.0.9 - 2026-07-30 - Security and deployment hardening
 

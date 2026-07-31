@@ -1,17 +1,25 @@
 # API Reference
 
+Documentation status: `v1.0.11`.
+
 ## REST API v1
 
 A full RESTful API at `/api/v1/` for external integrations:
 
-- **30+ endpoints** with consistent JSON envelope (`{ok, data, error, meta}`)
+- **40+ routes** with a consistent JSON envelope (`{ok, data, error, meta}`)
 - **API key authentication** via `X-Api-Key` header (configured in `config.yaml` → `web.api_key`)
 - Printers: list, status, commands (pause/resume/stop/temps/filament)
-- Jobs: create, list, status, assign, cancel, delete
-- File library: list, upload, download, delete
-- Cameras: snapshot, streaming control
-- Software updates: check and apply
+- Jobs: create/upload, list, status, assign, cancel, requeue, reprint, delete
+- File library: list, search, organise, print, download, delete
+- Cameras: list and authenticated JPEG snapshots
+- Spoolman: inventory, printer/tool assignment, and AMS tray linking
+- Happy Hare: macro discovery and validated execution
 - OpenAPI 3.0 spec available at `/api/v1/openapi.json`
+
+Browser administration also uses authenticated non-v1 routes documented in
+[API.md](../API.md), including camera streams, settings, and native software
+updates. An integration key cannot invoke deployment updates; those require a
+staff browser session.
 
 ### Quick Examples
 

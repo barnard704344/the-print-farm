@@ -30,7 +30,7 @@ docker pull ghcr.io/barnard704344/the-print-farm:latest
 For reproducible deployments, pin this release instead:
 
 ```bash
-docker pull ghcr.io/barnard704344/the-print-farm:v1.0.9
+docker pull ghcr.io/barnard704344/the-print-farm:v1.0.11
 ```
 
 ### Run the container
@@ -98,6 +98,10 @@ docker run -d --name the-print-farm \
 
 This replaces the container with the newest published image while keeping your persistent data.
 
+The dashboard's **Apply Update and Restart** button is for native installations
+managed by `setup.sh`; it cannot replace its own Docker container. Always update
+a container by pulling and recreating it as shown above.
+
 ## Option 2: Build and Run Locally from Source
 
 Use this if you want to build the image on your machine, test local changes, or run directly from the repository source.
@@ -155,6 +159,11 @@ Use the local source build if:
 
 - Linux: host networking can improve broadcast and scan discovery behavior
 - macOS with Docker Desktop: direct printer IP configuration is recommended
+- The published container does not install the native host's Apache,
+  root-owned update helper, systemd service, DHCP client, or privileged macvlan
+  virtual-printer layer. Use direct printer IPs for Docker, and set
+  `virtual_printer: false` on BambuLab entries when LAN-mode emulation is not
+  provided separately by the host.
 
 ## GHCR Image Source
 
@@ -164,4 +173,5 @@ Images are published by:
 
 Published image path:
 
-- ghcr.io/barnard704344/the-print-farm:latest
+- `ghcr.io/barnard704344/the-print-farm:latest`
+- `ghcr.io/barnard704344/the-print-farm:v1.0.11`

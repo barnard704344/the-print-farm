@@ -1,6 +1,6 @@
 # The Print Farm — API Documentation
 
-Complete reference for all REST API endpoints.
+Complete reference for all REST API endpoints, reviewed for `v1.0.11`.
 
 ---
 
@@ -36,7 +36,10 @@ Pass your API key in the `X-Api-Key` header. Configure the key in `config/config
 X-Api-Key: your-api-key-here
 ```
 
-API key authentication grants full admin access and is intended for external integrations and OrcaSlicer.
+API key authentication is intended for external integrations and OrcaSlicer.
+It grants privileged access where an endpoint explicitly accepts integration
+keys, but deployment updates and other staff-session-only browser operations do
+not accept it.
 
 ### Session (Browser)
 
@@ -113,7 +116,8 @@ SSO login for Apache GSSAPI integration. Requires AD enabled.
 
 #### `GET /api/farm/status`
 
-Full status of all printers and farm summary. No auth required.
+Full status of all printers and farm summary. Login required. Sensitive
+connection fields are omitted from non-staff responses.
 
 **Response:**
 ```json
@@ -147,7 +151,7 @@ Full status of all printers and farm summary. No auth required.
 
 #### `GET /api/farm/summary`
 
-Farm summary counts only. No auth required.
+Farm summary counts only. Login required.
 
 **Response:**
 ```json
@@ -169,7 +173,7 @@ All control endpoints are `POST` and require admin role unless noted.
 
 #### `GET /api/printer/<name>/status`
 
-Returns full state for a single printer. No auth required.
+Returns full state for a single printer. Login required.
 
 ### Print Control
 
@@ -253,6 +257,11 @@ Immediately halt printer. **Klipper only.** Admin required.
 | `POST /api/printer/<name>/ams_load` | admin | Load from AMS tray (Bambu). Body: `{"tray_id": 0}` |
 | `POST /api/printer/<name>/tray_config` | admin | Set AMS tray type/color (Bambu). Body: `{"tray_id": 0, "type": "PLA", "color": "FF0000"}` |
 
+`tray_config` works for loaded generic/untagged trays and can override
+tag-provided type or colour. Optional `nozzle_temp_min` and
+`nozzle_temp_max` values are accepted. The printer can reject changes while
+busy or while the target tray is active; this returns HTTP 409.
+
 ### Printer Settings
 
 #### `POST /api/printer/<name>/staff_only`
@@ -282,7 +291,8 @@ Job objects include `print_time_seconds` when the slicer provided an estimated p
 
 #### `POST /api/jobs/upload`
 
-Requires login. Multipart form upload.
+Requires staff access or a student session currently allowed to print.
+Multipart form upload.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -365,7 +375,7 @@ Requires login for all endpoints.
 
 ## Camera
 
-All camera endpoints are open (no auth required).
+All camera endpoints require an authenticated session.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -374,6 +384,10 @@ All camera endpoints are open (no auth required).
 | GET | `/api/camera/<name>/snapshot` | Latest JPEG frame |
 | GET | `/api/camera/<name>/stream` | **MJPEG stream** (`multipart/x-mixed-replace`, ~2 FPS) |
 | GET | `/api/camera/status` | Status of all cameras |
+
+Camera rotation is a browser display preference, not a camera API operation.
+The dashboard stores `0`, `90`, `180`, or `270` degrees per printer in browser
+local storage.
 
 ---
 
@@ -578,12 +592,16 @@ rendered across the dashboard. GET requires login; POST requires admin.
 ```json
 {
   "timezone": "Australia/Sydney",
-  "locale": "en-AU"
+  "locale": "en-AU",
+  "failed_printer_timeout_minutes": 5
 }
 ```
 
 `timezone` is an IANA timezone string (e.g. `Australia/Sydney`, `Europe/London`,
 `America/New_York`). Empty string means auto-detect from the viewer's browser.
+`failed_printer_timeout_minutes` controls how long a connected `FAILED` printer
+remains blocking before it is presented as Ready. `0` disables automatic
+clearing.
 
 ### `POST /api/ui/config`
 
@@ -591,13 +609,14 @@ rendered across the dashboard. GET requires login; POST requires admin.
 ```json
 {
   "timezone": "Australia/Sydney",
-  "locale": "en-AU"
+  "locale": "en-AU",
+  "failed_printer_timeout_minutes": 5
 }
 ```
 
-Both fields are optional — omit one to leave it unchanged. Settings are persisted
-to `config.yaml` under `ui.timezone` and `ui.locale` and take effect immediately
-on next page load.
+All fields are optional — omit one to leave it unchanged. The timeout accepts
+values from 0 to 1440 minutes. Settings are persisted under `ui` and take
+effect immediately. No job is ever resent automatically.
 
 **Response:**
 ```json
@@ -615,7 +634,7 @@ controls.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/update/check` | Fetch origin refs and report pending commits vs current HEAD |
-| POST | `/api/update/apply` | Run git pull and trigger delayed restart of `the-print-farm.service` |
+| POST | `/api/update/apply` | Apply a validated fast-forward update and trigger delayed restart of `the-print-farm.service` |
 
 ### `GET /api/update/check`
 
@@ -648,6 +667,11 @@ controls.
 - Updates are rejected when the working tree contains local changes
 - Legacy installs must rerun `sudo bash setup.sh --restart`; do not grant the
   service account direct passwordless access to Git, `systemctl`, or file tools
+- A `.git/objects` permission error indicates an old/unreconciled native
+  installation; rerun `sudo bash setup.sh --restart` rather than loosening
+  repository permissions
+- Docker containers must be updated by pulling and recreating the container;
+  this endpoint does not replace a running container
 
 ---
 
@@ -898,6 +922,17 @@ Requires Spoolman configured. Returns 503 if unavailable.
 | GET | `/api/v1/spoolman/printers/<name>/spools` | Spools located at printer |
 | PUT | `/api/v1/spoolman/printers/<name>/spools/<spool_id>` | Assign spool to printer |
 | DELETE | `/api/v1/spoolman/printers/<name>/spools/<spool_id>` | Remove spool from printer |
+
+#### Tool And AMS Assignments
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/spoolman/printers/<name>/tools/<tool>/spools` | Spools assigned to a Klipper tool |
+| PUT | `/api/v1/spoolman/printers/<name>/tools/<tool>/spools/<spool_id>` | Assign spool to a Klipper tool |
+| DELETE | `/api/v1/spoolman/printers/<name>/tools/<tool>/spools/<spool_id>` | Remove tool assignment |
+| GET | `/api/v1/printers/<name>/ams/trays` | AMS trays with persisted Spoolman assignments |
+| PUT | `/api/v1/printers/<name>/ams/trays/<tray_id>/spool/<spool_id>` | Link a spool to an AMS tray |
+| DELETE | `/api/v1/printers/<name>/ams/trays/<tray_id>/spool` | Remove AMS tray assignment |
 
 ---
 

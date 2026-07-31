@@ -9,7 +9,8 @@ Control how dates and times are shown across the dashboard. Configure from **Set
 - **Failed printer cooldown** — After this many minutes, a connected printer
   that still reports `FAILED` is presented as `READY` and may receive a new
   staff-approved job. This never resends a job automatically. Set it to `0` to
-  keep failed printers blocked until their reported state changes.
+  keep failed printers blocked until their reported state changes. A real
+  non-failed state clears the timer.
 
 ```yaml
 ui:
@@ -27,6 +28,11 @@ Settings tab provides:
 - Check for Updates
 - Apply Update and Restart
 
+These controls are for native Git checkouts installed with `setup.sh`. They use
+`git fetch` plus a fast-forward-only update and refuse to run when the worktree
+has local changes. Docker deployments must pull and recreate the container as
+described in [Docker](docker.md).
+
 `setup.sh` installs a root-owned deployment helper with a fixed configuration.
 The service can invoke that helper only for validated update, Apache, OrcaSlicer,
 and service-restart operations. Do not grant the service account direct
@@ -36,6 +42,16 @@ Legacy installations should rerun `sudo bash setup.sh --restart` while printers
 are idle. The script replaces older broad sudoers rules and validates the new
 configuration before restarting. Both setup and the web updater refuse an
 ordinary restart while print activity is detected.
+
+If an older install reports `.git/objects` permission errors from the update
+button, rerun:
+
+```bash
+sudo bash setup.sh --restart
+```
+
+This reconciles repository ownership and reinstalls the helper. Do not work
+around the error by making `.git` or the application tree world-writable.
 
 The live configuration is stored at `/etc/the-print-farm/config.yaml` with mode
 `0600`; `config/config.yaml` remains as a symlink for compatibility.
@@ -67,6 +83,7 @@ Optional integration with [Spoolman](https://github.com/Donkie/Spoolman) filamen
 - **Spool management** — View, search, and manage spools via proxied API endpoints
 - **Auto-deduction** — Filament usage is automatically deducted from matched spools when print jobs complete
 - **Gate linking** — Assign Spoolman spools to Happy Hare MMU gates for per-gate filament tracking
+- **AMS linking** — Assign a Spoolman spool to each BambuLab AMS tray
 - **Settings UI** — Configure the Spoolman URL and test connectivity from the dashboard Settings tab
 - **Graceful fallback** — All Spoolman features are optional; the system works normally without it
 
@@ -75,7 +92,23 @@ spoolman:
   url: http://localhost:7912
 ```
 
-Or configure from Settings in the dashboard. Leave unconfigured to disable Spoolman features.
+Or configure from Settings in the dashboard. Saving a blank URL disables the
+integration and removes optional spool assignment controls after restart; AMS,
+MMU, and generic filament controls continue to work.
+
+## Camera Display Rotation
+
+Printer-card and full-screen camera controls rotate the displayed image in
+90-degree steps. The selected value is saved per printer in browser local
+storage, not in `config.yaml`, so different workstations may use different
+orientations.
+
+## Retired Build-Plate Detection
+
+Camera-based build-plate detection was removed in `v1.0.11` to keep dispatch
+lightweight and predictable. Current setup upgrades remove the retired
+`plate_detection` configuration and `plate_blocked` notification event while
+creating a private pre-migration configuration backup.
 
 ## Notifications
 

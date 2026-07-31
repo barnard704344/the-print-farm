@@ -1,5 +1,9 @@
 # Getting Started
 
+These instructions apply to `v1.0.11`. The default branch also contains any
+documentation-only updates made after that tag. For a reproducible code
+deployment, check out the release tag after cloning.
+
 ## Quick Start
 
 ```bash
@@ -31,18 +35,34 @@ sudo bash setup.sh --restart
 sudo bash setup.sh --no-restart
 ```
 
-`--restart` is required for the first hardened upgrade because configuration is
-relocated. On later runs, `--no-restart` leaves an active farm process and its
-Python environment untouched. Add `--skip-packages` when system dependencies
-are already present. A restart is refused when live printer or queue activity is
+Use `--restart` when applying code, dependency, service, helper, or Apache
+changes. `--no-restart` validates and reconciles what it safely can without
+stopping an active farm. Add `--skip-packages` when system dependencies are
+already present. A restart is refused when live printer or queue activity is
 detected. `--force-restart` is reserved for recovery after checking every
 printer manually.
+
+After the initial setup, authenticated staff can use **Settings → Software
+Update**. The update button requires a clean Git worktree, fetches from GitHub,
+applies only a fast-forward update, reconciles dependencies/deployment files,
+and restarts only after every printer and active job is confirmed safe. If an
+older installation reports `.git/objects` permission errors, run `sudo bash
+setup.sh --restart` once to reinstall the current helper and ownership model.
 
 Virtual printers (for OrcaSlicer LAN mode / AMS sync) start automatically — no additional configuration is needed. See [Printers and OrcaSlicer](printers-and-orcaslicer.md#virtual-printer--lan-mode-orcaslicer-ams-sync) for details.
 
 Dashboard URL:
 
 - http://your-server-ip/the-print-farm
+
+Release-pinned checkout:
+
+```bash
+git checkout v1.0.11
+sudo bash setup.sh --restart
+```
+
+Return to updateable `main` with `git switch main`.
 
 ## Manual Setup
 

@@ -22,6 +22,7 @@ printers: []
 #      ftp: ''
 #      camera: ''
 #    staff_only: false          # optional — restrict to staff users
+#    virtual_printer: true      # native only; set false for Docker/direct-IP use
 #
 # ── Klipper Printer (via Moonraker) ──
 #  - name: Voron-01
@@ -82,7 +83,8 @@ active_directory:
 
 # ── Spoolman (optional) ──────────────────────────────────
 # Set the URL of your Spoolman instance for filament tracking.
-# Leave commented out to disable. Can also be set from the dashboard.
+# Leave commented out to disable. Can also be set from the dashboard; restart
+# after changing it so the optional client and UI state are rebuilt.
 #spoolman:
 #  url: http://localhost:7912
 

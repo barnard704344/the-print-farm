@@ -36,6 +36,21 @@ printers:
 
 Klipper webcams are auto-detected from Moonraker's `/server/webcams/list` endpoint. Happy Hare MMU is auto-detected from Klipper printer objects.
 
+## Printer Readiness After A Failed Print
+
+A printer that reports `FAILED` remains blocked for the configured cooldown.
+After that delay, a connected printer is displayed as **Ready** and can receive
+a new staff-approved job even if its firmware still reports `FAILED`.
+
+- Nothing is resent automatically.
+- There is no build-plate camera detection or bed-clear button.
+- Staff should clear and inspect the printer before approving the next job.
+- A real non-failed state resets the cooldown timer.
+- Set `ui.failed_printer_timeout_minutes` to `0` to keep failures blocked until
+  the printer itself changes state.
+
+Configure the timeout under **Settings → Display Preferences**.
+
 ### BambuLab Firmware And Developer Mode
 
 Current BambuLab firmware uses stricter local command authorisation. On P1/P1S firmware 01.08.02.00 and newer, including 01.09.01.00, the printer must have both **LAN-only mode** and **Developer Mode** enabled before The Print Farm can start prints, stop prints, set filament trays, or send other local MQTT control commands.
@@ -62,13 +77,37 @@ No Happy Hare plugin or extra configuration is required — detection is fully a
 
 ## BambuLab AMS Integration
 
-Full management of BambuLab AMS (Automatic Material System) units:
+The dashboard reads and manages BambuLab AMS (Automatic Material System) units:
 
-- **Auto-detected** — AMS units, tray contents, filament colours, and active tray are shown on printer cards automatically
-- **Per-unit monitoring** — Humidity percentage and temperature for each AMS unit
-- **Tray management modal** — Click the AMS section to open a popup with Overview and Tray Management tabs
-- **Filament configuration** — Set filament type, colour, and nozzle temperature per tray, applied directly to the printer
-- **Spoolman integration** — If Spoolman is configured, select spools from your inventory to auto-fill tray settings
+- **Automatic AMS data** — Units, loaded trays, active tray, tag-provided
+  material, colour, remaining percentage, humidity level, and temperature are
+  read from the printer when supplied by its MQTT status.
+- **RFID and generic filament** — Bambu RFID values appear automatically, but
+  staff can still override a loaded tray. Untagged/generic filament can be given
+  a material, colour, and nozzle-temperature range manually.
+- **Tray configuration** — Click a loaded mini tray on the printer card, or open
+  the AMS overview and click its edit control. The colour swatch and hex field
+  remain editable for tagged and untagged filament.
+- **Printer acknowledgement** — A rejected update is reported instead of being
+  silently accepted. Retry while the printer is idle or the tray is not active.
+- **Spoolman integration** — When configured, a spool can be linked to each AMS
+  tray and can fill its material and colour fields. Without Spoolman, the normal
+  AMS controls and manual fields remain available.
+
+Clearing the Spoolman URL disables the optional spool controls after the
+configuration is saved and the service is restarted; it does not remove AMS
+status or manual tray editing.
+
+## Camera Feeds
+
+- Start or stop a feed from its printer card.
+- Click the camera image to open the full-screen stream.
+- Use the rotate button on the card or in the full-screen viewer to turn that
+  printer's feed through `0°`, `90°`, `180°`, and `270°`.
+- Rotation is stored per printer in the current browser. It changes only the
+  display and does not rotate or reconfigure the physical camera.
+- Klipper webcam URLs are auto-detected from Moonraker when no explicit
+  `camera_url` is configured.
 
 ## OrcaSlicer Setup
 
@@ -83,7 +122,8 @@ Each printer has its own OrcaSlicer port. Jobs uploaded this way are assigned to
 1. Open **Printer Settings → Connection** (or the physical printer settings)
 2. Set **Host Type** to `Octo/Klipper`
 3. Set **Hostname, IP or URL** to `<server-ip>:<port>` (e.g. `192.168.1.180:5001`)
-4. Paste your **API Key** (from the Settings tab or `config.yaml` → `web.api_key`)
+4. Paste your **API Key** (`/etc/the-print-farm/config.yaml` →
+   `web.api_key`; the dashboard does not expose this secret)
 5. Click **Test** — you should see the connection succeed
 
 | Printer | Hostname | Port |

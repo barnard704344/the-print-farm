@@ -1,7 +1,9 @@
 # Overview
 
-The Print Farm is a web-based 3D printer management system designed for schools using BambuLab and Klipper printers.
-
+The Print Farm is a lightweight web-based 3D printer management system designed
+for schools using BambuLab and Klipper printers. Staff remain responsible for
+approving and dispatching prints; the application does not use camera-based
+build-plate detection.
 
 ## BambuLab Support
 
@@ -58,18 +60,19 @@ No Klipper plugin or extra component is required beyond a standard Moonraker ins
 - **Printer discovery** — Auto-detect BambuLab (UDP broadcast) and Klipper (Moonraker port scan)
 - **Authentication** — Local users, Active Directory/LDAP, student/staff roles
 - **OrcaSlicer integration** — Slice and print directly from OrcaSlicer via virtual printers (OctoPrint-compatible) — no batch files needed
-- **AMS support** — Full filament tray management for BambuLab printers with AMS, including per-unit humidity and temperature monitoring
+- **AMS support** — Live RFID/tag data when available plus manual type, colour, temperature, and Spoolman assignment for generic or overridden filament
 - **Printer pool** — Auto-dispatch generic OrcaSlicer jobs to the next idle printer in a configurable pool
 - **Multi-printer dispatch** — Send a queued job to multiple printers at once; the job is cloned automatically
 - **Reprint to selected printers** — Reprint actions can create a queued copy and optionally dispatch to one or more selected printers
-- **In-app software updates** — Check upstream commits and apply updates from Settings (git pull + service restart)
+- **Failed-print readiness timeout** — A connected failed printer can return to Ready after a configurable delay; jobs are never resent automatically
+- **In-app software updates** — Native installs can check upstream commits and apply safe fast-forward updates from Settings
 - **Mobile responsive** — Dashboard adapts to phones and tablets with touch-friendly targets and stacked layouts
-- **Camera streaming** — Live camera feeds from BambuLab printers and Klipper webcams (MJPEG/snapshot auto-detected via Moonraker)
+- **Camera streaming** — Live BambuLab and Klipper feeds with per-printer 90-degree rotation saved in each browser
 - **Notifications** — Email (SMTP) and Discord webhook alerts for job submission, print completion, pause, and failure
 - **Obico integration** — Pulls AI failure detection data from a local Obico server when present
-- **Spoolman integration** - Add in your local instance of spoolman and track your filament usage. https://github.com/Donkie/Spoolman
+- **Spoolman integration** — Optionally connect a local [Spoolman](https://github.com/Donkie/Spoolman) instance for assignment and usage tracking
 
-- ## Student Print Access
+## Student Print Access
 
 The Print Farm includes a student access control system designed for school environments.
 
