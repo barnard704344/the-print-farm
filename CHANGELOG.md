@@ -5,6 +5,10 @@ changes to The Print Farm.
 
 ## Unreleased
 
+No changes yet.
+
+## v1.0.14 - 2026-07-31 - Reliable updates and integration diagnostics
+
 ### Fixed
 
 - Run native dashboard update reconciliation in a transient privileged systemd
@@ -18,6 +22,22 @@ changes to The Print Farm.
 - Report Obico authentication and printer-ID failures in Settings and Printer
   Details, and let connection tests reuse a saved masked password instead of
   submitting the mask as a credential.
+- Accept nullable Obico status and image fields returned by self-hosted servers
+  without dropping the integration state.
+
+### Changed
+
+- Removed a retired Klipper integration, including its port probe, runtime
+  state, API payload, dashboard card, Details row, and external link.
+- Replaced the audience-specific dashboard tagline with the concise description
+  **Simple print farm management**. Documentation continues to identify schools
+  as the primary audience while including homes, makerspaces, and other small
+  print farms.
+
+### Documentation
+
+- Updated native upgrade, Obico configuration, API, release-pinned checkout,
+  and Docker image instructions for `v1.0.14`.
 
 ## v1.0.13 - 2026-07-31 - Zero-touch Orca credential split
 

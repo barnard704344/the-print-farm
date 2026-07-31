@@ -6,7 +6,7 @@ Built primarily for primary and secondary schools—but equally usable at home,
 in makerspaces, and in other small print farms—The Print Farm keeps things
 simple: no unnecessary plugins, extensions, or heavy dependencies.
 
-Current release: **[v1.0.13](https://github.com/barnard704344/the-print-farm/releases/tag/v1.0.13)**.
+Current release: **[v1.0.14](https://github.com/barnard704344/the-print-farm/releases/tag/v1.0.14)**.
 
 This README acts as a documentation index. Detailed information is split across the docs pages below.
 
@@ -32,6 +32,7 @@ This README acts as a documentation index. Detailed information is split across 
 - BambuLab P1/P1S firmware 01.08.02.00+ requires LAN-only mode and Developer Mode for local start/control commands
 - Spoolman optional
 - Happy Hare optional
+- Self-hosted Obico optional
 
 ## Installation And Updates
 

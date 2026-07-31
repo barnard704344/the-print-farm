@@ -61,7 +61,24 @@ If uploads succeed but the printer stays idle, this is the first thing to check.
 
 ## Obico Integration
 
-If a local [Obico](https://www.obico.io/) server is running and the Obico plugin is installed on a Klipper printer, the dashboard automatically pulls failure detection data and remote monitoring info from it and displays it on the printer card. No additional configuration is required.
+The Print Farm can display failure-detection and monitoring information from a
+self-hosted [Obico](https://www.obico.io/) server for each Klipper printer.
+
+In **Settings → Obico AI Failure Detection**, select the Klipper printer and
+provide:
+
+- the Obico server URL;
+- the Obico printer ID shown by that server;
+- an Obico account username and password.
+
+Use **Test Connection** before saving. The test validates both authentication
+and the configured printer endpoint; an incorrect printer ID is reported rather
+than appearing as a successful but disconnected integration. Saved passwords
+remain masked and can be reused by the test while the server and username stay
+unchanged. Restart The Print Farm after saving so the per-printer Obico client
+is rebuilt. Connected state, monitoring state, and any failure likelihood then
+appear on the printer card and in Printer Details. When unavailable, Printer
+Details shows the reason returned by the integration client.
 
 ## Happy Hare MMU Integration
 

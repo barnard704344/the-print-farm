@@ -32,6 +32,11 @@ printers: []
 #    api_key: ''                # optional — Moonraker API key
 #    camera_url: ''             # optional — webcam stream URL
 #    staff_only: false
+#    obico:                     # optional — self-hosted Obico integration
+#      server: http://192.168.1.105:3334
+#      printer_id: 3
+#      username: user@example.com
+#      password: CHANGE_ME
 
 web:
   host: 127.0.0.1            # Apache is the public-facing reverse proxy

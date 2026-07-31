@@ -65,11 +65,15 @@ No Klipper plugin or extra component is required beyond a standard Moonraker ins
 - **Multi-printer dispatch** — Send a queued job to multiple printers at once; the job is cloned automatically
 - **Reprint to selected printers** — Reprint actions can create a queued copy and optionally dispatch to one or more selected printers
 - **Failed-print readiness timeout** — A connected failed printer can return to Ready after a configurable delay; jobs are never resent automatically
-- **In-app software updates** — Native installs can check upstream commits and apply safe fast-forward updates from Settings
+- **In-app software updates** — Native installs can safely fast-forward,
+  reconcile the deployment in a privileged transient unit, and queue a restart
+  from Settings after printer and job checks pass
 - **Mobile responsive** — Dashboard adapts to phones and tablets with touch-friendly targets and stacked layouts
 - **Camera streaming** — Live BambuLab and Klipper feeds with per-printer 90-degree rotation saved in each browser
 - **Notifications** — Email (SMTP) and Discord webhook alerts for job submission, print completion, pause, and failure
-- **Obico integration** — Pulls AI failure detection data from a local Obico server when present
+- **Obico integration** — Optionally pulls failure-detection and monitoring data
+  from a configured self-hosted Obico printer, with connection diagnostics in
+  Settings and Printer Details
 - **Spoolman integration** — Optionally connect a local [Spoolman](https://github.com/Donkie/Spoolman) instance for assignment and usage tracking
 
 ## Student Print Access

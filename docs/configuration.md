@@ -122,6 +122,18 @@ Or configure from Settings in the dashboard. Saving a blank URL disables the
 integration and removes optional spool assignment controls after restart; AMS,
 MMU, and generic filament controls continue to work.
 
+## Obico
+
+Optional failure-detection and remote-monitoring integration for Klipper
+printers. Configure each printer from **Settings → Obico AI Failure Detection**
+with the self-hosted server URL, Obico printer ID, username, and password.
+
+The connection test verifies authentication and fetches the selected printer,
+so an invalid ID or unavailable endpoint is reported before saving. A masked
+saved password is reused only when the server and username are unchanged.
+Restart after saving to rebuild the per-printer client. Connection state and
+diagnostic errors appear in Printer Details.
+
 ## Camera Display Rotation
 
 Printer-card and full-screen camera controls rotate the displayed image in

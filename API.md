@@ -1,6 +1,6 @@
 # The Print Farm — API Documentation
 
-Complete reference for all REST API endpoints, reviewed for `v1.0.13`.
+Complete reference for all REST API endpoints, reviewed for `v1.0.14`.
 
 ---
 
@@ -602,6 +602,12 @@ Admin only. Per-printer Obico failure detection config.
 }
 ```
 
+The password returned by `GET` is masked. `POST /api/obico/test` accepts the
+same fields plus `printer_name`; when the password is the mask, the saved secret
+is reused only if the server and username are unchanged. The test returns a
+non-success response when authentication fails, the printer ID does not exist,
+or the printer endpoint is unavailable.
+
 ---
 
 ## UI Preferences
@@ -692,6 +698,10 @@ controls.
 - Requires git on the host
 - `setup.sh` installs a narrow root-owned helper for fetching, fast-forwarding,
   reconciling deployment files, installing dependencies, and restarting
+- Deployment reconciliation runs in a transient privileged systemd unit so it
+  does not inherit the web service's restricted capability set
+- The service restart is queued with systemd without waiting on the process
+  that requested its own restart
 - Updates are rejected when the working tree contains local changes
 - Legacy installs must rerun `sudo bash setup.sh --restart`; do not grant the
   service account direct passwordless access to Git, `systemctl`, or file tools

@@ -35,9 +35,15 @@ The Print Farm deliberately uses a small, local-first architecture.
 ## Security Boundaries
 
 - Browser administration uses an authenticated staff session.
-- The integration key is accepted by API and OrcaSlicer routes but cannot run
-  deployment updates.
+- The hidden administrator integration key is accepted by supported API routes
+  but cannot run deployment updates. The separate Orca upload key is limited to
+  OctoPrint-compatible connection and upload routes.
 - Native privileged operations are restricted to a root-owned helper installed
   by `setup.sh`; the web service is not given general passwordless shell access.
+- Native deployment reconciliation runs in a short-lived privileged systemd
+  unit, and post-update restarts are queued without blocking the service that
+  requested them.
+- Apache preserves the public request host so browser origin validation remains
+  correct behind the native reverse proxy.
 - Runtime configuration is stored at `/etc/the-print-farm/config.yaml` with
   private permissions on native installations.
