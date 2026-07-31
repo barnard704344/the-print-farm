@@ -41,6 +41,8 @@ Deployment reconciliation runs in a short-lived root systemd unit so its
 service-user access checks do not inherit the web application's restricted
 capability set. This also lets an existing installation bootstrap the updater
 fix entirely through the dashboard.
+The managed Apache proxy preserves the browser-facing host so same-origin
+validation continues to work for dashboard actions routed through Apache.
 
 Legacy installations should rerun `sudo bash setup.sh --restart` while printers
 are idle. The script replaces older broad sudoers rules and validates the new

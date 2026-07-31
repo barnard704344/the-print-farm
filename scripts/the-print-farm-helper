@@ -156,6 +156,7 @@ def render_proxy_block(web_port):
     return "\n".join(
         [
             PROXY_BEGIN,
+            "    ProxyPreserveHost On",
             f'    ProxyPassMatch "^/api/(version|connection|printer|files/local)$" '
             f'"http://127.0.0.1:{web_port}/api/$1"',
             f"    ProxyPass /the-print-farm http://127.0.0.1:{web_port}",
