@@ -8,10 +8,15 @@
         :root, [data-theme="dark"] {
             --bg: #0f1117;
             --card: #1a1d27;
+            --card-raised: #202431;
+            --surface-soft: rgba(255, 255, 255, 0.035);
             --border: #2a2d3a;
+            --line-soft: rgba(148, 163, 184, 0.14);
             --text: #e4e4e7;
             --text-muted: #71717a;
             --accent: #22c55e;
+            --brand-cyan: #38bdf8;
+            --brand-ink: #07120c;
             --accent-dim: rgba(34, 197, 94, 0.15);
             --accent-glow: rgba(34, 197, 94, 0.3);
             --warning: #f59e0b;
@@ -23,17 +28,23 @@
             --idle: #6b7280;
             --input-bg: var(--bg);
             --surface: #1a1d27;
-            --shadow: 0 1px 3px rgba(0,0,0,0.3);
+            --shadow: 0 12px 30px rgba(0,0,0,0.18);
+            --page-grid: rgba(255,255,255,0.018);
             color-scheme: dark;
         }
 
         [data-theme="light"] {
             --bg: #f0f2f5;
             --card: #ffffff;
+            --card-raised: #ffffff;
+            --surface-soft: rgba(15, 23, 42, 0.035);
             --border: #d9d9d9;
+            --line-soft: rgba(15, 23, 42, 0.1);
             --text: #1f1f1f;
             --text-muted: #8c8c8c;
             --accent: #22c55e;
+            --brand-cyan: #0284c7;
+            --brand-ink: #052e16;
             --accent-dim: rgba(34, 197, 94, 0.10);
             --accent-glow: rgba(34, 197, 94, 0.2);
             --warning: #d97706;
@@ -45,59 +56,125 @@
             --idle: #9ca3af;
             --input-bg: #ffffff;
             --surface: #ffffff;
-            --shadow: 0 1px 3px rgba(0,0,0,0.08);
+            --shadow: 0 12px 30px rgba(15,23,42,0.08);
+            --page-grid: rgba(15,23,42,0.025);
             color-scheme: light;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--bg);
+            font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background-color: var(--bg);
+            background-image:
+                linear-gradient(var(--page-grid) 1px, transparent 1px),
+                linear-gradient(90deg, var(--page-grid) 1px, transparent 1px);
+            background-size: 32px 32px;
             color: var(--text);
             min-height: 100vh;
         }
 
         .header {
-            background: var(--card);
-            border-bottom: 1px solid var(--border);
-            padding: 16px 24px;
+            position: sticky;
+            top: 0;
+            z-index: 800;
+            background: color-mix(in srgb, var(--card) 92%, transparent);
+            border-bottom: 1px solid var(--line-soft);
+            padding: 13px 24px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            backdrop-filter: blur(18px);
         }
 
-        .header h1 {
-            font-size: 20px;
-            font-weight: 600;
+        .brand {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 11px;
+            min-width: 220px;
         }
 
-        .header h1 .logo {
-            width: 28px;
-            height: 28px;
-            background: var(--accent);
-            border-radius: 6px;
+        .brand-mark {
+            position: relative;
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: linear-gradient(145deg, var(--accent), #16a34a);
+            color: var(--brand-ink);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 14px;
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 7px 18px var(--accent-glow);
+        }
+
+        .brand-mark svg { width: 25px; height: 25px; }
+        .brand-copy { min-width: 0; }
+        .brand-title {
+            font-size: 17px;
+            line-height: 1.05;
+            font-weight: 750;
+            letter-spacing: -0.025em;
+        }
+        .brand-kicker {
+            display: block;
+            margin-top: 3px;
+            color: var(--text-muted);
+            font-size: 9px;
+            font-weight: 650;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+
+        .icon-sprite {
+            position: absolute;
+            width: 0;
+            height: 0;
+            overflow: hidden;
+        }
+
+        .ui-icon {
+            width: 16px;
+            height: 16px;
+            flex: 0 0 auto;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .heading-icon {
+            width: 18px;
+            height: 18px;
+            color: var(--accent);
+            vertical-align: -3px;
+            margin-right: 6px;
+        }
+        .empty-state-icon {
+            display: block;
+            width: 48px;
+            height: 48px;
+            margin: 0 auto 16px;
+            color: var(--accent);
+            opacity: 0.72;
         }
 
         /* Theme toggle */
         .theme-toggle {
-            background: none;
-            border: 1px solid var(--border);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--surface-soft);
+            color: var(--text-muted);
+            border: 0;
             border-radius: 8px;
-            padding: 4px 8px;
+            width: 34px;
+            height: 34px;
+            padding: 0;
             cursor: pointer;
-            font-size: 16px;
-            line-height: 1;
-            transition: border-color 0.2s;
+            transition: color 0.2s, background 0.2s;
         }
-        .theme-toggle:hover { border-color: var(--text-muted); }
+        .theme-toggle:hover { color: var(--text); background: var(--accent-dim); }
+        .theme-toggle .ui-icon { width: 17px; height: 17px; }
         [data-theme="light"] .theme-icon-dark { display: none; }
         [data-theme="light"] .theme-icon-light { display: inline; }
         [data-theme="dark"] .theme-icon-dark,
@@ -143,34 +220,45 @@
         .main {
             max-width: 1600px;
             margin: 0 auto;
-            padding: 24px;
+            padding: 22px 24px 36px;
         }
 
         /* Tabs */
         .tabs {
             display: flex;
-            gap: 4px;
-            margin-bottom: 24px;
-            border-bottom: 1px solid var(--border);
-            padding-bottom: 0;
+            gap: 5px;
+            margin-bottom: 22px;
+            border-bottom: 0;
+            padding: 4px;
+            width: max-content;
+            max-width: 100%;
+            border-radius: 11px;
+            background: color-mix(in srgb, var(--card) 88%, transparent);
+            box-shadow: 0 1px 0 var(--line-soft), 0 8px 24px rgba(0,0,0,0.06);
         }
 
         .tab {
-            padding: 10px 20px;
-            font-size: 14px;
-            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 8px 13px;
+            font-size: 12px;
+            font-weight: 600;
             color: var(--text-muted);
             cursor: pointer;
-            border-bottom: 2px solid transparent;
-            transition: all 0.2s;
-            background: none;
-            border-top: none;
-            border-left: none;
-            border-right: none;
+            border: 0;
+            border-radius: 8px;
+            transition: color 0.2s, background 0.2s, box-shadow 0.2s;
+            background: transparent;
         }
 
-        .tab:hover { color: var(--text); }
-        .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .tab:hover { color: var(--text); background: var(--surface-soft); }
+        .tab.active {
+            color: var(--text);
+            background: var(--card-raised);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+        }
+        .tab.active .ui-icon { color: var(--accent); }
 
         .tab-content { display: none; }
         .tab-content.active { display: block; }
@@ -179,18 +267,23 @@
         .printer-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
-            gap: 16px;
+            gap: 18px;
         }
 
         .printer-card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
+            background: color-mix(in srgb, var(--card) 96%, transparent);
+            border: 0;
+            border-left: 3px solid var(--idle);
+            border-radius: 10px;
             padding: 20px;
-            transition: border-color 0.2s;
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
         }
 
-        .printer-card:hover { border-color: #3a3d4a; }
+        .printer-card:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 17px 38px rgba(0,0,0,0.2);
+        }
 
         .printer-card.status-running { border-left: 3px solid var(--info); }
         .printer-card.status-idle, .printer-card.status-finish { border-left: 3px solid var(--accent); }
@@ -215,12 +308,16 @@
         }
 
         .printer-card-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
             padding: 3px 8px;
             min-height: 24px;
             font-size: 11px;
             line-height: 1.2;
             border-radius: 5px;
         }
+        .printer-card-action .ui-icon { width: 13px; height: 13px; }
 
         .printer-remove-btn,
         .printer-rename-btn {
@@ -300,9 +397,13 @@
 
         .temp-item {
             text-align: center;
-            background: var(--bg);
-            border-radius: 8px;
-            padding: 8px 4px;
+            background: transparent;
+            border-radius: 0;
+            padding: 8px 6px;
+        }
+
+        .temp-item:not(:last-child) {
+            border-right: 1px solid var(--line-soft);
         }
 
         .temp-label {
@@ -402,9 +503,10 @@
         /* AMS Section */
         .ams-section {
             margin-bottom: 12px;
-            padding: 10px;
-            background: var(--bg);
-            border-radius: 8px;
+            padding: 12px 0 0;
+            background: transparent;
+            border-top: 1px solid var(--line-soft);
+            border-radius: 0;
         }
 
         .ams-header {
@@ -495,9 +597,9 @@
         /* MMU (Happy Hare) Section */
         .mmu-section {
             margin-bottom: 12px;
-            padding: 10px;
-            background: var(--bg);
-            border-radius: 8px;
+            padding: 12px 0 0;
+            background: transparent;
+            border-radius: 0;
         }
 
         .mmu-header {
@@ -589,15 +691,21 @@
         .mmu-tag.unloaded { background: var(--danger-dim); color: var(--danger); }
         .mmu-tag.unknown { background: rgba(255,255,255,0.08); color: var(--text-muted); }
 
-        .mmu-section { cursor: pointer; transition: border-color 0.2s; border: 1px solid transparent; }
+        .mmu-section {
+            cursor: pointer;
+            transition: border-color 0.2s;
+            border: 0;
+            border-top: 1px solid var(--line-soft);
+        }
         .mmu-section:hover { border-color: var(--accent); }
 
         /* Fan & LED Controls Section */
         .fanled-section {
             margin-bottom: 12px;
-            padding: 10px;
-            background: var(--bg);
-            border-radius: 8px;
+            padding: 12px 0 0;
+            background: transparent;
+            border-top: 1px solid var(--line-soft);
+            border-radius: 0;
         }
         .fanled-header {
             font-size: 12px;
@@ -653,24 +761,22 @@
             padding: 2px 4px;
         }
 
-        .printer-details-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 12px;
-        }
+        .printer-details-grid { display: block; }
         .printer-details-section {
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 12px;
+            background: transparent;
+            border: 0;
+            border-top: 1px solid var(--line-soft);
+            border-radius: 0;
+            padding: 18px 0;
         }
-        .printer-details-section.wide { grid-column: 1 / -1; }
+        .printer-details-section:first-child { border-top: 0; padding-top: 4px; }
         .printer-details-section h3 {
             margin: 0 0 10px;
             font-size: 12px;
             color: var(--accent);
             text-transform: uppercase;
             font-weight: 700;
+            letter-spacing: 0.08em;
         }
         .printer-details-row {
             display: grid;
@@ -692,12 +798,85 @@
             overflow: auto;
             padding: 10px;
             background: #0b0d12;
-            border: 1px solid var(--border);
+            border: 0;
             border-radius: 8px;
             font-size: 11px;
             line-height: 1.45;
             white-space: pre-wrap;
         }
+
+        /* Printer details slide-over */
+        .details-drawer-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 3200;
+            background: rgba(3, 7, 18, 0.56);
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transition: opacity 0.22s, visibility 0.22s;
+        }
+        .details-drawer-overlay.open {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+        }
+        .details-drawer {
+            position: absolute;
+            inset: 0 0 0 auto;
+            width: min(560px, 94vw);
+            background: var(--card);
+            box-shadow: -24px 0 70px rgba(0,0,0,0.32);
+            transform: translateX(102%);
+            transition: transform 0.25s ease;
+            display: flex;
+            flex-direction: column;
+        }
+        .details-drawer-overlay.open .details-drawer { transform: translateX(0); }
+        .details-drawer-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 22px 24px 18px;
+            border-bottom: 1px solid var(--line-soft);
+        }
+        .details-drawer-eyebrow {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            color: var(--accent);
+            font-size: 10px;
+            font-weight: 750;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+        .details-drawer-title {
+            margin-top: 5px;
+            font-size: 21px;
+            line-height: 1.2;
+            letter-spacing: -0.02em;
+        }
+        .details-drawer-close {
+            width: 36px;
+            height: 36px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+            border: 0;
+            border-radius: 9px;
+            background: var(--surface-soft);
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+        .details-drawer-close:hover { background: var(--danger-dim); color: var(--danger); }
+        .details-drawer-close .ui-icon { width: 19px; height: 19px; }
+        .details-drawer-body {
+            padding: 16px 24px 32px;
+            overflow: auto;
+        }
+        body.details-open { overflow: hidden; }
 
         /* Happy Hare Modal */
         .hh-overlay {
@@ -1057,9 +1236,10 @@
         /* Obico AI Detection Section */
         .obico-section {
             margin-bottom: 12px;
-            padding: 10px;
-            background: var(--bg);
-            border-radius: 8px;
+            padding: 12px 0 0;
+            background: transparent;
+            border-top: 1px solid var(--line-soft);
+            border-radius: 0;
         }
 
         .obico-header {
@@ -1325,10 +1505,11 @@
         .library-breadcrumb span { color: var(--text-muted); }
         .library-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
         .library-card {
-            background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-            overflow: hidden; transition: border-color 0.2s; cursor: pointer; position: relative;
+            background: var(--surface); border: 0; border-radius: 10px;
+            overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; position: relative;
+            box-shadow: var(--shadow);
         }
-        .library-card:hover { border-color: var(--accent); }
+        .library-card:hover { transform: translateY(-1px); box-shadow: 0 17px 38px rgba(0,0,0,0.16); }
         .library-card.dragging {
             opacity: 0.45;
             border-style: dashed;
@@ -1521,19 +1702,206 @@
             margin-bottom: 16px;
         }
 
-        .upload-area {
-            background: var(--card);
-            border: 2px dashed var(--border);
+        .teacher-dispatch-lane {
+            display: none;
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 20px;
+            padding: 0;
             border-radius: 12px;
-            padding: 40px;
+            background:
+                linear-gradient(120deg, rgba(34,197,94,0.14), transparent 42%),
+                color-mix(in srgb, var(--card) 96%, transparent);
+            box-shadow: var(--shadow);
+        }
+        body.is-admin .teacher-dispatch-lane { display: block; }
+        .teacher-dispatch-lane::before {
+            content: '';
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: 4px;
+            background: linear-gradient(var(--accent), var(--brand-cyan));
+        }
+        .dispatch-lane-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 19px 22px 15px 25px;
+        }
+        .dispatch-lane-heading {
+            display: flex;
+            align-items: center;
+            gap: 13px;
+        }
+        .dispatch-lane-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--accent);
+            color: var(--brand-ink);
+        }
+        .dispatch-lane-icon .ui-icon { width: 21px; height: 21px; }
+        .dispatch-lane-eyebrow {
+            color: var(--accent);
+            font-size: 9px;
+            font-weight: 750;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+        .dispatch-lane-title {
+            margin-top: 2px;
+            font-size: 17px;
+            line-height: 1.2;
+            letter-spacing: -0.015em;
+        }
+        .dispatch-lane-summary {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+        .dispatch-summary-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 27px;
+            padding: 4px 9px;
+            border-radius: 999px;
+            background: var(--surface-soft);
+            color: var(--text-muted);
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .dispatch-summary-pill strong { color: var(--text); font-variant-numeric: tabular-nums; }
+        .dispatch-summary-pill.ready { color: var(--accent); }
+        .dispatch-list {
+            padding: 0 22px 7px 25px;
+            max-height: 440px;
+            overflow: auto;
+        }
+        .dispatch-row {
+            display: grid;
+            grid-template-columns: minmax(190px, 1.35fr) minmax(120px, 0.7fr) minmax(176px, 0.8fr);
+            gap: 16px;
+            align-items: center;
+            min-height: 68px;
+            padding: 12px 0;
+            border-top: 1px solid var(--line-soft);
+        }
+        .dispatch-job-name {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            min-width: 0;
+            font-size: 13px;
+            font-weight: 650;
+        }
+        .dispatch-job-name .ui-icon { color: var(--brand-cyan); }
+        .dispatch-job-name span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .dispatch-job-meta {
+            margin: 4px 0 0 25px;
+            color: var(--text-muted);
+            font-size: 11px;
+        }
+        .dispatch-waiting {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            color: var(--warning);
+            font-size: 11px;
+            font-weight: 650;
+        }
+        .dispatch-controls {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 7px;
+        }
+        .dispatch-printer-select {
+            min-width: 0;
+            flex: 1;
+            padding: 7px 28px 7px 9px;
+            border: 0;
+            border-radius: 7px;
+            background: var(--surface-soft);
+            color: var(--text);
+            font: inherit;
+            font-size: 11px;
+        }
+        .dispatch-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            min-height: 32px;
+            white-space: nowrap;
+            background: var(--accent);
+            border-color: var(--accent);
+            color: var(--brand-ink);
+            font-weight: 750;
+        }
+        .dispatch-button:hover { background: #4ade80; color: var(--brand-ink); }
+        .dispatch-empty {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 15px 0 19px;
+            border-top: 1px solid var(--line-soft);
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+        .dispatch-empty .ui-icon { color: var(--accent); }
+        .queue-count-badge {
+            display: none;
+            min-width: 19px;
+            height: 19px;
+            padding: 0 5px;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            background: var(--warning);
+            color: #211405;
+            font-size: 9px;
+            font-weight: 800;
+            line-height: 1;
+        }
+        body.is-admin .queue-count-badge.has-jobs { display: inline-flex; }
+
+        .upload-area {
+            background: color-mix(in srgb, var(--card) 92%, transparent);
+            border: 1px dashed var(--border);
+            border-radius: 10px;
+            padding: 30px;
             text-align: center;
             margin-bottom: 24px;
             cursor: pointer;
-            transition: border-color 0.2s;
+            transition: border-color 0.2s, background 0.2s;
         }
 
         .upload-area:hover, .upload-area.dragover {
             border-color: var(--accent);
+            background: var(--accent-dim);
+        }
+
+        .upload-area-icon {
+            width: 34px;
+            height: 34px;
+            margin: 0 auto 9px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 9px;
+            background: var(--surface-soft);
+            color: var(--accent);
         }
 
         .upload-area h3 {
@@ -1574,6 +1942,8 @@
         .job-table {
             width: 100%;
             border-collapse: collapse;
+            background: color-mix(in srgb, var(--card) 76%, transparent);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.05);
         }
 
         .job-table th {
@@ -1645,7 +2015,8 @@
             .farm-stats { display: none; }
             .main { padding: 12px; }
             .header { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
-            .header h1 { font-size: 17px; }
+            .brand { min-width: 0; }
+            .brand-title { font-size: 16px; }
             .header-actions { gap: 10px; margin-left: auto; }
 
             /* Tabs: horizontal scroll */
@@ -1655,6 +2026,14 @@
             }
             .tabs::-webkit-scrollbar { display: none; }
             .tab { padding: 10px 14px; font-size: 13px; white-space: nowrap; flex-shrink: 0; }
+
+            .dispatch-lane-header { align-items: flex-start; }
+            .dispatch-row {
+                grid-template-columns: minmax(0, 1fr) minmax(170px, 0.7fr);
+                gap: 8px 14px;
+            }
+            .dispatch-row > :first-child { grid-column: 1 / -1; }
+            .dispatch-job-meta { margin-left: 25px; }
 
             /* Tables: horizontal scroll wrapper */
             .tab-content { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -1690,9 +2069,11 @@
         @media (max-width: 480px) {
             .main { padding: 8px; }
             .header { padding: 10px 12px; }
-            .header h1 { font-size: 15px; gap: 6px; }
-            .header h1 .logo { width: 24px; height: 24px; font-size: 12px; }
-            .header-subtitle { display: none; }
+            .brand { gap: 8px; }
+            .brand-mark { width: 31px; height: 31px; border-radius: 8px; }
+            .brand-mark svg { width: 21px; height: 21px; }
+            .brand-title { font-size: 14px; }
+            .brand-kicker { display: none; }
 
             .tab { padding: 10px 12px; font-size: 12px; }
 
@@ -1705,6 +2086,24 @@
             .temp-set-btn { padding: 6px 10px; font-size: 12px; min-height: 36px; }
             .temp-off-btn { padding: 6px 8px; font-size: 12px; min-height: 36px; }
             .theme-toggle { padding: 8px 10px; min-height: 44px; }
+
+            .details-drawer { width: 100vw; }
+            .details-drawer-header { padding: 17px 16px 14px; }
+            .details-drawer-body { padding: 12px 16px 26px; }
+            .dispatch-lane-header {
+                display: block;
+                padding: 17px 16px 13px 19px;
+            }
+            .dispatch-lane-summary {
+                justify-content: flex-start;
+                margin: 12px 0 0 51px;
+            }
+            .dispatch-list { padding: 0 16px 6px 19px; }
+            .dispatch-row { display: block; padding: 14px 0; }
+            .dispatch-waiting { margin: 9px 0; }
+            .dispatch-controls { justify-content: stretch; }
+            .dispatch-printer-select { min-height: 40px; }
+            .dispatch-button { min-height: 40px; }
 
             /* Font size bumps for legibility */
             .ams-tray-type, .mmu-gate-label { font-size: 11px; }
@@ -1843,12 +2242,86 @@
     })();
 </script>
 <body>
+    <svg class="icon-sprite" aria-hidden="true">
+        <symbol id="icon-farm-mark" viewBox="0 0 24 24">
+            <path d="m4 7 8-4 8 4-8 4-8-4Z"></path>
+            <path d="m4 12 8 4 8-4"></path>
+            <path d="m4 17 8 4 8-4"></path>
+        </symbol>
+        <symbol id="icon-printers" viewBox="0 0 24 24">
+            <path d="M7 8V3h10v5"></path>
+            <rect x="4" y="8" width="16" height="9" rx="2"></rect>
+            <path d="M7 14h10v7H7zM8 11h.01"></path>
+        </symbol>
+        <symbol id="icon-queue" viewBox="0 0 24 24">
+            <path d="M9 5h6M9 3h6v4H9z"></path>
+            <path d="M7 5H5v16h14V5h-2"></path>
+            <path d="m8 14 2.5 2.5L16 11"></path>
+        </symbol>
+        <symbol id="icon-library" viewBox="0 0 24 24">
+            <path d="M3 6h7l2 2h9v11H3z"></path>
+        </symbol>
+        <symbol id="icon-network" viewBox="0 0 24 24">
+            <path d="M5 9a10 10 0 0 1 14 0M8 12a6 6 0 0 1 8 0M11 15a2 2 0 0 1 2 0"></path>
+            <circle cx="12" cy="18" r="1" fill="currentColor" stroke="none"></circle>
+        </symbol>
+        <symbol id="icon-spool" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="8"></circle>
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M4 20h16"></path>
+        </symbol>
+        <symbol id="icon-settings" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1A8 8 0 0 0 15 6.2L14.7 4h-5.4L9 6.2a8 8 0 0 0-1.5.9l-2.4-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 1.5.9l.3 2.2h5.4l.3-2.2a8 8 0 0 0 1.5-.9l2.4 1 2-3.4-2-1.5c.1-.3.1-.7.1-1Z"></path>
+        </symbol>
+        <symbol id="icon-moon" viewBox="0 0 24 24">
+            <path d="M20 15.5A8.5 8.5 0 0 1 8.5 4 8.5 8.5 0 1 0 20 15.5Z"></path>
+        </symbol>
+        <symbol id="icon-sun" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="4"></circle>
+            <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path>
+        </symbol>
+        <symbol id="icon-plus" viewBox="0 0 24 24">
+            <path d="M12 5v14M5 12h14"></path>
+        </symbol>
+        <symbol id="icon-details" viewBox="0 0 24 24">
+            <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+            <path d="M9 4v16M13 9h4M13 13h4"></path>
+        </symbol>
+        <symbol id="icon-dispatch" viewBox="0 0 24 24">
+            <path d="M4 12h15M14 7l5 5-5 5"></path>
+        </symbol>
+        <symbol id="icon-teacher" viewBox="0 0 24 24">
+            <path d="M3 5h18v12H8l-5 4z"></path>
+            <path d="m9 11 2 2 4-5"></path>
+        </symbol>
+        <symbol id="icon-clock" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="9"></circle>
+            <path d="M12 7v5l3 2"></path>
+        </symbol>
+        <symbol id="icon-file" viewBox="0 0 24 24">
+            <path d="M6 3h8l4 4v14H6zM14 3v5h5"></path>
+        </symbol>
+        <symbol id="icon-check" viewBox="0 0 24 24">
+            <path d="m5 12 4 4L19 6"></path>
+        </symbol>
+        <symbol id="icon-upload" viewBox="0 0 24 24">
+            <path d="M12 16V4M7 9l5-5 5 5M4 20h16"></path>
+        </symbol>
+        <symbol id="icon-close" viewBox="0 0 24 24">
+            <path d="m6 6 12 12M18 6 6 18"></path>
+        </symbol>
+    </svg>
     <div class="header">
-        <h1>
-            <span class="logo">&#x25B2;</span>
-            The Print Farm
-        </h1>
-        <span class="header-subtitle" style="font-size:11px;color:var(--text-muted);margin-left:-6px;">BambuLab &amp; Klipper</span>
+        <div class="brand" aria-label="The Print Farm">
+            <span class="brand-mark">
+                <svg class="ui-icon" aria-hidden="true"><use href="#icon-farm-mark"></use></svg>
+            </span>
+            <span class="brand-copy">
+                <span class="brand-title">The Print Farm</span>
+                <span class="brand-kicker">School print operations</span>
+            </span>
+        </div>
         <div class="header-actions">
             <div class="farm-stats" id="farmStats">
                 <div class="farm-stat"><span class="dot dot-connected"></span> <span id="statConnected">0</span> Connected</div>
@@ -1858,8 +2331,8 @@
             </div>
             <div class="header-controls">
                 <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark theme">
-                    <span class="theme-icon-dark">🌛</span>
-                    <span class="theme-icon-light">🔆</span>
+                    <span class="theme-icon-dark"><svg class="ui-icon" aria-hidden="true"><use href="#icon-moon"></use></svg></span>
+                    <span class="theme-icon-light"><svg class="ui-icon" aria-hidden="true"><use href="#icon-sun"></use></svg></span>
                 </button>
             </div>
             <div id="authArea">
@@ -1870,26 +2343,45 @@
 
     <div class="main">
         <div class="tabs">
-            <button class="tab active" data-tab="printers">Printers</button>
-            <button class="tab" data-tab="queue">Job Queue</button>
-            <button class="tab" data-tab="library">File Library</button>
-            <button class="tab" data-tab="orca">OrcaSlicer Setup</button>
-            <a class="tab" id="spoolmanTab" href="#" target="_blank" rel="noopener" style="text-decoration:none;display:none;">Spoolman ↗</a>
-            <button class="tab admin-only" data-tab="settings">Settings</button>
+            <button class="tab active" data-tab="printers"><svg class="ui-icon" aria-hidden="true"><use href="#icon-printers"></use></svg>Printers</button>
+            <button class="tab" data-tab="queue"><svg class="ui-icon" aria-hidden="true"><use href="#icon-queue"></use></svg>Job Queue <span class="queue-count-badge" id="queueNavCount">0</span></button>
+            <button class="tab" data-tab="library"><svg class="ui-icon" aria-hidden="true"><use href="#icon-library"></use></svg>File Library</button>
+            <button class="tab" data-tab="orca"><svg class="ui-icon" aria-hidden="true"><use href="#icon-network"></use></svg>OrcaSlicer Setup</button>
+            <a class="tab" id="spoolmanTab" href="#" target="_blank" rel="noopener" style="text-decoration:none;display:none;"><svg class="ui-icon" aria-hidden="true"><use href="#icon-spool"></use></svg>Spoolman ↗</a>
+            <button class="tab admin-only" data-tab="settings"><svg class="ui-icon" aria-hidden="true"><use href="#icon-settings"></use></svg>Settings</button>
         </div>
 
         <!-- Printers Tab -->
         <div class="tab-content active" id="tab-printers">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
                 <div id="printerCount" style="font-size:13px; color:var(--text-muted);"></div>
-                <button class="btn btn-success admin-only" onclick="openWizard()">+ Add Printer</button>
+                <button class="btn btn-success admin-only" onclick="openWizard()"><svg class="ui-icon" aria-hidden="true" style="width:13px;height:13px;vertical-align:-2px;margin-right:4px;"><use href="#icon-plus"></use></svg>Add Printer</button>
             </div>
             <div class="printer-grid" id="printerGrid"></div>
         </div>
 
         <!-- Job Queue Tab -->
         <div class="tab-content" id="tab-queue">
+            <section class="teacher-dispatch-lane admin-only" id="teacherDispatchLane" aria-labelledby="dispatchLaneTitle">
+                <div class="dispatch-lane-header">
+                    <div class="dispatch-lane-heading">
+                        <span class="dispatch-lane-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-teacher"></use></svg></span>
+                        <div>
+                            <div class="dispatch-lane-eyebrow">Teacher control</div>
+                            <h2 class="dispatch-lane-title" id="dispatchLaneTitle">Approval &amp; dispatch</h2>
+                        </div>
+                    </div>
+                    <div class="dispatch-lane-summary">
+                        <span class="dispatch-summary-pill"><strong id="dispatchWaitingCount">0</strong> waiting</span>
+                        <span class="dispatch-summary-pill ready"><strong id="dispatchReadyCount">0</strong> printers ready</span>
+                    </div>
+                </div>
+                <div class="dispatch-list" id="teacherDispatchList">
+                    <div class="dispatch-empty"><svg class="ui-icon" aria-hidden="true"><use href="#icon-check"></use></svg>No jobs are waiting for approval.</div>
+                </div>
+            </section>
             <div class="upload-area" id="uploadArea">
+                <div class="upload-area-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-upload"></use></svg></div>
                 <h3>Upload G-code File</h3>
                 <p>Drag &amp; drop files here or click to browse</p>
                 <input type="file" id="fileInput" accept=".gcode,.3mf" style="display:none" multiple>
@@ -2422,22 +2914,27 @@
         </div>
     </div>
 
-    <!-- Printer Details Modal -->
-    <div class="modal-overlay" id="printerDetailsOverlay" style="display:none" onclick="if(event.target===this)closePrinterDetails()">
-        <div class="modal" style="max-width:900px; width:94vw; max-height:88vh; overflow:auto;">
-            <div class="modal-header">
-                <h2 style="font-size:18px;">Printer Details — <span id="printerDetailsName"></span></h2>
-                <button class="modal-close" onclick="closePrinterDetails()">&times;</button>
+    <!-- Printer Details Side Panel -->
+    <div class="details-drawer-overlay" id="printerDetailsOverlay" aria-hidden="true" onclick="if(event.target===this)closePrinterDetails()">
+        <aside class="details-drawer" role="dialog" aria-modal="true" aria-labelledby="printerDetailsName" onclick="event.stopPropagation()">
+            <div class="details-drawer-header">
+                <div>
+                    <div class="details-drawer-eyebrow"><svg class="ui-icon" aria-hidden="true"><use href="#icon-details"></use></svg>Printer details</div>
+                    <h2 class="details-drawer-title" id="printerDetailsName"></h2>
+                </div>
+                <button class="details-drawer-close" id="printerDetailsClose" onclick="closePrinterDetails()" title="Close details" aria-label="Close printer details">
+                    <svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+                </button>
             </div>
-            <div id="printerDetailsBody"></div>
-        </div>
+            <div class="details-drawer-body" id="printerDetailsBody"></div>
+        </aside>
     </div>
 
     <!-- Happy Hare Modal -->
     <div class="hh-overlay" id="hhOverlay" style="display:none" onclick="if(event.target===this)closeHappyHareModal()">
         <div class="hh-modal" onclick="event.stopPropagation()">
             <div class="hh-modal-header">
-                <h2>🔀 Happy Hare — <span id="hhPrinterName"></span> <span id="hhActionBadge" style="font-size:12px;font-weight:400;color:var(--text-muted);margin-left:8px;"></span></h2>
+                <h2><svg class="ui-icon heading-icon" aria-hidden="true"><use href="#icon-network"></use></svg>Happy Hare — <span id="hhPrinterName"></span> <span id="hhActionBadge" style="font-size:12px;font-weight:400;color:var(--text-muted);margin-left:8px;"></span></h2>
                 <button class="hh-modal-close" onclick="closeHappyHareModal()">&times;</button>
             </div>
             <div class="hh-tabs">
@@ -2461,7 +2958,7 @@
     <div class="ams-overlay" id="amsOverlay" onclick="if(event.target===this)closeAmsModal()">
         <div class="ams-modal" onclick="event.stopPropagation()">
             <div class="ams-modal-header">
-                <h2>📦 AMS — <span id="amsPrinterName"></span></h2>
+                <h2><svg class="ui-icon heading-icon" aria-hidden="true"><use href="#icon-spool"></use></svg>AMS — <span id="amsPrinterName"></span></h2>
                 <button class="ams-modal-close" onclick="closeAmsModal()">&times;</button>
             </div>
             <div class="ams-modal-body" id="amsTabOverview"></div>
@@ -2913,6 +3410,12 @@
     <script>
         const BASE = '{{ prefix }}';
 
+        function iconMarkup(name, extraClass = '') {
+            const safeName = String(name).replace(/[^a-z-]/g, '');
+            const safeClass = String(extraClass).replace(/[^a-z0-9 _-]/gi, '');
+            return `<svg class="ui-icon ${safeClass}" aria-hidden="true"><use href="#icon-${safeName}"></use></svg>`;
+        }
+
         // ── Theme Toggle ─────────────────────────────────────
         function toggleTheme() {
             const current = document.documentElement.getAttribute('data-theme');
@@ -2934,6 +3437,7 @@
         let cameraStreaming = {};   // {printerName: true/false}
         let cameraRefreshTimers = {};  // per-printer snapshot refresh intervals
         let currentCameraModalName = null;
+        let printerDetailsLastFocus = null;
 
         // ── Auth ─────────────────────────────────────────────
         async function checkAuth() {
@@ -3977,6 +4481,7 @@
 
         let lastPrinterNames = [];  // Track which printers are in the grid
         let availablePrinters = [];  // Track available printers for manual assign
+        let latestJobs = [];  // Shared by the full queue and teacher dispatch lane
         let spoolmanConfigured = false;
 
         function renderPrinterCard(name, p) {
@@ -4007,7 +4512,7 @@
                         </span>
                         <div class="printer-header-actions">
                             <span class="printer-status ${statusBadge}" data-field="status">${escapeHtml(statusLabel)}</span>
-                            ${isAuthenticated ? `<button class="btn printer-card-action" onclick="openPrinterDetails(${nameArg})" title="View printer details">Details</button>` : ''}
+                            ${isAuthenticated ? `<button class="btn printer-card-action" onclick="openPrinterDetails(${nameArg})" title="View printer details">${iconMarkup('details')} Details</button>` : ''}
                             ${isAdmin ? `<button class="printer-remove-btn" onclick="removePrinter(${nameArg})" title="Remove printer">&times;</button>` : ''}
                         </div>
                     </div>
@@ -4709,11 +5214,24 @@
                     </div>
                 </div>
             `;
-            document.getElementById('printerDetailsOverlay').style.display = 'flex';
+            printerDetailsLastFocus = document.activeElement;
+            const overlay = document.getElementById('printerDetailsOverlay');
+            overlay.classList.add('open');
+            overlay.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('details-open');
+            requestAnimationFrame(() => document.getElementById('printerDetailsClose')?.focus());
         }
 
         function closePrinterDetails() {
-            document.getElementById('printerDetailsOverlay').style.display = 'none';
+            const overlay = document.getElementById('printerDetailsOverlay');
+            if (!overlay || !overlay.classList.contains('open')) return;
+            overlay.classList.remove('open');
+            overlay.setAttribute('aria-hidden', 'true');
+            document.body.classList.remove('details-open');
+            if (printerDetailsLastFocus && typeof printerDetailsLastFocus.focus === 'function') {
+                printerDetailsLastFocus.focus();
+            }
+            printerDetailsLastFocus = null;
         }
 
         // ── Temperature & Filament Controls ──────────────────
@@ -5465,7 +5983,10 @@
         });
 
         document.addEventListener('keydown', e => {
-            if (e.key === 'Escape') closeCameraModal();
+            if (e.key === 'Escape') {
+                closeCameraModal();
+                closePrinterDetails();
+            }
         });
 
         async function refreshCameraStatus() {
@@ -5511,6 +6032,79 @@
         }
 
         const priorityLabels = { 0: 'Normal', 1: 'High', 2: 'Urgent' };
+
+        function renderTeacherDispatchLane(jobs = latestJobs) {
+            const list = document.getElementById('teacherDispatchList');
+            const waitingCount = document.getElementById('dispatchWaitingCount');
+            const readyCount = document.getElementById('dispatchReadyCount');
+            const navCount = document.getElementById('queueNavCount');
+            if (!list || !waitingCount || !readyCount || !navCount) return;
+
+            const queued = (jobs || [])
+                .filter(job => String(job.status || '').toLowerCase() === 'queued')
+                .sort((a, b) => (Number(b.priority) || 0) - (Number(a.priority) || 0)
+                    || new Date(a.created_at || 0) - new Date(b.created_at || 0));
+
+            waitingCount.textContent = queued.length;
+            readyCount.textContent = availablePrinters.length;
+            navCount.textContent = queued.length;
+            navCount.classList.toggle('has-jobs', queued.length > 0);
+
+            if (!isAdmin) return;
+            if (queued.length === 0) {
+                list.innerHTML = `<div class="dispatch-empty">${iconMarkup('check')} No jobs are waiting for approval.</div>`;
+                return;
+            }
+
+            list.innerHTML = queued.map(job => {
+                const jobId = Number(job.id);
+                const assignedPrinter = job.printer_name ? String(job.printer_name) : '';
+                const priority = priorityLabels[job.priority] || 'Normal';
+                const fileName = job.original_name || job.filename || `Job ${jobId}`;
+                const submittedBy = job.submitted_by || 'Unknown user';
+                let controls = '';
+
+                if (assignedPrinter) {
+                    controls = `
+                        <span class="dispatch-printer-select" title="This job was sent to the printer-specific queue">${escapeHtml(assignedPrinter)}</span>
+                        <button class="btn dispatch-button" onclick="sendToAssigned(${jobId}, ${jsArg(assignedPrinter)})">
+                            ${iconMarkup('dispatch')} Dispatch
+                        </button>`;
+                } else {
+                    const options = availablePrinters.map(printer =>
+                        `<option value="${escapeHtml(printer.name)}">${escapeHtml(printer.name)} · ${escapeHtml(String(printer.status || 'Ready'))}</option>`
+                    ).join('');
+                    controls = `
+                        <select class="dispatch-printer-select" id="dispatch-printer-${jobId}" aria-label="Printer for ${escapeHtml(fileName)}" ${availablePrinters.length ? '' : 'disabled'}>
+                            ${availablePrinters.length ? `<option value="">Choose printer</option>${options}` : '<option value="">No printers ready</option>'}
+                        </select>
+                        <button class="btn dispatch-button" onclick="dispatchFromLane(${jobId})" ${availablePrinters.length ? '' : 'disabled'}>
+                            ${iconMarkup('dispatch')} Dispatch
+                        </button>`;
+                }
+
+                return `
+                    <div class="dispatch-row">
+                        <div>
+                            <div class="dispatch-job-name">${iconMarkup('file')}<span title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</span></div>
+                            <div class="dispatch-job-meta">${escapeHtml(submittedBy)} · ${escapeHtml(priority)} · ${escapeHtml(formatDate(job.created_at))}</div>
+                        </div>
+                        <div class="dispatch-waiting">${iconMarkup('clock')} Waiting for teacher</div>
+                        <div class="dispatch-controls">${controls}</div>
+                    </div>`;
+            }).join('');
+        }
+
+        async function dispatchFromLane(jobId) {
+            const select = document.getElementById(`dispatch-printer-${jobId}`);
+            const printerName = select?.value || '';
+            if (!printerName) {
+                alert('Choose a ready printer first');
+                select?.focus();
+                return;
+            }
+            await sendToAssigned(jobId, printerName);
+        }
 
         function getWeekLabel(dateStr) {
             const d = new Date(dateStr);
@@ -5860,10 +6454,10 @@
                 if (entries.length === 0) {
                     grid.innerHTML = `
                         <div style="grid-column:1/-1; text-align:center; padding:60px 20px;">
-                            <div style="font-size:48px; margin-bottom:16px;">🖨️</div>
+                            ${iconMarkup('printers', 'empty-state-icon')}
                             <h3 style="margin-bottom:8px;">No Printers Added Yet</h3>
                             <p style="color:var(--text-muted); margin-bottom:20px;">Click "Add Printer" to discover BambuLab printers on your network.</p>
-                            <button class="btn btn-success admin-only" onclick="openWizard()">+ Add Printer</button>
+                            <button class="btn btn-success admin-only" onclick="openWizard()">${iconMarkup('plus')} Add Printer</button>
                         </div>`;
                     lastPrinterNames = [];
                 } else if (currentNames !== prevNames) {
@@ -5896,6 +6490,7 @@
                         name,
                         status: p.display_status || p.status,
                     }));
+                renderTeacherDispatchLane();
             } catch (err) {
                 console.error('Failed to refresh printers:', err);
             }
@@ -5905,6 +6500,7 @@
             try {
                 const res = await fetch(BASE + '/api/jobs');
                 const data = await res.json();
+                latestJobs = Array.isArray(data.jobs) ? data.jobs : [];
 
                 // Track which printers have the current user's active jobs
                 const newMyPrinters = new Set();
@@ -5926,11 +6522,12 @@
 
                 document.getElementById('queueStats').textContent =
                     `${data.stats.queued || 0} queued · ${data.stats.printing || 0} printing · ${data.stats.completed || 0} completed`;
+                renderTeacherDispatchLane(latestJobs);
 
                 // Don't re-render while a dropdown is open — it would clobber it mid-interaction
                 if (document.querySelector('.send-dropdown.open')) return;
 
-                renderJobsGroupedByWeek(data.jobs);
+                renderJobsGroupedByWeek(latestJobs);
             } catch (err) {
                 console.error('Failed to refresh jobs:', err);
             }

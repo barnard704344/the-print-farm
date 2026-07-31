@@ -220,6 +220,24 @@ class SecurityTests(unittest.TestCase):
             response.data,
         )
 
+    def test_dashboard_has_teacher_dispatch_lane_and_details_drawer(self):
+        app = create_app(
+            self.farm,
+            self.queue,
+            api_key="integration-secret",
+            config=self.config,
+        )
+        response = app.test_client().get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'id="teacherDispatchLane"', response.data)
+        self.assertIn(b'id="teacherDispatchList"', response.data)
+        self.assertIn(b'class="details-drawer"', response.data)
+        self.assertIn(b"function dispatchFromLane(jobId)", response.data)
+        self.assertNotIn(
+            b'class="modal-overlay" id="printerDetailsOverlay"',
+            response.data,
+        )
+
     def test_legacy_job_list_requires_login(self):
         app = create_app(
             self.farm,

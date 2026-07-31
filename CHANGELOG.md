@@ -3,6 +3,16 @@
 This file records notable user-facing, security, deployment, and compatibility
 changes to The Print Farm.
 
+### Changed
+
+- Introduced a distinct Print Farm visual identity with consistent interface
+  icons, a flatter card treatment, and fewer nested borders.
+- Printer Details now opens in a responsive right-side panel so the printer grid
+  remains visible in context.
+- Added a staff-only Approval & Dispatch lane that prioritises queued jobs,
+  shows ready-printer capacity, and reuses the existing filament checks and
+  dispatch path.
+
 ### Documentation
 
 - Audited the complete documentation set against `v1.0.11`, including
