@@ -2,8 +2,7 @@
 
 The Print Farm is a lightweight web-based 3D printer management system designed
 for schools using BambuLab and Klipper printers. Staff remain responsible for
-approving and dispatching prints; the application does not use camera-based
-build-plate detection.
+approving and dispatching prints.
 
 ## BambuLab Support
 
