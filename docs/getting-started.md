@@ -1,6 +1,6 @@
 # Getting Started
 
-These instructions apply to `v1.0.13`. The default branch also contains any
+These instructions apply to `v1.0.14`. The default branch also contains any
 documentation-only updates made after that tag. For a reproducible code
 deployment, check out the release tag after cloning.
 
@@ -45,7 +45,9 @@ printer manually.
 After the initial setup, authenticated staff can use **Settings → Software
 Update**. The update button requires a clean Git worktree, fetches from GitHub,
 applies only a fast-forward update, reconciles dependencies/deployment files,
-and restarts only after every printer and active job is confirmed safe. If an
+and restarts only after every printer and active job is confirmed safe.
+Deployment reconciliation runs in a transient privileged systemd unit, and the
+restart is queued asynchronously so the service never waits on itself. If an
 older installation reports `.git/objects` permission errors, run `sudo bash
 setup.sh --restart` once to reinstall the current helper and ownership model.
 
@@ -58,7 +60,7 @@ Dashboard URL:
 Release-pinned checkout:
 
 ```bash
-git checkout v1.0.13
+git checkout v1.0.14
 sudo bash setup.sh --restart
 ```
 
