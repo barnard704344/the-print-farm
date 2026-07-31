@@ -3711,6 +3711,7 @@
             const payload = {
                 server: document.getElementById('obicoServer').value,
                 printer_id: parseInt(document.getElementById('obicoPrinterId').value) || 0,
+                printer_name: name,
                 username: document.getElementById('obicoUsername').value,
                 password: document.getElementById('obicoPassword').value,
             };
@@ -5137,7 +5138,9 @@
                 detailSection('Klipper / Integrations', [
                     ['Fans', fans],
                     ['Lights', leds],
-                    ['Obico', p.obico && p.obico.connected ? `${p.obico.state || 'connected'} ${p.obico.watching ? '(watching)' : ''}` : ''],
+                    ['Obico', p.obico ? (p.obico.connected
+                        ? `${p.obico.state || 'connected'} ${p.obico.watching ? '(watching)' : ''}`
+                        : `Unavailable${p.obico.error ? ` — ${p.obico.error}` : ''}`) : ''],
                     ['Adaptive Flow', p.adaptive_flow ? p.adaptive_flow.url : ''],
                 ], true),
                 detailSection('Errors', [
