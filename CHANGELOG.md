@@ -3,8 +3,6 @@
 This file records notable user-facing, security, deployment, and compatibility
 changes to The Print Farm.
 
-## Unreleased
-
 ### Documentation
 
 - Audited the complete documentation set against `v1.0.11`, including
