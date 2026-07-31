@@ -2466,9 +2466,17 @@
             <!-- API access -->
             <div class="setup-section" style="max-width:700px; margin-bottom:24px;">
                 <h3 style="margin-bottom:16px;">API Access</h3>
-                <p style="color:var(--text-muted); font-size:13px;">
-                    The API key is stored only in the server configuration and is never sent to dashboard browsers.
+                <p style="color:var(--text-muted); font-size:13px; margin-bottom:12px;">
+                    Use this key when connecting OrcaSlicer to the General Queue or a per-printer Print Host. It is visible only to logged-in staff.
                 </p>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <input type="text" id="apiAccessKey" class="ad-input" readonly
+                           value="" placeholder="Loading API key…" autocomplete="off"
+                           style="flex:1; font-family:monospace;">
+                    <button type="button" class="btn" id="apiAccessCopyBtn"
+                            onclick="copyApiAccessKey()" disabled>Copy API Key</button>
+                </div>
+                <div id="apiAccessStatus" style="font-size:11px; color:var(--text-muted); margin-top:7px;"></div>
             </div>
 
             <div class="setup-section" style="max-width:700px;">
@@ -3404,6 +3412,7 @@
             } else {
                 document.body.classList.remove('is-admin');
                 area.innerHTML = `<button class="btn" onclick="showLoginModal()" style="font-size:12px; padding:4px 12px;">Login</button>`;
+                clearApiAccessKey();
             }
             // Show/hide the Spoolman nav tab based on whether it's configured
             initSpoolmanTab();
@@ -3417,6 +3426,7 @@
                 const s = document.getElementById('orca-virtual-section');
                 if (s) s.style.display = 'none';
             }
+            populateOrcaPrinterTable();
             // Re-render printers and jobs to show/hide controls
             updatePrintAccessUI();
             lastPrinterNames = [];  // Force full rebuild
@@ -4138,6 +4148,56 @@
         // ── OrcaSlicer hostname ──────────────────────────────
         const farmHost = `http://${location.hostname}:5000`;
 
+        function clearApiAccessKey() {
+            const input = document.getElementById('apiAccessKey');
+            const button = document.getElementById('apiAccessCopyBtn');
+            const status = document.getElementById('apiAccessStatus');
+            if (input) input.value = '';
+            if (button) button.disabled = true;
+            if (status) status.textContent = '';
+        }
+
+        async function fetchStaffApiKey() {
+            if (!isAdmin) return '';
+            try {
+                const res = await fetch(BASE + '/api/orca/api-key', {
+                    credentials: 'same-origin',
+                    cache: 'no-store',
+                });
+                if (!res.ok) return '';
+                const data = await res.json();
+                return data.configured ? String(data.api_key || '') : '';
+            } catch (e) {
+                return '';
+            }
+        }
+
+        async function loadApiAccessKey() {
+            const input = document.getElementById('apiAccessKey');
+            const button = document.getElementById('apiAccessCopyBtn');
+            const status = document.getElementById('apiAccessStatus');
+            if (!input || !button || !status) return;
+            clearApiAccessKey();
+            input.placeholder = 'Loading API key…';
+            const key = await fetchStaffApiKey();
+            if (!isAdmin) return;
+            input.placeholder = '';
+            if (key) {
+                input.value = key;
+                button.disabled = false;
+                status.textContent = 'Configured and ready for OrcaSlicer connections.';
+            } else {
+                input.value = '';
+                input.placeholder = 'No API key configured';
+                status.textContent = 'No API key is configured on this server.';
+            }
+        }
+
+        function copyApiAccessKey() {
+            const input = document.getElementById('apiAccessKey');
+            if (input && input.value) copyText(input.value);
+        }
+
         // Populate virtual printer LAN mode table
         async function populateOrcaVirtualTable(printers) {
             const tbody = document.getElementById('orca-virtual-table');
@@ -4163,16 +4223,23 @@
         // Populate per-printer connection table
         async function populateOrcaPrinterTable() {
             try {
+                const requestedAsAdmin = isAdmin;
+                const sharedApiKey = await fetchStaffApiKey();
                 const res = await fetch(BASE + '/api/farm/status');
                 const data = await res.json();
                 const tbody = document.getElementById('orca-printer-table');
                 if (!tbody) return;
+                if (requestedAsAdmin !== isAdmin) return;
+                const apiKeyCell = sharedApiKey
+                    ? `<code style="user-select:all;">${escapeHtml(sharedApiKey)}</code>
+                       <button class="btn" style="font-size:10px;margin-left:6px;" onclick="copyText(${jsArg(sharedApiKey)})">Copy</button>`
+                    : `<span style="font-size:11px;color:var(--text-muted);">${isAdmin ? 'No API key configured' : 'Staff login required'}</span>`;
                 let rows = '';
                 // General queue row
                 rows += `<tr style="border-bottom:1px solid var(--border);">
                     <td style="padding:8px;"><strong>General Queue</strong><br><span style="font-size:11px;color:var(--text-muted);">Any available printer</span></td>
                     <td style="padding:8px;"><code style="user-select:all;">${location.hostname}</code></td>
-                    <td style="padding:8px;"><span style="font-size:11px;color:var(--text-muted);">Use the key from server config</span></td>
+                    <td style="padding:8px;">${apiKeyCell}</td>
                     <td style="padding:8px;"><button class="btn" style="font-size:11px;" onclick="copyText('${location.hostname}')">Copy</button></td>
                 </tr>`;
                 // Per-printer rows — test port reachability first
@@ -4195,7 +4262,7 @@
                     rows += `<tr style="border-bottom:1px solid var(--border);">
                         <td style="padding:8px;"><strong>${escapeHtml(name)}</strong><br><span style="font-size:11px;color:var(--text-muted);">${escapeHtml(p.type || '')}</span></td>
                         <td style="padding:8px;"><code style="user-select:all;">${escapeHtml(hostname)}</code></td>
-                        <td style="padding:8px;"><span style="font-size:11px;color:var(--text-muted);">Use the key from server config</span></td>
+                        <td style="padding:8px;">${apiKeyCell}</td>
                         <td style="padding:8px;"><button class="btn" style="font-size:11px;" onclick="copyText(${jsArg(hostname)})">Copy</button></td>
                     </tr>`;
                 }
@@ -4209,7 +4276,6 @@
                 }
             } catch (e) {}
         }
-        populateOrcaPrinterTable();
 
         function copyText(text) {
             navigator.clipboard.writeText(text).then(() => {
@@ -4230,7 +4296,7 @@
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 tab.classList.add('active');
                 document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
-                if (tab.dataset.tab === 'settings') { loadADConfig(); loadStudentAccessConfig(); populateObicoPrinterDropdown(); loadSpoolmanConfig(); loadPoolConfig(); loadNotificationConfig(); loadUiConfig(); }
+                if (tab.dataset.tab === 'settings') { loadApiAccessKey(); loadADConfig(); loadStudentAccessConfig(); populateObicoPrinterDropdown(); loadSpoolmanConfig(); loadPoolConfig(); loadNotificationConfig(); loadUiConfig(); }
                 if (tab.dataset.tab === 'library') refreshLibrary();
             });
         });

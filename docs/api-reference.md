@@ -1,6 +1,6 @@
 # API Reference
 
-Documentation status: `v1.0.11`.
+Documentation status: `v1.0.12`.
 
 ## REST API v1
 
@@ -20,6 +20,11 @@ Browser administration also uses authenticated non-v1 routes documented in
 [API.md](../API.md), including camera streams, settings, and native software
 updates. An integration key cannot invoke deployment updates; those require a
 staff browser session.
+
+Logged-in staff can copy the integration key from **OrcaSlicer Setup →
+Connection Details** or **Settings → API Access**. The browser retrieves it from
+a non-cacheable, staff-session-only endpoint; it is not included in the public
+dashboard HTML.
 
 ### Quick Examples
 

@@ -205,6 +205,28 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn(b"sentinel-master-key", response.data)
 
+    def test_orca_api_key_is_available_only_to_staff_session(self):
+        app = create_app(
+            self.farm,
+            self.queue,
+            api_key="sentinel-master-key",
+            config=self.config,
+        )
+        client = app.test_client()
+
+        self.assertEqual(client.get("/api/orca/api-key").status_code, 403)
+
+        with client.session_transaction() as session:
+            session.update(role="student", username="alice", display_name="Alice")
+        self.assertEqual(client.get("/api/orca/api-key").status_code, 403)
+
+        with client.session_transaction() as session:
+            session.update(role="staff", username="teacher", display_name="Teacher")
+        response = client.get("/api/orca/api-key")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["api_key"], "sentinel-master-key")
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
+
     def test_dashboard_javascript_arguments_escape_html_attribute_quotes(self):
         app = create_app(
             self.farm,

@@ -492,6 +492,19 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             "print_denied_reason": print_denied_reason,
         })
 
+    @app.route(prefix + "/api/orca/api-key")
+    @app.route("/api/orca/api-key")
+    @staff_session_required
+    def orca_api_key():
+        """Return the shared Print Host key to an authenticated staff browser."""
+        response = jsonify({
+            "ok": True,
+            "api_key": str(api_key or ""),
+            "configured": bool(api_key),
+        })
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
     @app.route(prefix + "/api/auth/login", methods=["POST"])
     @app.route("/api/auth/login", methods=["POST"])
     def auth_login():

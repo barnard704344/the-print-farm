@@ -1,6 +1,6 @@
 # The Print Farm — API Documentation
 
-Complete reference for all REST API endpoints, reviewed for `v1.0.11`.
+Complete reference for all REST API endpoints, reviewed for `v1.0.12`.
 
 ---
 
@@ -40,6 +40,10 @@ API key authentication is intended for external integrations and OrcaSlicer.
 It grants privileged access where an endpoint explicitly accepts integration
 keys, but deployment updates and other staff-session-only browser operations do
 not accept it.
+
+Logged-in staff can copy the key from **OrcaSlicer Setup → Connection Details**
+or **Settings → API Access**. The key is not embedded in the public dashboard
+HTML.
 
 ### Session (Browser)
 
@@ -98,6 +102,21 @@ Returns current session status. No auth required.
 #### `POST /api/auth/logout`
 
 Clears session. Returns `{"ok": true}`.
+
+#### `GET /api/orca/api-key`
+
+Returns the shared OrcaSlicer/API integration key to an authenticated staff
+browser session. API-key authentication, student sessions, and anonymous
+requests are not accepted. The response uses `Cache-Control: no-store`.
+
+**Response:**
+```json
+{
+  "ok": true,
+  "api_key": "configured-integration-key",
+  "configured": true
+}
+```
 
 #### `POST /api/auth/sso`
 

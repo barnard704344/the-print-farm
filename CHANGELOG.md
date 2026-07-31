@@ -3,6 +3,17 @@
 This file records notable user-facing, security, deployment, and compatibility
 changes to The Print Farm.
 
+## v1.0.12 - 2026-07-31 - Queue workflow and Orca connection recovery
+
+### Fixed
+
+- Restored the shared OrcaSlicer/API integration key to the General Queue
+  connection table and Settings so staff can configure clients on networks
+  where the per-printer ports are blocked.
+- Kept the key out of the initial dashboard HTML and exposed it only through a
+  non-cacheable endpoint requiring an authenticated staff browser session.
+  Anonymous visitors and student sessions cannot retrieve it.
+
 ### Changed
 
 - Restored the original green Print Farm colour palette with
@@ -13,16 +24,20 @@ changes to The Print Farm.
   narrower screens.
 - Printer Details now opens in a responsive right-side panel so the printer grid
   remains visible in context.
+- Removed the duplicate approval-and-dispatch panel and retained the original
+  queue action workflow as the single place staff dispatch jobs.
 - Split the Job Queue into Queued Jobs and Job History sub-tabs. Staff can view
-  the complete queue separately from chronological history while retaining the
-  original dispatch and job actions.
+  the complete newest-first queue separately from chronological history while
+  retaining the original dispatch and job actions.
 
 ### Documentation
 
-- Audited the complete documentation set against `v1.0.11`, including
+- Audited the complete documentation set against `v1.0.12`, including
   authentication boundaries, native and Docker updates, failed-printer
   readiness, camera rotation, optional Spoolman behaviour, and AMS controls for
   tagged and generic filament.
+- Documented staff-only retrieval of the OrcaSlicer connection key from the
+  dashboard.
 - Added the missing `v1.0.10` history and current release/image references.
 
 ## v1.0.11 - 2026-07-31 - Lightweight printer readiness
