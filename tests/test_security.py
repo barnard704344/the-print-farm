@@ -330,6 +330,7 @@ class SecurityTests(unittest.TestCase):
         response = app.test_client().get("/")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'<nav class="tabs" aria-label="Primary navigation">', response.data)
+        self.assertIn(b"Print operations for schools and beyond", response.data)
         self.assertIn(b'class="details-drawer"', response.data)
         self.assertIn(b"fetch(BASE + '/api/jobs')", response.data)
         self.assertIn(b"fetch(BASE + '/api/jobs/queued')", response.data)
