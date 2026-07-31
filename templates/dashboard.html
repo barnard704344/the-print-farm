@@ -4373,7 +4373,7 @@
                             <span style="margin-left:auto;">
                                 <button class="btn" onclick="amsLoadTray(${nameArg}, 255)" style="font-size:10px;padding:2px 8px;">Unload</button>
                             </span>
-                        </div>` : `<div class="ams-external ${externalActive ? 'active' : ''}" onclick="event.stopPropagation()">>
+                        </div>` : `<div class="ams-external ${externalActive ? 'active' : ''}" onclick="event.stopPropagation()">
                             <span>🔗 External Spool${externalActive ? ' (active)' : ''}</span>
                         </div>`}
                     </div>
@@ -6402,7 +6402,12 @@
         }
 
         function jsArg(value) {
-            return escapeHtml(JSON.stringify(String(value ?? '')));
+            // These JSON string literals are interpolated inside double-quoted
+            // HTML event attributes. Encode the attribute delimiters as entities;
+            // the browser decodes them back into valid JavaScript string quotes.
+            return JSON.stringify(String(value ?? '')).replace(/[&"<>]/g, ch => ({
+                '&': '&amp;', '"': '&quot;', '<': '&lt;', '>': '&gt;'
+            }[ch]));
         }
 
         function clampNumber(value, min, max) {

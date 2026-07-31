@@ -13,6 +13,11 @@ changes to The Print Farm.
 - Setup upgrades now remove retired plate-detection configuration and notification
   settings from existing installations.
 
+### Fixed
+
+- Corrected printer-name escaping in generated dashboard actions so Details,
+  AMS popups, tray configuration, and manual AMS colour selection are clickable.
+
 ## v1.0.9 - 2026-07-30 - Security and deployment hardening
 
 Commit: `c47ca23`

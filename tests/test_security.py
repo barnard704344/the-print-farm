@@ -205,6 +205,21 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn(b"sentinel-master-key", response.data)
 
+    def test_dashboard_javascript_arguments_escape_html_attribute_quotes(self):
+        app = create_app(
+            self.farm,
+            self.queue,
+            api_key="integration-secret",
+            config=self.config,
+        )
+        response = app.test_client().get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"'&': '&amp;', '\"': '&quot;'", response.data)
+        self.assertNotIn(
+            b"return escapeHtml(JSON.stringify(String(value ?? '')))",
+            response.data,
+        )
+
     def test_legacy_job_list_requires_login(self):
         app = create_app(
             self.farm,
