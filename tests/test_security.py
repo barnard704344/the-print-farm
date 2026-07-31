@@ -220,7 +220,7 @@ class SecurityTests(unittest.TestCase):
             response.data,
         )
 
-    def test_dashboard_has_unified_queue_and_details_drawer(self):
+    def test_dashboard_has_original_queue_and_details_drawer(self):
         app = create_app(
             self.farm,
             self.queue,
@@ -231,10 +231,10 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'<nav class="tabs" aria-label="Primary navigation">', response.data)
         self.assertIn(b'class="details-drawer"', response.data)
-        self.assertIn(b"fetch(BASE + '/api/jobs/queued')", response.data)
-        self.assertIn(b"let queueWaitingVisibleCount = 10", response.data)
-        self.assertIn(b"function showMoreWaitingJobs()", response.data)
+        self.assertIn(b"fetch(BASE + '/api/jobs')", response.data)
         self.assertIn(b"['completed', 'failed', 'cancelled'].includes(status)", response.data)
+        self.assertNotIn(b"fetch(BASE + '/api/jobs/queued')", response.data)
+        self.assertNotIn(b'class="job-table waiting-table"', response.data)
         self.assertNotIn(b'id="teacherDispatchLane"', response.data)
         self.assertNotIn(
             b'class="modal-overlay" id="printerDetailsOverlay"',

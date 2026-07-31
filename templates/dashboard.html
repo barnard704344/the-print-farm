@@ -1802,31 +1802,6 @@
             box-shadow: 0 8px 24px rgba(0,0,0,0.05);
         }
 
-        .job-table.waiting-table {
-            border-left: 3px solid var(--accent);
-            background: var(--card);
-            box-shadow: var(--shadow);
-        }
-        .job-table.waiting-table > thead > tr:first-child {
-            background: var(--accent-dim) !important;
-        }
-        .queue-waiting-footer td {
-            padding: 10px 12px;
-            color: var(--text-muted);
-            font-size: 11px;
-            text-align: right;
-        }
-        .queue-waiting-footer button {
-            margin-left: 14px;
-            border: 0;
-            background: transparent;
-            color: var(--accent);
-            cursor: pointer;
-            font: inherit;
-            font-weight: 700;
-        }
-        .queue-waiting-footer button:hover { text-decoration: underline; }
-
         .job-table th {
             text-align: left;
             font-size: 11px;
@@ -4338,8 +4313,6 @@
         let lastPrinterNames = [];  // Track which printers are in the grid
         let availablePrinters = [];  // Track available printers for manual assign
         let latestJobs = [];  // Paginated job history
-        let latestQueuedJobs = [];  // Complete staff approval queue
-        let queueWaitingVisibleCount = 10;
         let spoolmanConfigured = false;
 
         function renderPrinterCard(name, p) {
@@ -5906,38 +5879,17 @@
 
         function renderJobsGroupedByWeek(jobs) {
             const container = document.getElementById('jobTableContainer');
-            const sourceJobs = Array.isArray(jobs) ? jobs : [];
-            const queuedJobs = isAdmin
-                ? [...latestQueuedJobs].sort((a, b) =>
-                    (Number(b.priority) || 0) - (Number(a.priority) || 0)
-                    || new Date(a.created_at || 0) - new Date(b.created_at || 0)
-                )
-                : [];
-            const historyJobs = isAdmin
-                ? sourceJobs.filter(job => String(job.status || '').toLowerCase() !== 'queued')
-                : sourceJobs;
-            const visibleQueuedJobs = queuedJobs.slice(0, queueWaitingVisibleCount);
-            const renderedJobs = isAdmin
-                ? [...visibleQueuedJobs, ...historyJobs]
-                : historyJobs;
-
-            if (renderedJobs.length === 0) {
+            if (!jobs || jobs.length === 0) {
                 container.innerHTML = '<p style="text-align:center;color:var(--text-muted);margin:24px 0;">No jobs</p>';
                 return;
             }
             const groups = [];
             const groupMap = {};
-            for (const job of renderedJobs) {
-                const label = isAdmin && String(job.status || '').toLowerCase() === 'queued'
-                    ? 'Waiting approval'
-                    : getWeekLabel(job.created_at);
+            for (const job of jobs) {
+                const label = getWeekLabel(job.created_at);
                 if (!groupMap[label]) {
                     groupMap[label] = [];
-                    groups.push({
-                        label,
-                        jobs: groupMap[label],
-                        total: label === 'Waiting approval' ? queuedJobs.length : null,
-                    });
+                    groups.push({ label, jobs: groupMap[label] });
                 }
                 groupMap[label].push(job);
             }
@@ -5945,25 +5897,15 @@
             let html = '';
             for (const group of groups) {
                 const weekId = 'week_' + group.label.replace(/[^a-z0-9]/gi, '_');
-                const isWaitingGroup = group.label === 'Waiting approval';
-                const isExpanded = isWaitingGroup || group.label === 'This Week';
-                const groupTotal = group.total ?? group.jobs.length;
-                const remaining = isWaitingGroup ? Math.max(0, groupTotal - group.jobs.length) : 0;
-                const moreRow = remaining > 0 ? `
-                    <tr class="queue-waiting-footer">
-                        <td colspan="${colCount}">
-                            <span>Showing ${group.jobs.length} of ${groupTotal} waiting jobs</span>
-                            <button type="button" onclick="showMoreWaitingJobs()">Show ${Math.min(10, remaining)} more</button>
-                        </td>
-                    </tr>` : '';
-                html += `<table class="job-table ${isWaitingGroup ? 'waiting-table' : ''}" style="margin-bottom:24px;">
+                const isExpanded = group.label === 'This Week';
+                html += `<table class="job-table" style="margin-bottom:24px;">
                     <thead>
                         <tr style="background:rgba(255,255,255,0.06);">
                             <th colspan="${colCount}" style="padding:8px 10px;font-size:13px;font-weight:600;letter-spacing:0;">
                                 <button type="button" id="${weekId}_toggle" onclick="toggleWeekCollapse('${weekId}')" style="margin-right:8px;border:none;background:transparent;color:var(--text);cursor:pointer;font-size:12px;">${isExpanded ? '&#9662;' : '&#9656;'}</button>
                                 ${isAdmin ? `<input type="checkbox" id="${weekId}_all" onchange="toggleWeekSelection('${weekId}')">` : ''}
                                 ${group.label}
-                                <span style="font-weight:400;font-size:11px;color:var(--text-muted);margin-left:6px;">(${groupTotal} job${groupTotal !== 1 ? 's' : ''})</span>
+                                <span style="font-weight:400;font-size:11px;color:var(--text-muted);margin-left:6px;">(${group.jobs.length} job${group.jobs.length !== 1 ? 's' : ''})</span>
                             </th>
                         </tr>
                         <tr id="${weekId}_cols" style="${isExpanded ? '' : 'display:none;'}">
@@ -5972,15 +5914,10 @@
                             <th>Submitted By</th><th>Copies</th><th>Est. Time</th><th>Priority</th><th>Created</th><th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody id="${weekId}_body" style="${isExpanded ? '' : 'display:none;'}">${group.jobs.map(j => renderJobRow(j, weekId)).join('')}${moreRow}</tbody>
+                    <tbody id="${weekId}_body" style="${isExpanded ? '' : 'display:none;'}">${group.jobs.map(j => renderJobRow(j, weekId)).join('')}</tbody>
                 </table>`;
             }
             container.innerHTML = html;
-        }
-
-        function showMoreWaitingJobs() {
-            queueWaitingVisibleCount += 10;
-            renderJobsGroupedByWeek(latestJobs);
         }
 
         function toggleWeekCollapse(weekId) {
@@ -6321,27 +6258,9 @@
 
         async function refreshJobs() {
             try {
-                const queuedRequest = isAdmin
-                    ? fetch(BASE + '/api/jobs/queued').catch(() => null)
-                    : null;
                 const res = await fetch(BASE + '/api/jobs');
                 const data = await res.json();
                 latestJobs = Array.isArray(data.jobs) ? data.jobs : [];
-                if (queuedRequest) {
-                    const queuedRes = await queuedRequest;
-                    if (queuedRes?.ok) {
-                        const queuedData = await queuedRes.json();
-                        latestQueuedJobs = Array.isArray(queuedData) ? queuedData : [];
-                    } else if (latestQueuedJobs.length === 0) {
-                        latestQueuedJobs = latestJobs.filter(job =>
-                            String(job.status || '').toLowerCase() === 'queued'
-                        );
-                    }
-                } else {
-                    latestQueuedJobs = latestJobs.filter(job =>
-                        String(job.status || '').toLowerCase() === 'queued'
-                    );
-                }
 
                 // Track which printers have the current user's active jobs
                 const newMyPrinters = new Set();
@@ -6364,7 +6283,7 @@
                 document.getElementById('queueStats').textContent =
                     `${data.stats.queued || 0} queued · ${data.stats.printing || 0} printing · ${data.stats.completed || 0} completed`;
                 const navCount = document.getElementById('queueNavCount');
-                const queuedCount = isAdmin ? latestQueuedJobs.length : (data.stats.queued || 0);
+                const queuedCount = data.stats.queued || 0;
                 navCount.textContent = queuedCount;
                 navCount.classList.toggle('has-jobs', queuedCount > 0);
 
