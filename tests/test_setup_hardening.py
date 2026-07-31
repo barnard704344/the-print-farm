@@ -34,6 +34,11 @@ class PrivilegedHelperTests(unittest.TestCase):
         self.assertIn('"--service-type=exec"', source)
         self.assertIn('f"--unit=the-print-farm-update-{os.getpid()}"', source)
 
+    def test_restart_is_queued_without_waiting_on_its_own_service(self):
+        with open(HELPER_PATH, "r", encoding="utf-8") as handle:
+            source = handle.read()
+        self.assertIn('"--no-block",\n            "restart",', source)
+
     def test_printer_names_and_ports_are_strictly_validated(self):
         self.assertEqual(helper.validate_printer_name("P1S-1"), "P1S-1")
         self.assertEqual(helper.validate_port("5001"), 5001)

@@ -583,9 +583,17 @@ def update_apply(config):
 
 
 def restart_service(config):
+    # The request originates inside the service being restarted. Queue the job
+    # and return immediately so systemctl never waits for its own caller to
+    # exit before the helper/web process can finish.
     _run(
-        [_command_path("systemctl"), "restart", config["service_name"]],
-        timeout=30,
+        [
+            _command_path("systemctl"),
+            "--no-block",
+            "restart",
+            config["service_name"],
+        ],
+        timeout=10,
     )
 
 
