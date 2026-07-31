@@ -37,6 +37,10 @@ described in [Docker](docker.md).
 The service can invoke that helper only for validated update, Apache, OrcaSlicer,
 and service-restart operations. Do not grant the service account direct
 passwordless access to `systemctl`, file-writing tools, Git, or Apache commands.
+Deployment reconciliation runs in a short-lived root systemd unit so its
+service-user access checks do not inherit the web application's restricted
+capability set. This also lets an existing installation bootstrap the updater
+fix entirely through the dashboard.
 
 Legacy installations should rerun `sudo bash setup.sh --restart` while printers
 are idle. The script replaces older broad sudoers rules and validates the new

@@ -6,6 +6,7 @@ set -Eeuo pipefail
 umask 077
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+SETUP_ARGS=("$@")
 REPO_CONFIG_PATH="${SCRIPT_DIR}/config/config.yaml"
 RUNTIME_CONFIG_DIR="/etc/the-print-farm"
 RUNTIME_CONFIG_PATH="${RUNTIME_CONFIG_DIR}/config.yaml"
@@ -101,6 +102,30 @@ case "$SCRIPT_DIR" in
 esac
 [[ -f "$HELPER_SOURCE" ]] || fail "Missing helper source: ${HELPER_SOURCE}"
 [[ -f "${SCRIPT_DIR}/requirements.txt" ]] || fail "Run setup.sh from a complete repository checkout"
+
+# The web updater starts from the hardened application service. Its capability
+# bounding set intentionally prevents changing users or groups, so even a
+# root-owned helper cannot run the service-account access checks below. Move
+# the reconciler into a transient root unit managed by PID 1, which gives setup
+# a clean privilege context without granting those capabilities to the web app.
+# Existing installations bootstrap through this block before their installed
+# helper has been replaced with the version that starts the transient unit
+# directly.
+if [[ "${FARM_SETUP_TRANSIENT_UNIT:-0}" != "1" ]] && \
+   ! runuser -u root -- true >/dev/null 2>&1; then
+    command -v systemd-run >/dev/null 2>&1 || \
+        fail "systemd-run is required to complete an update from the web interface"
+    info "Continuing setup in a privileged transient systemd unit..."
+    exec systemd-run \
+        --quiet \
+        --wait \
+        --pipe \
+        --collect \
+        --service-type=exec \
+        --unit="the-print-farm-setup-${BASHPID}" \
+        /usr/bin/env FARM_SETUP_TRANSIENT_UNIT=1 \
+        /bin/bash "$SCRIPT_DIR/setup.sh" "${SETUP_ARGS[@]}"
+fi
 cd "$SCRIPT_DIR"
 for runtime_directory in config data uploads logs venv; do
     [[ ! -L "${SCRIPT_DIR}/${runtime_directory}" ]] || \
@@ -301,7 +326,7 @@ else
     info "Skipping system package installation"
 fi
 
-for command in python3 apache2ctl systemctl systemd-analyze git flock runuser visudo; do
+for command in python3 apache2ctl systemctl systemd-analyze systemd-run git flock runuser visudo; do
     command -v "$command" >/dev/null || fail "Required command not found: ${command}"
 done
 python3 - <<'PY'

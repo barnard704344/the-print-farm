@@ -3,6 +3,16 @@
 This file records notable user-facing, security, deployment, and compatibility
 changes to The Print Farm.
 
+## Unreleased
+
+### Fixed
+
+- Run native dashboard update reconciliation in a transient privileged systemd
+  unit. Hardened installations can now complete service-user access checks and
+  upgrade fully through the UI without requiring shell access.
+- Queue the post-update service restart asynchronously so the updater does not
+  wait on the application process that issued its own restart request.
+
 ## v1.0.13 - 2026-07-31 - Zero-touch Orca credential split
 
 ### Fixed
