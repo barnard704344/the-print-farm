@@ -27,6 +27,13 @@ class PrivilegedHelperTests(unittest.TestCase):
         self.assertIn('"pip", "check"', source)
         self.assertIn('requirements = Path(repo) / "requirements.txt"', source)
 
+    def test_update_reconciles_in_a_transient_privileged_unit(self):
+        with open(HELPER_PATH, "r", encoding="utf-8") as handle:
+            source = handle.read()
+        self.assertIn('_command_path("systemd-run")', source)
+        self.assertIn('"--service-type=exec"', source)
+        self.assertIn('f"--unit=the-print-farm-update-{os.getpid()}"', source)
+
     def test_printer_names_and_ports_are_strictly_validated(self):
         self.assertEqual(helper.validate_printer_name("P1S-1"), "P1S-1")
         self.assertEqual(helper.validate_port("5001"), 5001)
@@ -147,6 +154,9 @@ class SetupScriptTests(unittest.TestCase):
             'install -r "${SCRIPT_DIR}/requirements.txt"',
             self.script,
         )
+        self.assertIn('FARM_SETUP_TRANSIENT_UNIT', self.script)
+        self.assertIn('--unit="the-print-farm-setup-${BASHPID}"', self.script)
+        self.assertIn('! runuser -u root -- true', self.script)
 
     def test_setup_does_not_grant_generic_privileged_commands(self):
         forbidden = (

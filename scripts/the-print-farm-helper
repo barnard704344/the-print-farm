@@ -546,8 +546,20 @@ def update_apply(config):
     )
     setup = Path(repo) / "setup.sh"
     _validate_root_owned_file(setup)
+    # The application service has a deliberately narrow capability bounding
+    # set. Run deployment reconciliation as a transient root service instead
+    # of inheriting that restriction; setup needs to validate access as the
+    # dedicated service account. setup.sh contains the equivalent bootstrap
+    # path for installations whose older helper invokes it directly.
     _run(
         [
+            _command_path("systemd-run"),
+            "--quiet",
+            "--wait",
+            "--pipe",
+            "--collect",
+            "--service-type=exec",
+            f"--unit=the-print-farm-update-{os.getpid()}",
             _command_path("bash"),
             str(setup),
             "--skip-packages",
