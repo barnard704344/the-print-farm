@@ -2,7 +2,9 @@
 
 A lightweight, web-based print farm manager for BambuLab and Klipper printers.
 
-Built primarily for primary and secondary schools, The Print Farm keeps things simple: no unnecessary plugins, extensions, or heavy dependencies.
+Built primarily for primary and secondary schools—but equally usable at home,
+in makerspaces, and in other small print farms—The Print Farm keeps things
+simple: no unnecessary plugins, extensions, or heavy dependencies.
 
 Current release: **[v1.0.13](https://github.com/barnard704344/the-print-farm/releases/tag/v1.0.13)**.
 
