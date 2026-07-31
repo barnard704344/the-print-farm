@@ -336,6 +336,8 @@ class SecurityTests(unittest.TestCase):
         self.assertIn(b'id="queueSubtabQueued"', response.data)
         self.assertIn(b'id="queueSubtabHistory"', response.data)
         self.assertIn(b"function renderQueuedJobs(jobs)", response.data)
+        self.assertIn(b"printer_name: name", response.data)
+        self.assertIn(b"Unavailable${p.obico.error", response.data)
         self.assertIn(b"new Date(b.created_at || 0) - new Date(a.created_at || 0)", response.data)
         self.assertIn(b"['completed', 'failed', 'cancelled'].includes(status)", response.data)
         self.assertNotIn(b'class="job-table waiting-table"', response.data)

@@ -28,6 +28,11 @@ class ObicoClient:
         self._session: Optional[requests.Session] = None
         self._lock = threading.Lock()
         self._last_data: dict = {}
+        self._last_error = ""
+
+    @property
+    def last_error(self) -> str:
+        return self._last_error
 
     def _login(self) -> bool:
         """Authenticate via Django session login."""
@@ -35,6 +40,7 @@ class ObicoClient:
             s = requests.Session()
             r = s.get(f"{self.server_url}/accounts/login/", timeout=10)
             if r.status_code != 200:
+                self._last_error = f"Obico login page returned HTTP {r.status_code}"
                 logger.warning(f"Obico login page returned {r.status_code}")
                 return False
 
@@ -42,6 +48,7 @@ class ObicoClient:
                 r'csrfmiddlewaretoken.*?value=["\x27]([^"\x27]+)', r.text
             )
             if not csrf_match:
+                self._last_error = "Obico login page did not provide a CSRF token"
                 logger.warning("Obico: no CSRF token found on login page")
                 return False
 
@@ -57,13 +64,16 @@ class ObicoClient:
                 allow_redirects=False,
             )
             if r2.status_code not in (301, 302):
+                self._last_error = f"Obico login was rejected (HTTP {r2.status_code})"
                 logger.warning(f"Obico login failed: {r2.status_code}")
                 return False
 
             self._session = s
+            self._last_error = ""
             logger.info(f"Obico: authenticated to {self.server_url}")
             return True
         except Exception as e:
+            self._last_error = f"Obico login error: {e}"
             logger.warning(f"Obico login error: {e}")
             return False
 
@@ -80,7 +90,7 @@ class ObicoClient:
         snapshot_url, state, current_print.
         """
         if not self._ensure_session():
-            return {"connected": False}
+            return {"connected": False, "error": self._last_error or "Obico authentication failed"}
 
         try:
             r = self._session.get(
@@ -92,18 +102,23 @@ class ObicoClient:
                 with self._lock:
                     self._session = None
                 if not self._ensure_session():
-                    return {"connected": False}
+                    return {"connected": False, "error": self._last_error or "Obico authentication failed"}
                 r = self._session.get(
                     f"{self.server_url}/api/v1/printers/{self.printer_id}/",
                     timeout=10,
                 )
 
             if r.status_code != 200:
-                return {"connected": False}
+                if r.status_code == 404:
+                    error = f"Obico printer ID {self.printer_id} was not found"
+                else:
+                    error = f"Obico printer request failed (HTTP {r.status_code})"
+                self._last_error = error
+                return {"connected": False, "error": error}
 
             data = r.json()
-            status = data.get("status", {})
-            pic = data.get("pic", {})
+            status = data.get("status") or {}
+            pic = data.get("pic") or {}
             current_print = data.get("current_print")
 
             result = {
@@ -134,11 +149,15 @@ class ObicoClient:
                 result["current_print"] = None
 
             self._last_data = result
+            self._last_error = ""
             return result
 
         except Exception as e:
+            self._last_error = f"Obico request error: {e}"
             logger.debug(f"Obico fetch error: {e}")
-            return self._last_data if self._last_data else {"connected": False}
+            if self._last_data:
+                return {**self._last_data, "connected": False, "error": self._last_error}
+            return {"connected": False, "error": self._last_error}
 
     def _fetch_prediction(self, print_id: int) -> dict:
         """Get the latest AI detection score for a print."""

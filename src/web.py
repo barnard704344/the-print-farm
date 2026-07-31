@@ -2243,6 +2243,19 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         username = data.get("username", "").strip()
         password = data.get("password", "").strip()
         printer_id = int(data.get("printer_id", 0))
+        printer_name = data.get("printer_name", "").strip()
+
+        if password == "********" and printer_name:
+            saved = _get_obico_config_for_printer(printer_name)
+            if (
+                server != str(saved.get("server", "")).strip()
+                or username != str(saved.get("username", "")).strip()
+            ):
+                return jsonify({
+                    "ok": False,
+                    "message": "Re-enter the Obico password after changing the server or username",
+                }), 400
+            password = str(saved.get("password", ""))
 
         if not server or not username or not password or not printer_id:
             return jsonify({"ok": False, "message": "All fields are required"}), 400
@@ -2250,8 +2263,17 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         try:
             from .obico_client import ObicoClient
             client = ObicoClient(server, username, password, printer_id)
-            client._login()
+            if not client._login():
+                return jsonify({
+                    "ok": False,
+                    "message": client.last_error or "Obico authentication failed",
+                }), 502
             status = client.fetch_status()
+            if not status.get("connected"):
+                return jsonify({
+                    "ok": False,
+                    "message": status.get("error", "Obico printer is unavailable"),
+                }), 502
             return jsonify({
                 "ok": True,
                 "state": status.get("state", "unknown"),

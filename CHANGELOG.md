@@ -15,6 +15,9 @@ changes to The Print Farm.
 - Preserve the public request host through the managed Apache proxy so CSRF
   origin validation accepts same-origin dashboard actions such as deleting
   queued jobs.
+- Report Obico authentication and printer-ID failures in Settings and Printer
+  Details, and let connection tests reuse a saved masked password instead of
+  submitting the mask as a credential.
 
 ## v1.0.13 - 2026-07-31 - Zero-touch Orca credential split
 
