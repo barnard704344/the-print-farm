@@ -30,7 +30,7 @@ The Print Farm deliberately uses a small, local-first architecture.
 5. Completion updates the queue and can trigger notifications and optional
    Spoolman usage deduction.
 
-There is no camera/image build-plate detection or automatic failed-job resend.
+
 
 ## Security Boundaries
 
