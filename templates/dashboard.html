@@ -1708,188 +1708,6 @@
             margin-bottom: 16px;
         }
 
-        .teacher-dispatch-lane {
-            display: none;
-            position: relative;
-            overflow: hidden;
-            margin-bottom: 20px;
-            padding: 0;
-            border-radius: 10px;
-            background: var(--card);
-            box-shadow: var(--shadow);
-        }
-        body.is-admin .teacher-dispatch-lane { display: block; }
-        .teacher-dispatch-lane::before {
-            content: '';
-            position: absolute;
-            inset: 0 auto 0 0;
-            width: 3px;
-            background: var(--accent);
-        }
-        .dispatch-lane-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            padding: 15px 20px 13px 22px;
-        }
-        .dispatch-lane-heading {
-            display: flex;
-            align-items: center;
-            gap: 11px;
-        }
-        .dispatch-lane-icon {
-            width: 34px;
-            height: 34px;
-            border-radius: 8px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            background: var(--accent-dim);
-            color: var(--accent);
-        }
-        .dispatch-lane-icon .ui-icon { width: 19px; height: 19px; }
-        .dispatch-lane-eyebrow {
-            color: var(--accent);
-            font-size: 9px;
-            font-weight: 750;
-            letter-spacing: 0.14em;
-            text-transform: uppercase;
-        }
-        .dispatch-lane-title {
-            margin-top: 2px;
-            font-size: 16px;
-            line-height: 1.2;
-            letter-spacing: -0.015em;
-        }
-        .dispatch-lane-summary {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex-wrap: wrap;
-            justify-content: flex-end;
-        }
-        .dispatch-summary-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            min-height: 27px;
-            padding: 4px 9px;
-            border-radius: 999px;
-            background: var(--surface-soft);
-            color: var(--text-muted);
-            font-size: 11px;
-            font-weight: 600;
-        }
-        .dispatch-summary-pill strong { color: var(--text); font-variant-numeric: tabular-nums; }
-        .dispatch-summary-pill.ready { color: var(--success); }
-        .dispatch-list {
-            padding: 0 20px 6px 22px;
-        }
-        .dispatch-row {
-            display: grid;
-            grid-template-columns: minmax(220px, 1.35fr) minmax(130px, 0.55fr) minmax(280px, 0.85fr);
-            gap: 16px;
-            align-items: center;
-            min-height: 58px;
-            padding: 9px 0;
-            border-top: 1px solid var(--line-soft);
-        }
-        .dispatch-job-name {
-            display: flex;
-            align-items: center;
-            gap: 9px;
-            min-width: 0;
-            font-size: 13px;
-            font-weight: 650;
-        }
-        .dispatch-job-name .ui-icon { color: var(--brand-secondary); }
-        .dispatch-job-name span {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        .dispatch-job-meta {
-            margin: 4px 0 0 25px;
-            color: var(--text-muted);
-            font-size: 11px;
-        }
-        .dispatch-waiting {
-            display: flex;
-            align-items: center;
-            gap: 7px;
-            color: var(--text-muted);
-            font-size: 11px;
-            font-weight: 650;
-        }
-        .dispatch-waiting .ui-icon { color: var(--warning); }
-        .dispatch-controls {
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            gap: 7px;
-        }
-        .dispatch-printer-select {
-            min-width: 0;
-            flex: 1;
-            padding: 7px 28px 7px 9px;
-            border: 1px solid var(--line-soft);
-            border-radius: 7px;
-            background: var(--surface-soft);
-            color: var(--text);
-            font: inherit;
-            font-size: 11px;
-        }
-        .dispatch-button {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            min-height: 32px;
-            white-space: nowrap;
-            background: var(--accent);
-            border-color: var(--accent);
-            color: var(--brand-ink);
-            font-weight: 750;
-        }
-        .dispatch-button:hover {
-            background: color-mix(in srgb, var(--accent) 86%, #000);
-            color: var(--brand-ink);
-        }
-        .dispatch-lane-footer {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            padding: 10px 0 8px;
-            border-top: 1px solid var(--line-soft);
-            color: var(--text-muted);
-            font-size: 11px;
-        }
-        .dispatch-lane-toggle {
-            border: 0;
-            background: transparent;
-            color: var(--accent);
-            cursor: pointer;
-            font: inherit;
-            font-weight: 700;
-        }
-        .dispatch-lane-toggle:hover { text-decoration: underline; }
-        .dispatch-lane-footer-actions {
-            display: inline-flex;
-            align-items: center;
-            gap: 14px;
-        }
-        .dispatch-empty {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 15px 0 19px;
-            border-top: 1px solid var(--line-soft);
-            color: var(--text-muted);
-            font-size: 12px;
-        }
-        .dispatch-empty .ui-icon { color: var(--accent); }
         .queue-count-badge {
             display: none;
             min-width: 19px;
@@ -1983,6 +1801,31 @@
             background: color-mix(in srgb, var(--card) 76%, transparent);
             box-shadow: 0 8px 24px rgba(0,0,0,0.05);
         }
+
+        .job-table.waiting-table {
+            border-left: 3px solid var(--accent);
+            background: var(--card);
+            box-shadow: var(--shadow);
+        }
+        .job-table.waiting-table > thead > tr:first-child {
+            background: var(--accent-dim) !important;
+        }
+        .queue-waiting-footer td {
+            padding: 10px 12px;
+            color: var(--text-muted);
+            font-size: 11px;
+            text-align: right;
+        }
+        .queue-waiting-footer button {
+            margin-left: 14px;
+            border: 0;
+            background: transparent;
+            color: var(--accent);
+            cursor: pointer;
+            font: inherit;
+            font-weight: 700;
+        }
+        .queue-waiting-footer button:hover { text-decoration: underline; }
 
         .job-table th {
             text-align: left;
@@ -2096,14 +1939,6 @@
             .brand-title { font-size: 16px; }
             .tab { font-size: 13px; }
 
-            .dispatch-lane-header { align-items: flex-start; }
-            .dispatch-row {
-                grid-template-columns: minmax(0, 1fr) minmax(170px, 0.7fr);
-                gap: 8px 14px;
-            }
-            .dispatch-row > :first-child { grid-column: 1 / -1; }
-            .dispatch-job-meta { margin-left: 25px; }
-
             /* Tables: horizontal scroll wrapper */
             .tab-content { overflow-x: auto; -webkit-overflow-scrolling: touch; }
             .job-table { min-width: 600px; }
@@ -2159,21 +1994,6 @@
             .details-drawer { width: 100vw; }
             .details-drawer-header { padding: 17px 16px 14px; }
             .details-drawer-body { padding: 12px 16px 26px; }
-            .dispatch-lane-header {
-                display: block;
-                padding: 17px 16px 13px 19px;
-            }
-            .dispatch-lane-summary {
-                justify-content: flex-start;
-                margin: 12px 0 0 51px;
-            }
-            .dispatch-list { padding: 0 16px 6px 19px; }
-            .dispatch-row { display: block; padding: 14px 0; }
-            .dispatch-waiting { margin: 9px 0; }
-            .dispatch-controls { justify-content: stretch; }
-            .dispatch-printer-select { min-height: 40px; }
-            .dispatch-button { min-height: 40px; }
-
             /* Font size bumps for legibility */
             .ams-tray-type, .mmu-gate-label { font-size: 11px; }
             .ams-tray-slot, .ams-tray-remain { font-size: 10px; }
@@ -2357,22 +2177,8 @@
             <rect x="3" y="4" width="18" height="16" rx="2"></rect>
             <path d="M9 4v16M13 9h4M13 13h4"></path>
         </symbol>
-        <symbol id="icon-dispatch" viewBox="0 0 24 24">
-            <path d="M4 12h15M14 7l5 5-5 5"></path>
-        </symbol>
-        <symbol id="icon-teacher" viewBox="0 0 24 24">
-            <path d="M3 5h18v12H8l-5 4z"></path>
-            <path d="m9 11 2 2 4-5"></path>
-        </symbol>
-        <symbol id="icon-clock" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="9"></circle>
-            <path d="M12 7v5l3 2"></path>
-        </symbol>
         <symbol id="icon-file" viewBox="0 0 24 24">
             <path d="M6 3h8l4 4v14H6zM14 3v5h5"></path>
-        </symbol>
-        <symbol id="icon-check" viewBox="0 0 24 24">
-            <path d="m5 12 4 4L19 6"></path>
         </symbol>
         <symbol id="icon-upload" viewBox="0 0 24 24">
             <path d="M12 16V4M7 9l5-5 5 5M4 20h16"></path>
@@ -2430,24 +2236,6 @@
 
         <!-- Job Queue Tab -->
         <div class="tab-content" id="tab-queue">
-            <section class="teacher-dispatch-lane admin-only" id="teacherDispatchLane" aria-labelledby="dispatchLaneTitle">
-                <div class="dispatch-lane-header">
-                    <div class="dispatch-lane-heading">
-                        <span class="dispatch-lane-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-teacher"></use></svg></span>
-                        <div>
-                            <div class="dispatch-lane-eyebrow">Teacher control</div>
-                            <h2 class="dispatch-lane-title" id="dispatchLaneTitle">Approval &amp; dispatch</h2>
-                        </div>
-                    </div>
-                    <div class="dispatch-lane-summary">
-                        <span class="dispatch-summary-pill"><strong id="dispatchWaitingCount">0</strong> waiting</span>
-                        <span class="dispatch-summary-pill ready"><strong id="dispatchReadyCount">0</strong> <span id="dispatchReadyLabel">printers ready</span></span>
-                    </div>
-                </div>
-                <div class="dispatch-list" id="teacherDispatchList">
-                    <div class="dispatch-empty"><svg class="ui-icon" aria-hidden="true"><use href="#icon-check"></use></svg>No jobs are waiting for approval.</div>
-                </div>
-            </section>
             <div class="upload-area" id="uploadArea">
                 <div class="upload-area-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-upload"></use></svg></div>
                 <h3>Upload G-code File</h3>
@@ -4551,7 +4339,7 @@
         let availablePrinters = [];  // Track available printers for manual assign
         let latestJobs = [];  // Paginated job history
         let latestQueuedJobs = [];  // Complete staff approval queue
-        let dispatchLaneVisibleCount = 4;
+        let queueWaitingVisibleCount = 10;
         let spoolmanConfigured = false;
 
         function renderPrinterCard(name, p) {
@@ -6103,116 +5891,6 @@
 
         const priorityLabels = { 0: 'Normal', 1: 'High', 2: 'Urgent' };
 
-        function renderTeacherDispatchLane(jobs = latestQueuedJobs) {
-            const list = document.getElementById('teacherDispatchList');
-            const waitingCount = document.getElementById('dispatchWaitingCount');
-            const readyCount = document.getElementById('dispatchReadyCount');
-            const readyLabel = document.getElementById('dispatchReadyLabel');
-            const navCount = document.getElementById('queueNavCount');
-            if (!list || !waitingCount || !readyCount || !readyLabel || !navCount) return;
-            const selectedPrinters = {};
-            list.querySelectorAll('.dispatch-printer-select[id]').forEach(select => {
-                selectedPrinters[select.id] = select.value;
-            });
-
-            const queued = (jobs || [])
-                .filter(job => String(job.status || '').toLowerCase() === 'queued')
-                .sort((a, b) => (Number(b.priority) || 0) - (Number(a.priority) || 0)
-                    || new Date(a.created_at || 0) - new Date(b.created_at || 0));
-
-            waitingCount.textContent = queued.length;
-            readyCount.textContent = availablePrinters.length;
-            readyLabel.textContent = availablePrinters.length === 1 ? 'printer ready' : 'printers ready';
-            navCount.textContent = queued.length;
-            navCount.classList.toggle('has-jobs', queued.length > 0);
-
-            if (!isAdmin) return;
-            if (queued.length === 0) {
-                list.innerHTML = `<div class="dispatch-empty">${iconMarkup('check')} No jobs are waiting for approval.</div>`;
-                return;
-            }
-
-            const visibleJobs = queued.slice(0, dispatchLaneVisibleCount);
-            const rows = visibleJobs.map(job => {
-                const jobId = Number(job.id);
-                const assignedPrinter = job.printer_name ? String(job.printer_name) : '';
-                const priority = priorityLabels[job.priority]
-                    || (job.priority != null ? `Priority ${job.priority}` : 'Normal');
-                const fileName = job.original_name || job.filename || `Job ${jobId}`;
-                const submittedBy = job.submitted_by || 'Unknown user';
-                let controls = '';
-
-                if (assignedPrinter) {
-                    controls = `
-                        <span class="dispatch-printer-select" title="This job was sent to the printer-specific queue">${escapeHtml(assignedPrinter)}</span>
-                        <button class="btn dispatch-button" onclick="sendToAssigned(${jobId}, ${jsArg(assignedPrinter)})">
-                            ${iconMarkup('dispatch')} Dispatch
-                        </button>`;
-                } else {
-                    const options = availablePrinters.map(printer =>
-                        `<option value="${escapeHtml(printer.name)}">${escapeHtml(printer.name)} · ${escapeHtml(String(printer.status || 'Ready'))}</option>`
-                    ).join('');
-                    controls = `
-                        <select class="dispatch-printer-select" id="dispatch-printer-${jobId}" aria-label="Printer for ${escapeHtml(fileName)}" ${availablePrinters.length ? '' : 'disabled'}>
-                            ${availablePrinters.length ? `<option value="">Choose printer</option>${options}` : '<option value="">No printers ready</option>'}
-                        </select>
-                        <button class="btn dispatch-button" onclick="dispatchFromLane(${jobId})" ${availablePrinters.length ? '' : 'disabled'}>
-                            ${iconMarkup('dispatch')} Dispatch
-                        </button>`;
-                }
-
-                return `
-                    <div class="dispatch-row">
-                        <div>
-                            <div class="dispatch-job-name">${iconMarkup('file')}<span title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</span></div>
-                            <div class="dispatch-job-meta">${escapeHtml(submittedBy)} · ${escapeHtml(priority)} · ${escapeHtml(formatDate(job.created_at))}</div>
-                        </div>
-                        <div class="dispatch-waiting">${iconMarkup('clock')} Awaiting approval</div>
-                        <div class="dispatch-controls">${controls}</div>
-                    </div>`;
-            }).join('');
-
-            const remaining = queued.length - visibleJobs.length;
-            const footer = queued.length > 4 ? `
-                <div class="dispatch-lane-footer">
-                    <span>Showing ${visibleJobs.length} of ${queued.length} waiting jobs</span>
-                    <span class="dispatch-lane-footer-actions">
-                        ${dispatchLaneVisibleCount > 4 ? '<button class="dispatch-lane-toggle" onclick="collapseDispatchLane()">Collapse</button>' : ''}
-                        ${remaining > 0 ? `<button class="dispatch-lane-toggle" onclick="showMoreDispatchJobs()">Show ${Math.min(4, remaining)} more</button>` : ''}
-                    </span>
-                </div>` : '';
-            list.innerHTML = rows + footer;
-
-            Object.entries(selectedPrinters).forEach(([id, value]) => {
-                const select = document.getElementById(id);
-                if (select && [...select.options].some(option => option.value === value)) {
-                    select.value = value;
-                }
-            });
-        }
-
-        function showMoreDispatchJobs() {
-            dispatchLaneVisibleCount += 4;
-            renderTeacherDispatchLane();
-        }
-
-        function collapseDispatchLane() {
-            dispatchLaneVisibleCount = 4;
-            renderTeacherDispatchLane();
-            document.getElementById('teacherDispatchLane')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-
-        async function dispatchFromLane(jobId) {
-            const select = document.getElementById(`dispatch-printer-${jobId}`);
-            const printerName = select?.value || '';
-            if (!printerName) {
-                alert('Choose a ready printer first');
-                select?.focus();
-                return;
-            }
-            await sendToAssigned(jobId, printerName);
-        }
-
         function getWeekLabel(dateStr) {
             const d = new Date(dateStr);
             const startOfWeek = (dt) => { const d2 = new Date(dt); d2.setHours(0,0,0,0); d2.setDate(d2.getDate() - d2.getDay()); return d2; };
@@ -6228,30 +5906,64 @@
 
         function renderJobsGroupedByWeek(jobs) {
             const container = document.getElementById('jobTableContainer');
-            if (!jobs || jobs.length === 0) {
+            const sourceJobs = Array.isArray(jobs) ? jobs : [];
+            const queuedJobs = isAdmin
+                ? [...latestQueuedJobs].sort((a, b) =>
+                    (Number(b.priority) || 0) - (Number(a.priority) || 0)
+                    || new Date(a.created_at || 0) - new Date(b.created_at || 0)
+                )
+                : [];
+            const historyJobs = isAdmin
+                ? sourceJobs.filter(job => String(job.status || '').toLowerCase() !== 'queued')
+                : sourceJobs;
+            const visibleQueuedJobs = queuedJobs.slice(0, queueWaitingVisibleCount);
+            const renderedJobs = isAdmin
+                ? [...visibleQueuedJobs, ...historyJobs]
+                : historyJobs;
+
+            if (renderedJobs.length === 0) {
                 container.innerHTML = '<p style="text-align:center;color:var(--text-muted);margin:24px 0;">No jobs</p>';
                 return;
             }
             const groups = [];
             const groupMap = {};
-            for (const job of jobs) {
-                const label = getWeekLabel(job.created_at);
-                if (!groupMap[label]) { groupMap[label] = []; groups.push({ label, jobs: groupMap[label] }); }
+            for (const job of renderedJobs) {
+                const label = isAdmin && String(job.status || '').toLowerCase() === 'queued'
+                    ? 'Waiting approval'
+                    : getWeekLabel(job.created_at);
+                if (!groupMap[label]) {
+                    groupMap[label] = [];
+                    groups.push({
+                        label,
+                        jobs: groupMap[label],
+                        total: label === 'Waiting approval' ? queuedJobs.length : null,
+                    });
+                }
                 groupMap[label].push(job);
             }
             const colCount = isAdmin ? 11 : 10;
             let html = '';
             for (const group of groups) {
                 const weekId = 'week_' + group.label.replace(/[^a-z0-9]/gi, '_');
-                const isExpanded = group.label === 'This Week';
-                html += `<table class="job-table" style="margin-bottom:24px;">
+                const isWaitingGroup = group.label === 'Waiting approval';
+                const isExpanded = isWaitingGroup || group.label === 'This Week';
+                const groupTotal = group.total ?? group.jobs.length;
+                const remaining = isWaitingGroup ? Math.max(0, groupTotal - group.jobs.length) : 0;
+                const moreRow = remaining > 0 ? `
+                    <tr class="queue-waiting-footer">
+                        <td colspan="${colCount}">
+                            <span>Showing ${group.jobs.length} of ${groupTotal} waiting jobs</span>
+                            <button type="button" onclick="showMoreWaitingJobs()">Show ${Math.min(10, remaining)} more</button>
+                        </td>
+                    </tr>` : '';
+                html += `<table class="job-table ${isWaitingGroup ? 'waiting-table' : ''}" style="margin-bottom:24px;">
                     <thead>
                         <tr style="background:rgba(255,255,255,0.06);">
                             <th colspan="${colCount}" style="padding:8px 10px;font-size:13px;font-weight:600;letter-spacing:0;">
                                 <button type="button" id="${weekId}_toggle" onclick="toggleWeekCollapse('${weekId}')" style="margin-right:8px;border:none;background:transparent;color:var(--text);cursor:pointer;font-size:12px;">${isExpanded ? '&#9662;' : '&#9656;'}</button>
                                 ${isAdmin ? `<input type="checkbox" id="${weekId}_all" onchange="toggleWeekSelection('${weekId}')">` : ''}
                                 ${group.label}
-                                <span style="font-weight:400;font-size:11px;color:var(--text-muted);margin-left:6px;">(${group.jobs.length} job${group.jobs.length !== 1 ? 's' : ''})</span>
+                                <span style="font-weight:400;font-size:11px;color:var(--text-muted);margin-left:6px;">(${groupTotal} job${groupTotal !== 1 ? 's' : ''})</span>
                             </th>
                         </tr>
                         <tr id="${weekId}_cols" style="${isExpanded ? '' : 'display:none;'}">
@@ -6260,10 +5972,15 @@
                             <th>Submitted By</th><th>Copies</th><th>Est. Time</th><th>Priority</th><th>Created</th><th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody id="${weekId}_body" style="${isExpanded ? '' : 'display:none;'}">${group.jobs.map(j => renderJobRow(j, weekId)).join('')}</tbody>
+                    <tbody id="${weekId}_body" style="${isExpanded ? '' : 'display:none;'}">${group.jobs.map(j => renderJobRow(j, weekId)).join('')}${moreRow}</tbody>
                 </table>`;
             }
             container.innerHTML = html;
+        }
+
+        function showMoreWaitingJobs() {
+            queueWaitingVisibleCount += 10;
+            renderJobsGroupedByWeek(latestJobs);
         }
 
         function toggleWeekCollapse(weekId) {
@@ -6327,7 +6044,7 @@
             const canCancel = canUseJobActions && (status === 'queued' || status === 'uploading' || status === 'printing');
             const canDelete = isAdmin;
             const canAssign = canUseJobActions && status === 'queued';
-            const canReprint = canUseJobActions;
+            const canReprint = canUseJobActions && ['completed', 'failed', 'cancelled'].includes(status);
 
             let assignBtn = '';
             if (canAssign && job.printer_name) {
@@ -6597,7 +6314,6 @@
                         name,
                         status: p.display_status || p.status,
                     }));
-                renderTeacherDispatchLane();
             } catch (err) {
                 console.error('Failed to refresh printers:', err);
             }
@@ -6647,7 +6363,10 @@
 
                 document.getElementById('queueStats').textContent =
                     `${data.stats.queued || 0} queued · ${data.stats.printing || 0} printing · ${data.stats.completed || 0} completed`;
-                renderTeacherDispatchLane();
+                const navCount = document.getElementById('queueNavCount');
+                const queuedCount = isAdmin ? latestQueuedJobs.length : (data.stats.queued || 0);
+                navCount.textContent = queuedCount;
+                navCount.classList.toggle('has-jobs', queuedCount > 0);
 
                 // Don't re-render while a dropdown is open — it would clobber it mid-interaction
                 if (document.querySelector('.send-dropdown.open')) return;

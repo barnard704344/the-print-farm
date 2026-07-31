@@ -13,9 +13,9 @@ changes to The Print Farm.
   narrower screens.
 - Printer Details now opens in a responsive right-side panel so the printer grid
   remains visible in context.
-- Added a compact staff-only Approval & Dispatch lane that reads the complete
-  queued-job feed, shows ready-printer capacity, preserves selections during
-  refreshes, and reuses the existing filament checks and dispatch path.
+- Promoted the complete staff approval queue into an expanded Waiting Approval
+  group in the existing job table. This retains the original multi-printer
+  dropdown and job actions without presenting a duplicate dispatch panel.
 
 ### Documentation
 
