@@ -211,17 +211,6 @@ class KlipperClient:
             except Exception:
                 pass
 
-            # Detect Klipper Adaptive Flow (dashboard on port 7127)
-            self._adaptive_flow_url = None
-            try:
-                af_url = f"http://{self.host}:7127"
-                af_resp = self._session.get(af_url, timeout=3)
-                if af_resp.status_code == 200:
-                    self._adaptive_flow_url = af_url
-                    logger.info(f"[{self.name}] Klipper Adaptive Flow detected at {af_url}")
-            except Exception:
-                pass
-
             # Start background polling thread
             if not self._poll_thread or not self._poll_thread.is_alive():
                 self._poll_thread = threading.Thread(
@@ -733,11 +722,6 @@ class KlipperClient:
                     self._state.obico = obico_data
             except Exception as e:
                 logger.debug(f"[{self.name}] Obico poll error: {e}")
-
-        # Keep Adaptive Flow URL on state so frontend can link to it
-        if self._adaptive_flow_url:
-            with self._state_lock:
-                self._state.adaptive_flow = {"url": self._adaptive_flow_url}
 
         new_status = self._state.status
         if new_status != prev_status:

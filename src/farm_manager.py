@@ -252,7 +252,6 @@ class FarmManager:
                 "klipper_fans": s.klipper_fans,
                 "klipper_leds": s.klipper_leds,
                 "obico": s.obico,
-                "adaptive_flow": s.adaptive_flow,
             }
 
             # Overlay persisted gate configs onto MMU gates when HH has cleared them.
