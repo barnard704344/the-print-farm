@@ -23,6 +23,7 @@ from .farm_manager import FarmManager
 from .job_queue import JobQueue
 from .file_library import FileLibrary
 from .camera import CameraManager
+from .config_store import migrate_api_keys, save_config as save_yaml_config
 from .spoolman_client import SpoolmanClient
 from .notifications import NotificationManager
 from .virtual_printer import VirtualPrinterManager
@@ -423,7 +424,7 @@ def cmd_run(args, config: dict):
     vp_manager.start_all(printers, farm, queue, uploads_dir)
 
     app = create_app(farm, queue, camera_manager=camera_mgr,
-                     api_key=web_cfg.get("api_key", ""),
+                     admin_api_key=web_cfg.get("admin_api_key", ""),
                      admin_password=web_cfg.get("admin_password", ""),
                      config=config, file_library=library,
                      spoolman_client=spoolman,
@@ -678,6 +679,12 @@ def main():
     args = parser.parse_args()
 
     config = load_config(args.config)
+    try:
+        if migrate_api_keys(config):
+            save_yaml_config(args.config, config)
+            print("Migrated API credentials: existing Orca key preserved; new administrator key generated.")
+    except (OSError, ValueError) as exc:
+        parser.error(f"Could not prepare API credentials: {exc}")
     setup_logging(config)
 
     if args.command == "status":

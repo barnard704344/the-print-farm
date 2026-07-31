@@ -87,7 +87,7 @@ def _save_valid_thumbnail(upload, destination: str) -> None:
     )
 
 
-def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin_password=None, config=None, file_library=None, spoolman_client=None, vp_manager=None):
+def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None, admin_password=None, config=None, file_library=None, spoolman_client=None, vp_manager=None):
     """Create the Flask app with references to farm manager, job queue, and camera manager."""
     if config is None:
         config = {}
@@ -104,6 +104,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         static_folder=os.path.join(os.path.dirname(__file__), "..", "static"),
     )
     web_config = app_config.get("web", {})
+    orca_upload_key = str(web_config.get("orca_api_key") or "")
     max_upload_mb = max(1, min(int(web_config.get("max_upload_mb", 1024)), 4096))
     app.config["MAX_CONTENT_LENGTH"] = max_upload_mb * 1024 * 1024
     app.config.update(
@@ -192,7 +193,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         return _current_user_in_entries(_get_student_access_config().get("banlist", []))
 
     def has_print_access():
-        if is_admin() or _check_api_key():
+        if is_admin() or _check_admin_api_key():
             return True
         if not is_authenticated() or session.get("role") != "student":
             return False
@@ -202,7 +203,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         return _current_user_in_entries(access.get("allowlist", []))
 
     def _print_access_denied_response():
-        if not is_authenticated() and not _check_api_key():
+        if not is_authenticated() and not _check_admin_api_key():
             return jsonify({"error": "Login required"}), 401
         if _is_student_banned():
             return jsonify({"error": "Print access has been removed for this student"}), 403
@@ -354,7 +355,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         """Require staff / legacy admin role, or a valid API key."""
         @wraps(f)
         def decorated(*args, **kwargs):
-            if not is_admin() and not _check_api_key():
+            if not is_admin() and not _check_admin_api_key():
                 return jsonify({"ok": False, "error": "Admin login required", "message": "Admin login required"}), 403
             return f(*args, **kwargs)
         return decorated
@@ -372,13 +373,26 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             return f(*args, **kwargs)
         return decorated
 
-    def _check_api_key():
-        """Check if a valid API key was provided in the request header."""
-        if not api_key:
+    def authenticated_session_required(f):
+        """Require a logged-in student or staff browser session."""
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if not is_authenticated():
+                return jsonify({
+                    "ok": False,
+                    "error": "Login required",
+                    "message": "Login required",
+                }), 401
+            return f(*args, **kwargs)
+        return decorated
+
+    def _check_admin_api_key():
+        """Check the hidden administrator integration key."""
+        if not admin_api_key:
             return False
         return secrets.compare_digest(
             request.headers.get("X-Api-Key", ""),
-            str(api_key),
+            str(admin_api_key),
         )
 
     @app.before_request
@@ -386,7 +400,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         """Block browser CSRF while leaving API-key integrations unaffected."""
         if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
             return None
-        if _check_api_key():
+        if _check_admin_api_key():
             return None
         if request.headers.get("Sec-Fetch-Site", "").lower() == "cross-site":
             return jsonify({"ok": False, "error": "Cross-site request rejected"}), 403
@@ -401,7 +415,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         """Require any authenticated user (student or staff), or a valid API key."""
         @wraps(f)
         def decorated(*args, **kwargs):
-            if not is_authenticated() and not _check_api_key():
+            if not is_authenticated() and not _check_admin_api_key():
                 return jsonify({"ok": False, "error": "Login required", "message": "Login required"}), 401
             return f(*args, **kwargs)
         return decorated
@@ -424,7 +438,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         """Require admin OR ownership of the job (job_id must be a route param)."""
         @wraps(f)
         def decorated(*args, **kwargs):
-            if is_admin() or _check_api_key():
+            if is_admin() or _check_admin_api_key():
                 return f(*args, **kwargs)
             if not is_authenticated():
                 return jsonify({"error": "Login required"}), 401
@@ -452,7 +466,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         """Require admin OR having an active job on the printer (name must be a route param)."""
         @wraps(f)
         def decorated(*args, **kwargs):
-            if is_admin() or _check_api_key():
+            if is_admin() or _check_admin_api_key():
                 return f(*args, **kwargs)
             if not is_authenticated():
                 return jsonify({"error": "Login required"}), 401
@@ -494,13 +508,13 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/orca/api-key")
     @app.route("/api/orca/api-key")
-    @staff_session_required
-    def orca_api_key():
-        """Return the shared Print Host key to an authenticated staff browser."""
+    @authenticated_session_required
+    def get_orca_api_key():
+        """Return the upload-only Orca key to a logged-in dashboard user."""
         response = jsonify({
             "ok": True,
-            "api_key": str(api_key or ""),
-            "configured": bool(api_key),
+            "api_key": orca_upload_key,
+            "configured": bool(orca_upload_key),
         })
         response.headers["Cache-Control"] = "no-store"
         return response
@@ -922,7 +936,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     @login_required
     def list_jobs():
         jobs = job_queue.get_all_jobs()
-        privileged = is_admin() or _check_api_key()
+        privileged = is_admin() or _check_admin_api_key()
         if not privileged:
             jobs = [j for j in jobs if _is_job_owner(j)]
         jobs = [{k: v for k, v in j.items() if k not in ("file_path", "filename")} for j in jobs]
@@ -942,7 +956,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     @login_required
     def queued_jobs():
         jobs = job_queue.get_queued_jobs()
-        if not (is_admin() or _check_api_key()):
+        if not (is_admin() or _check_admin_api_key()):
             jobs = [j for j in jobs if _is_job_owner(j)]
         return jsonify([{k: v for k, v in j.items() if k not in ("file_path", "filename")} for j in jobs])
 
@@ -951,7 +965,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     @login_required
     def active_jobs():
         jobs = job_queue.get_active_jobs()
-        if not (is_admin() or _check_api_key()):
+        if not (is_admin() or _check_admin_api_key()):
             jobs = [j for j in jobs if _is_job_owner(j)]
         return jsonify([{k: v for k, v in j.items() if k not in ("file_path", "filename")} for j in jobs])
 
@@ -988,7 +1002,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             return jsonify({"error": "Priority must be between -100 and 100"}), 400
         notes = request.form.get("notes", "")[:2000]
         printer = request.form.get("printer", "").strip()
-        if printer and not (is_admin() or _check_api_key()) and _is_staff_only_printer(printer):
+        if printer and not (is_admin() or _check_admin_api_key()) and _is_staff_only_printer(printer):
             return jsonify({"error": f"Printer '{printer}' is restricted to staff"}), 403
         if printer:
             availability_error = _printer_availability_error(printer)
@@ -1347,7 +1361,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             availability_error = _printer_availability_error(pname)
             if availability_error:
                 return jsonify({"error": availability_error[0]}), availability_error[1]
-            if not (is_admin() or _check_api_key()) and _is_staff_only_printer(pname):
+            if not (is_admin() or _check_admin_api_key()) and _is_staff_only_printer(pname):
                 return jsonify({"error": f"Printer '{pname}' is restricted to staff"}), 403
 
         results = []
@@ -1406,7 +1420,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
             availability_error = _printer_availability_error(pname)
             if availability_error:
                 return jsonify({"error": availability_error[0]}), availability_error[1]
-            if not (is_admin() or _check_api_key()) and _is_staff_only_printer(pname):
+            if not (is_admin() or _check_admin_api_key()) and _is_staff_only_printer(pname):
                 return jsonify({"error": f"Printer '{pname}' is restricted to staff"}), 403
 
         new_id = job_queue.reprint_job(job_id)
@@ -2477,12 +2491,25 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     # ── OctoPrint-Compatible API (for OrcaSlicer) ─────────
 
     def _check_octoprint_api_key():
-        """Validate X-Api-Key header against configured API key."""
+        """Validate the restricted Orca upload credential."""
         key = request.headers.get("X-Api-Key", "")
-        return bool(api_key and key and secrets.compare_digest(str(api_key), key))
+        return bool(
+            orca_upload_key
+            and key
+            and secrets.compare_digest(orca_upload_key, key)
+        )
+
+    def octoprint_api_key_required(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if not _check_octoprint_api_key():
+                return jsonify({"error": "Invalid Orca API key"}), 403
+            return f(*args, **kwargs)
+        return decorated
 
     @app.route(prefix + "/api/version")
     @app.route("/api/version")
+    @octoprint_api_key_required
     def octoprint_version():
         """OctoPrint version endpoint — OrcaSlicer checks this to verify connection."""
         return jsonify({
@@ -2493,6 +2520,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/connection")
     @app.route("/api/connection")
+    @octoprint_api_key_required
     def octoprint_connection():
         """OctoPrint connection status — tells OrcaSlicer we're operational."""
         return jsonify({
@@ -2511,6 +2539,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
 
     @app.route(prefix + "/api/printer")
     @app.route("/api/printer")
+    @octoprint_api_key_required
     def octoprint_printer():
         """OctoPrint printer state — minimal response for compatibility."""
         return jsonify({
@@ -2536,15 +2565,13 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     @app.route(prefix + "/api/files/local/<printer_target>", methods=["POST"])
     @app.route("/api/files/local/<printer_target>", methods=["POST"])
     @app.route("/<printer_target>/api/files/local", methods=["POST"])
+    @octoprint_api_key_required
     def octoprint_upload(printer_target=None):
         """OctoPrint file upload — receives G-code from OrcaSlicer.
         
         If printer_target is provided in the URL, the job is assigned directly
         to that printer. Otherwise it enters the general queue.
         """
-        if not _check_octoprint_api_key():
-            return jsonify({"error": "Invalid API key"}), 403
-
         if "file" not in request.files:
             return jsonify({"error": "No file provided"}), 400
 
@@ -2642,6 +2669,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     @app.route(prefix + "/api/version/<printer_target>")
     @app.route("/api/version/<printer_target>")
     @app.route("/<printer_target>/api/version")
+    @octoprint_api_key_required
     def octoprint_version_printer(printer_target):
         p = farm_manager.get_printer(printer_target)
         name = printer_target if p else "Unknown"
@@ -2654,6 +2682,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     @app.route(prefix + "/api/connection/<printer_target>")
     @app.route("/api/connection/<printer_target>")
     @app.route("/<printer_target>/api/connection")
+    @octoprint_api_key_required
     def octoprint_connection_printer(printer_target):
         p = farm_manager.get_printer(printer_target)
         connected = p.is_connected() if p else False
@@ -2674,6 +2703,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
     @app.route(prefix + "/api/printer/<printer_target>")
     @app.route("/api/printer/<printer_target>")
     @app.route("/<printer_target>/api/printer")
+    @octoprint_api_key_required
     def octoprint_printer_target(printer_target):
         p = farm_manager.get_printer(printer_target)
         connected = p.is_connected() if p else False
@@ -2891,7 +2921,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, api_key=None, admin
         farm_manager=farm_manager,
         job_queue=job_queue,
         camera_manager=camera_manager,
-        api_key=api_key,
+        api_key=admin_api_key,
         config=config,
         file_library=file_library,
         send_job_fn=_send_job_to_printer,

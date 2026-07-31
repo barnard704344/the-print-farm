@@ -1,13 +1,14 @@
 # API Reference
 
-Documentation status: `v1.0.12`.
+Documentation status: `v1.0.13`.
 
 ## REST API v1
 
 A full RESTful API at `/api/v1/` for external integrations:
 
 - **40+ routes** with a consistent JSON envelope (`{ok, data, error, meta}`)
-- **API key authentication** via `X-Api-Key` header (configured in `config.yaml` → `web.api_key`)
+- **Administrator API-key authentication** via `X-Api-Key` header (stored
+  privately as `web.admin_api_key`)
 - Printers: list, status, commands (pause/resume/stop/temps/filament)
 - Jobs: create/upload, list, status, assign, cancel, requeue, reprint, delete
 - File library: list, search, organise, print, download, delete
@@ -21,26 +22,25 @@ Browser administration also uses authenticated non-v1 routes documented in
 updates. An integration key cannot invoke deployment updates; those require a
 staff browser session.
 
-Logged-in staff can copy the integration key from **OrcaSlicer Setup →
-Connection Details** or **Settings → API Access**. The browser retrieves it from
-a non-cacheable, staff-session-only endpoint; it is not included in the public
-dashboard HTML.
+OrcaSlicer uses a different upload-only key stored as `web.orca_api_key`.
+Logged-in students and staff can copy it from **OrcaSlicer Setup → Connection
+Details**. It cannot access `/api/v1` or browser administration routes.
 
 ### Quick Examples
 
 ```bash
 # List printers
-curl -H "X-Api-Key: YOUR_KEY" http://localhost:5000/the-print-farm/api/v1/printers
+curl -H "X-Api-Key: YOUR_ADMIN_KEY" http://localhost:5000/the-print-farm/api/v1/printers
 
 # Get printer status
-curl -H "X-Api-Key: YOUR_KEY" http://localhost:5000/the-print-farm/api/v1/printers/MyPrinter
+curl -H "X-Api-Key: YOUR_ADMIN_KEY" http://localhost:5000/the-print-farm/api/v1/printers/MyPrinter
 
 # Queue a job
-curl -X POST -H "X-Api-Key: YOUR_KEY" -F "file=@model.gcode" \
+curl -X POST -H "X-Api-Key: YOUR_ADMIN_KEY" -F "file=@model.gcode" \
   http://localhost:5000/the-print-farm/api/v1/jobs
 
 # View full API spec
-curl -H "X-Api-Key: YOUR_KEY" http://localhost:5000/the-print-farm/api/v1/openapi.json
+curl -H "X-Api-Key: YOUR_ADMIN_KEY" http://localhost:5000/the-print-farm/api/v1/openapi.json
 ```
 
 ## Full Reference

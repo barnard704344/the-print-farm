@@ -1,12 +1,14 @@
 """Thread-safe, atomic YAML configuration persistence."""
 
 import os
+import secrets
 import tempfile
 import threading
 
 import yaml
 
 _CONFIG_LOCK = threading.RLock()
+MIN_API_KEY_LENGTH = 16
 
 
 def load_config(path):
@@ -46,3 +48,40 @@ def save_config(path, config):
             except OSError:
                 pass
             raise
+
+
+def migrate_api_keys(config):
+    """Split the legacy shared key into restricted Orca and admin credentials.
+
+    The legacy key is deliberately preserved as the Orca key so existing
+    OrcaSlicer clients continue working. A new administrator key is generated
+    and is never returned to dashboard users.
+    """
+    web = config.setdefault("web", {})
+    changed = False
+
+    legacy_web_key = str(web.pop("api_key", "") or "")
+    legacy_root_key = str(config.pop("api_key", "") or "")
+    legacy_key = legacy_web_key or legacy_root_key
+    if legacy_web_key or legacy_root_key:
+        changed = True
+
+    orca_key = str(web.get("orca_api_key") or "")
+    if not orca_key or orca_key == "CHANGE_ME":
+        orca_key = legacy_key if legacy_key and legacy_key != "CHANGE_ME" else secrets.token_urlsafe(24)
+        web["orca_api_key"] = orca_key
+        changed = True
+    if len(orca_key) < MIN_API_KEY_LENGTH:
+        raise ValueError("web.orca_api_key must be at least 16 characters")
+
+    admin_key = str(web.get("admin_api_key") or "")
+    if not admin_key or admin_key == "CHANGE_ME" or secrets.compare_digest(admin_key, orca_key):
+        admin_key = secrets.token_urlsafe(24)
+        while secrets.compare_digest(admin_key, orca_key):
+            admin_key = secrets.token_urlsafe(24)
+        web["admin_api_key"] = admin_key
+        changed = True
+    if len(admin_key) < MIN_API_KEY_LENGTH:
+        raise ValueError("web.admin_api_key must be at least 16 characters")
+
+    return changed

@@ -56,6 +56,26 @@ around the error by making `.git` or the application tree world-writable.
 The live configuration is stored at `/etc/the-print-farm/config.yaml` with mode
 `0600`; `config/config.yaml` remains as a symlink for compatibility.
 
+## API Credentials
+
+The server maintains two separate credentials:
+
+```yaml
+web:
+  orca_api_key: generated-upload-key
+  admin_api_key: generated-hidden-administrator-key
+```
+
+- `orca_api_key` is shown in **OrcaSlicer Setup → Connection Details** to
+  logged-in students and staff. It authorises only OctoPrint-compatible
+  connection checks and uploads.
+- `admin_api_key` is never displayed in the dashboard. It is reserved for
+  trusted server integrations and privileged API endpoints.
+
+When upgrading an older installation, its existing `web.api_key` is preserved
+unchanged as `orca_api_key`, keeping all existing OrcaSlicer clients connected.
+Setup generates a new, distinct `admin_api_key`.
+
 ## Printer Pool
 
 Auto-dispatch jobs from the generic OrcaSlicer port to idle printers:

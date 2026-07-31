@@ -122,9 +122,9 @@ Each printer has its own OrcaSlicer port. Jobs uploaded this way are assigned to
 1. Open **Printer Settings → Connection** (or the physical printer settings)
 2. Set **Host Type** to `Octo/Klipper`
 3. Set **Hostname, IP or URL** to `<server-ip>:<port>` (e.g. `192.168.1.180:5001`)
-4. While logged in as staff, copy the **API Key** from **OrcaSlicer Setup →
-   Connection Details** or **Settings → API Access**. It is also stored in
-   `/etc/the-print-farm/config.yaml` as `web.api_key`
+4. While logged in as a student or staff member, copy the **API Key** from
+   **OrcaSlicer Setup → Connection Details**. It is the upload-only
+   `web.orca_api_key`, not the hidden administrator credential
 5. Click **Test** — you should see the connection succeed
 
 | Printer | Hostname | Port |
@@ -139,16 +139,22 @@ Each printer has its own OrcaSlicer port. Jobs uploaded this way are assigned to
 To send jobs to the shared queue (any available printer), use port 80 (default HTTP) with no path:
 
 - **Hostname:** `192.168.1.180`
-- **API Key:** use the copyable General Queue key shown to logged-in staff in
-  **OrcaSlicer Setup → Connection Details**
+- **API Key:** use the copyable General Queue key shown to logged-in students
+  and staff in **OrcaSlicer Setup → Connection Details**
 
 Jobs enter the queue unassigned and can be sent to any printer from the dashboard.
 Use this General Queue connection when a school firewall blocks the dedicated
 per-printer ports.
 
+Upgrades preserve the former shared key as the Orca upload key, so existing
+OrcaSlicer clients continue working without any configuration changes. That key
+cannot access printer controls or administrative APIs.
+
 ### How It Works
 
 - Each printer gets a dedicated Apache VirtualHost on its own port (5001, 5002, …)
+- The main port-80 VirtualHost proxies only the exact General Queue endpoints
+  used by OrcaSlicer; it does not take ownership of unrelated `/api` routes
 - Apache proxies `/api` requests on that port to Flask's per-printer OctoPrint-compatible routes
 - The dashboard uses an opaque browser request to test port reachability without enabling wildcard CORS
 - The `setup.sh` script auto-configures ports for all printers in `config.yaml`

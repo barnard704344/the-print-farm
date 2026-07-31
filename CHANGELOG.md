@@ -3,6 +3,31 @@
 This file records notable user-facing, security, deployment, and compatibility
 changes to The Print Farm.
 
+## v1.0.13 - 2026-07-31 - Zero-touch Orca credential split
+
+### Fixed
+
+- Restored hostname-only General Queue connections on port 80 using narrowly
+  matched OctoPrint-compatible routes. Existing OrcaSlicer clients do not need
+  a URL path or configuration change, and unrelated `/api` routes remain owned
+  by their applications.
+
+### Security
+
+- Split the former shared credential into an upload-only Orca key and a newly
+  generated hidden administrator key. Existing Orca installations keep their
+  current key unchanged, but that key no longer authorises general or
+  administrative API access.
+- Made the Orca key available from Connection Details to logged-in students and
+  staff while keeping it out of the public dashboard HTML. Anonymous users
+  cannot retrieve it.
+
+### Deployment
+
+- Updated native setup, upgrades, manual startup, and Docker startup to migrate
+  legacy `web.api_key` configurations automatically. The legacy value becomes
+  `web.orca_api_key`; a distinct `web.admin_api_key` is generated server-side.
+
 ## v1.0.12 - 2026-07-31 - Queue workflow and Orca connection recovery
 
 ### Fixed

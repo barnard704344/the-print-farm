@@ -30,7 +30,7 @@ docker pull ghcr.io/barnard704344/the-print-farm:latest
 For reproducible deployments, pin this release instead:
 
 ```bash
-docker pull ghcr.io/barnard704344/the-print-farm:v1.0.12
+docker pull ghcr.io/barnard704344/the-print-farm:v1.0.13
 ```
 
 ### Run the container
@@ -174,4 +174,4 @@ Images are published by:
 Published image path:
 
 - `ghcr.io/barnard704344/the-print-farm:latest`
-- `ghcr.io/barnard704344/the-print-farm:v1.0.12`
+- `ghcr.io/barnard704344/the-print-farm:v1.0.13`

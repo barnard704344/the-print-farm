@@ -1,4 +1,5 @@
 import hashlib
+import io
 import os
 import ssl
 import stat
@@ -12,7 +13,7 @@ from flask import Flask
 
 from src.api_v1 import create_api_v1
 from src.camera import BambuCamera
-from src.config_store import load_config, save_config
+from src.config_store import load_config, migrate_api_keys, save_config
 from src.file_validation import InvalidPrintFile, validate_print_file
 from src.image_validation import save_normalized_image
 from src.main import _resolve_web_bind
@@ -112,6 +113,23 @@ class FakeQueue:
     def get_stats(self):
         return {"queued": len(self.jobs)}
 
+    def add_job(self, filename, original_name, file_path, copies=1, priority=0,
+                notes="", print_time_seconds=None, **kwargs):
+        job_id = max((job["id"] for job in self.jobs), default=0) + 1
+        self.jobs.append({
+            "id": job_id,
+            "status": "queued",
+            "submitted_by": None,
+            "file_path": file_path,
+            "filename": filename,
+            "original_name": original_name,
+            "copies": copies,
+            "priority": priority,
+            "notes": notes,
+            "print_time_seconds": print_time_seconds,
+        })
+        return job_id
+
 
 class FakeCameraManager:
     def get_frame(self, name):
@@ -127,7 +145,10 @@ class SecurityTests(unittest.TestCase):
         self.farm = FakeFarm()
         self.queue = FakeQueue(self.temp_dir.name)
         self.config = {
-            "web": {"secret_key": "test-secret"},
+            "web": {
+                "secret_key": "test-secret",
+                "orca_api_key": "student-orca-upload-key",
+            },
             "printers": [{"name": "Printer-1", "type": "klipper"}],
             "student_access": {"allowlist": ["alice"], "banlist": []},
         }
@@ -198,40 +219,97 @@ class SecurityTests(unittest.TestCase):
         app = create_app(
             self.farm,
             self.queue,
-            api_key="sentinel-master-key",
+            admin_api_key="sentinel-master-key",
             config=self.config,
         )
         response = app.test_client().get("/")
         self.assertEqual(response.status_code, 200)
         self.assertNotIn(b"sentinel-master-key", response.data)
+        self.assertNotIn(b"student-orca-upload-key", response.data)
 
-    def test_orca_api_key_is_available_only_to_staff_session(self):
+    def test_orca_api_key_is_available_to_student_and_staff_sessions(self):
         app = create_app(
             self.farm,
             self.queue,
-            api_key="sentinel-master-key",
+            admin_api_key="sentinel-master-key",
             config=self.config,
         )
         client = app.test_client()
 
-        self.assertEqual(client.get("/api/orca/api-key").status_code, 403)
+        self.assertEqual(client.get("/api/orca/api-key").status_code, 401)
+        self.assertEqual(
+            client.get(
+                "/api/orca/api-key",
+                headers={"X-Api-Key": "sentinel-master-key"},
+            ).status_code,
+            401,
+        )
 
         with client.session_transaction() as session:
             session.update(role="student", username="alice", display_name="Alice")
-        self.assertEqual(client.get("/api/orca/api-key").status_code, 403)
+        response = client.get("/api/orca/api-key")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["api_key"], "student-orca-upload-key")
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
 
         with client.session_transaction() as session:
             session.update(role="staff", username="teacher", display_name="Teacher")
         response = client.get("/api/orca/api-key")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json()["api_key"], "sentinel-master-key")
+        self.assertEqual(response.get_json()["api_key"], "student-orca-upload-key")
         self.assertEqual(response.headers["Cache-Control"], "no-store")
+
+    def test_orca_key_only_authorises_octoprint_compatibility_routes(self):
+        app = create_app(
+            self.farm,
+            self.queue,
+            admin_api_key="sentinel-master-key",
+            config=self.config,
+        )
+        client = app.test_client()
+        orca_headers = {"X-Api-Key": "student-orca-upload-key"}
+        admin_headers = {"X-Api-Key": "sentinel-master-key"}
+
+        self.assertEqual(client.get("/api/version").status_code, 403)
+        self.assertEqual(
+            client.get("/api/version", headers=admin_headers).status_code,
+            403,
+        )
+        self.assertEqual(
+            client.get("/api/version", headers=orca_headers).status_code,
+            200,
+        )
+        self.assertEqual(
+            client.post("/api/files/local", headers=orca_headers).status_code,
+            400,
+        )
+        response = client.post(
+            "/api/files/local",
+            headers=orca_headers,
+            data={"file": (io.BytesIO(b"G28\n"), "student-upload.gcode")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(response.get_json()["done"])
+        self.assertEqual(self.queue.jobs[-1]["original_name"], "student-upload.gcode")
+        self.assertEqual(
+            client.post("/api/files/local", headers=admin_headers).status_code,
+            403,
+        )
+        self.assertEqual(
+            client.get("/api/v1/server", headers=orca_headers).status_code,
+            401,
+        )
+        self.assertEqual(
+            client.get("/api/v1/server", headers=admin_headers).status_code,
+            200,
+        )
 
     def test_dashboard_javascript_arguments_escape_html_attribute_quotes(self):
         app = create_app(
             self.farm,
             self.queue,
-            api_key="integration-secret",
+            admin_api_key="integration-secret",
             config=self.config,
         )
         response = app.test_client().get("/")
@@ -246,7 +324,7 @@ class SecurityTests(unittest.TestCase):
         app = create_app(
             self.farm,
             self.queue,
-            api_key="integration-secret",
+            admin_api_key="integration-secret",
             config=self.config,
         )
         response = app.test_client().get("/")
@@ -271,7 +349,7 @@ class SecurityTests(unittest.TestCase):
         app = create_app(
             self.farm,
             self.queue,
-            api_key="sentinel-master-key",
+            admin_api_key="sentinel-master-key",
             config=self.config,
         )
         response = app.test_client().get("/api/jobs")
@@ -281,7 +359,7 @@ class SecurityTests(unittest.TestCase):
         app = create_app(
             self.farm,
             self.queue,
-            api_key="sentinel-master-key",
+            admin_api_key="sentinel-master-key",
             config=self.config,
         )
         response = app.test_client().get("/api/farm/status")
@@ -291,7 +369,7 @@ class SecurityTests(unittest.TestCase):
         app = create_app(
             self.farm,
             self.queue,
-            api_key="sentinel-master-key",
+            admin_api_key="sentinel-master-key",
             config=self.config,
         )
         self.farm.get_all_states = lambda: {
@@ -307,7 +385,7 @@ class SecurityTests(unittest.TestCase):
         app = create_app(
             self.farm,
             self.queue,
-            api_key="sentinel-master-key",
+            admin_api_key="sentinel-master-key",
             config=self.config,
         )
         self.farm.get_all_states = lambda: {
@@ -324,7 +402,7 @@ class SecurityTests(unittest.TestCase):
         app = create_app(
             self.farm,
             self.queue,
-            api_key="sentinel-master-key",
+            admin_api_key="sentinel-master-key",
             config=self.config,
         )
         response = app.test_client().post(
@@ -337,7 +415,7 @@ class SecurityTests(unittest.TestCase):
         app = create_app(
             self.farm,
             self.queue,
-            api_key="sentinel-master-key",
+            admin_api_key="sentinel-master-key",
             config=self.config,
         )
         client = app.test_client()
@@ -375,6 +453,24 @@ class SecurityTests(unittest.TestCase):
 
 
 class ResourceLimitTests(unittest.TestCase):
+    def test_legacy_api_key_is_preserved_for_orca_and_admin_key_is_rotated(self):
+        config = {
+            "api_key": "obsolete-root-level-key",
+            "web": {"api_key": "existing-student-orca-key"},
+        }
+        with patch(
+            "src.config_store.secrets.token_urlsafe",
+            return_value="new-hidden-administrator-key",
+        ):
+            self.assertTrue(migrate_api_keys(config))
+
+        web = config["web"]
+        self.assertEqual(web["orca_api_key"], "existing-student-orca-key")
+        self.assertEqual(web["admin_api_key"], "new-hidden-administrator-key")
+        self.assertNotIn("api_key", web)
+        self.assertNotIn("api_key", config)
+        self.assertFalse(migrate_api_keys(config))
+
     def test_remote_web_bind_requires_explicit_opt_in(self):
         with patch.dict(os.environ, {}, clear=True):
             self.assertEqual(

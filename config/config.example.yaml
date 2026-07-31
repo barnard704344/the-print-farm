@@ -36,7 +36,8 @@ printers: []
 web:
   host: 127.0.0.1            # Apache is the public-facing reverse proxy
   port: 5000
-  api_key: CHANGE_ME            # used by OrcaSlicer and API access
+  orca_api_key: CHANGE_ME       # upload-only key shared with OrcaSlicer users
+  admin_api_key: CHANGE_ME      # hidden server/integration key; never share with users
   admin_password: ''            # legacy single-password mode (ignored when local_users set)
   max_upload_mb: 1024
   session_cookie_secure: false   # set true after enabling HTTPS on Apache

@@ -72,6 +72,10 @@ class PrivilegedHelperTests(unittest.TestCase):
             installed.index(helper.PROXY_BEGIN):
             installed.index(helper.PROXY_END) + len(helper.PROXY_END)
         ]
+        self.assertIn(
+            'ProxyPassMatch "^/api/(version|connection|printer|files/local)$"',
+            managed,
+        )
         self.assertIn("ProxyPass /the-print-farm ", managed)
         self.assertNotIn("ProxyPass /api ", managed)
         self.assertNotIn("LimitRequestBody", managed)
@@ -135,6 +139,10 @@ class SetupScriptTests(unittest.TestCase):
         self.assertIn("Python 3.10 or newer is required", self.script)
         self.assertIn("configured runtime paths", self.script.lower())
         self.assertIn("must be a real directory, not a symlink", self.script)
+        self.assertIn("migrate_api_keys(config)", self.script)
+        self.assertIn('"orca_api_key": os.environ["FARM_SETUP_ORCA_API_KEY"]', self.script)
+        self.assertIn('"admin_api_key": os.environ["FARM_SETUP_ADMIN_API_KEY"]', self.script)
+        self.assertIn("Share this key with users who connect OrcaSlicer", self.script)
         self.assertIn(
             'install -r "${SCRIPT_DIR}/requirements.txt"',
             self.script,

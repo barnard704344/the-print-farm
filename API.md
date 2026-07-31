@@ -1,6 +1,6 @@
 # The Print Farm — API Documentation
 
-Complete reference for all REST API endpoints, reviewed for `v1.0.12`.
+Complete reference for all REST API endpoints, reviewed for `v1.0.13`.
 
 ---
 
@@ -26,24 +26,33 @@ Complete reference for all REST API endpoints, reviewed for `v1.0.12`.
 
 ## Authentication
 
-The Print Farm supports two authentication methods:
+The Print Farm separates browser sessions, administrator integrations, and
+OrcaSlicer uploads.
 
-### API Key
+### Administrator API Key
 
-Pass your API key in the `X-Api-Key` header. Configure the key in `config/config.yaml` under `web.api_key`.
+Pass the hidden administrator key in the `X-Api-Key` header. It is stored under
+`web.admin_api_key` in the private server configuration and is never displayed
+by the dashboard.
 
 ```
-X-Api-Key: your-api-key-here
+X-Api-Key: your-hidden-administrator-key
 ```
 
-API key authentication is intended for external integrations and OrcaSlicer.
-It grants privileged access where an endpoint explicitly accepts integration
-keys, but deployment updates and other staff-session-only browser operations do
-not accept it.
+This key is intended only for trusted external integrations. It grants
+privileged access where an endpoint accepts integration keys, but deployment
+updates and other staff-session-only browser operations do not accept it.
 
-Logged-in staff can copy the key from **OrcaSlicer Setup → Connection Details**
-or **Settings → API Access**. The key is not embedded in the public dashboard
-HTML.
+### Orca Upload Key
+
+OrcaSlicer uses the separate `web.orca_api_key`. Logged-in students and staff
+can copy it from **OrcaSlicer Setup → Connection Details**. It authorises only
+the OctoPrint-compatible connection and upload endpoints and cannot access
+printer controls, settings, job administration, or `/api/v1`.
+
+Upgrades preserve the former `web.api_key` value as `web.orca_api_key`, so
+existing OrcaSlicer clients do not need to be changed. A new hidden
+`web.admin_api_key` is generated during migration.
 
 ### Session (Browser)
 
@@ -105,15 +114,15 @@ Clears session. Returns `{"ok": true}`.
 
 #### `GET /api/orca/api-key`
 
-Returns the shared OrcaSlicer/API integration key to an authenticated staff
-browser session. API-key authentication, student sessions, and anonymous
-requests are not accepted. The response uses `Cache-Control: no-store`.
+Returns the upload-only OrcaSlicer key to an authenticated student or staff
+browser session. Administrator-key authentication and anonymous requests are
+not accepted. The response uses `Cache-Control: no-store`.
 
 **Response:**
 ```json
 {
   "ok": true,
-  "api_key": "configured-integration-key",
+  "api_key": "configured-orca-upload-key",
   "configured": true
 }
 ```
@@ -698,7 +707,15 @@ controls.
 
 These endpoints mimic OctoPrint's API so OrcaSlicer can connect to The Print Farm as a network printer.
 
-Each per-printer port (5001, 5002, …) is served by a dedicated Apache VirtualHost that proxies `/api` requests to Flask. The vhosts do not enable wildcard CORS; the dashboard uses an opaque request when probing whether a port is reachable. The general queue is served through the main Apache vhost.
+Each per-printer port (5001, 5002, …) is served by a dedicated Apache
+VirtualHost that proxies `/api` requests to Flask. The vhosts do not enable
+wildcard CORS; the dashboard uses an opaque request when probing whether a port
+is reachable. The general queue is served through narrowly matched
+OctoPrint-compatible routes on the main port-80 VirtualHost, without claiming
+unrelated `/api` routes.
+
+All endpoints in this section require the upload-only Orca key in the
+`X-Api-Key` header. The hidden administrator key is not accepted.
 
 ### Generic Endpoints
 
@@ -722,7 +739,8 @@ When OrcaSlicer is configured to send to a specific printer:
 
 #### `POST /api/files/local`
 
-Upload gcode from OrcaSlicer. Requires `X-Api-Key` header.
+Upload gcode from OrcaSlicer. Requires the Orca upload key in the
+`X-Api-Key` header.
 
 **Multipart form:**
 - `file` — the gcode file

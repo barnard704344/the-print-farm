@@ -180,17 +180,22 @@ with open(config_path, "r", encoding="utf-8") as handle:
     config = yaml.safe_load(handle) or {}
 
 web = config.get("web") or {}
-api_key = str(web.get("api_key") or config.get("api_key") or "")
-if not api_key:
+admin_api_key = str(
+    web.get("admin_api_key")
+    or web.get("api_key")
+    or config.get("api_key")
+    or ""
+)
+if not admin_api_key:
     raise SystemExit(
-        "Cannot verify print activity without an API key; use --force-restart "
+        "Cannot verify print activity without an administrator API key; use --force-restart "
         "only after checking every printer"
     )
 
 port = int(web.get("port", 5000))
 request = urllib.request.Request(
     f"http://127.0.0.1:{port}/api/farm/status",
-    headers={"X-Api-Key": api_key},
+    headers={"X-Api-Key": admin_api_key},
 )
 try:
     with urllib.request.urlopen(request, timeout=5) as response:
@@ -354,7 +359,8 @@ publish_config_link() {
     CONFIG_LINK_DIR=""
 }
 
-NEW_API_KEY=""
+NEW_ORCA_API_KEY=""
+NEW_ADMIN_API_KEY=""
 if [[ ! -f "$CONFIG_PATH" ]]; then
     [[ -t 0 ]] || fail \
         "Initial configuration is interactive; run setup.sh from a terminal"
@@ -423,13 +429,16 @@ if [[ ! -f "$CONFIG_PATH" ]]; then
     validate_port "$WEB_PORT" "Backend web port"
     ((WEB_PORT >= 1024)) || fail "Backend web port must be 1024 or greater"
 
-    NEW_API_KEY="$("${SCRIPT_DIR}/venv/bin/python" -c \
+    NEW_ORCA_API_KEY="$("${SCRIPT_DIR}/venv/bin/python" -c \
+        'import secrets; print(secrets.token_urlsafe(24))')"
+    NEW_ADMIN_API_KEY="$("${SCRIPT_DIR}/venv/bin/python" -c \
         'import secrets; print(secrets.token_urlsafe(24))')"
 
     export FARM_SETUP_ADMIN_USER="$ADMIN_USER"
     export FARM_SETUP_ADMIN_PASS="$ADMIN_PASS"
     export FARM_SETUP_ADMIN_DISPLAY="$ADMIN_DISPLAY"
-    export FARM_SETUP_API_KEY="$NEW_API_KEY"
+    export FARM_SETUP_ORCA_API_KEY="$NEW_ORCA_API_KEY"
+    export FARM_SETUP_ADMIN_API_KEY="$NEW_ADMIN_API_KEY"
     export FARM_SETUP_WEB_PORT="$WEB_PORT"
     export FARM_SETUP_AD_ENABLED="$AD_ENABLED"
     export FARM_SETUP_AD_SERVER="$AD_SERVER"
@@ -452,7 +461,8 @@ config = {
     "web": {
         "host": "127.0.0.1",
         "port": int(os.environ["FARM_SETUP_WEB_PORT"]),
-        "api_key": os.environ["FARM_SETUP_API_KEY"],
+        "orca_api_key": os.environ["FARM_SETUP_ORCA_API_KEY"],
+        "admin_api_key": os.environ["FARM_SETUP_ADMIN_API_KEY"],
         "max_upload_mb": 1024,
         "session_cookie_secure": False,
     },
@@ -491,7 +501,8 @@ PY
     unset \
         ADMIN_PASS ADMIN_PASS_CONFIRM AD_BIND_PASS \
         FARM_SETUP_ADMIN_USER FARM_SETUP_ADMIN_PASS FARM_SETUP_ADMIN_DISPLAY \
-        FARM_SETUP_API_KEY FARM_SETUP_WEB_PORT FARM_SETUP_AD_ENABLED \
+        FARM_SETUP_ORCA_API_KEY FARM_SETUP_ADMIN_API_KEY \
+        FARM_SETUP_WEB_PORT FARM_SETUP_AD_ENABLED \
         FARM_SETUP_AD_SERVER FARM_SETUP_AD_PORT FARM_SETUP_AD_BASE_DN \
         FARM_SETUP_AD_BIND_USER FARM_SETUP_AD_BIND_PASS FARM_SETUP_AD_STUDENT_OU \
         FARM_SETUP_AD_STAFF_OU FARM_SETUP_AD_CA_FILE
@@ -506,7 +517,7 @@ import secrets
 import shutil
 import time
 from werkzeug.security import generate_password_hash
-from src.config_store import load_config, save_config
+from src.config_store import load_config, migrate_api_keys, save_config
 
 path = os.environ["FARM_CONFIG_PATH"]
 config = load_config(path)
@@ -535,11 +546,10 @@ if not 1 <= max_upload_mb <= 4096:
     raise SystemExit("web.max_upload_mb must be between 1 and 4096")
 web["max_upload_mb"] = max_upload_mb
 web.setdefault("session_cookie_secure", False)
-api_key = str(web.get("api_key") or config.get("api_key") or "")
-if not api_key or api_key == "CHANGE_ME":
-    web["api_key"] = secrets.token_urlsafe(24)
-elif len(api_key) < 16:
-    raise SystemExit("web.api_key must be at least 16 characters")
+try:
+    migrate_api_keys(config)
+except ValueError as exc:
+    raise SystemExit(str(exc)) from exc
 
 queue = config.setdefault("queue", {})
 queue.setdefault("upload_dir", "./uploads")
@@ -1009,9 +1019,9 @@ printf "  %bSetup Complete%b\n" "$GREEN" "$NC"
 echo "=============================================="
 echo
 echo "  Dashboard: http://${LOCAL_IP}/the-print-farm/"
-if [[ -n "$NEW_API_KEY" ]]; then
-    echo "  API key:   ${NEW_API_KEY}"
-    echo "  Store this API key securely; it is intended for slicer integrations."
+if [[ -n "$NEW_ORCA_API_KEY" ]]; then
+    echo "  Orca upload key: ${NEW_ORCA_API_KEY}"
+    echo "  Share this key with users who connect OrcaSlicer to the farm."
 fi
 echo
 echo "  Service commands:"
