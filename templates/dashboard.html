@@ -6,21 +6,21 @@
     <title>The Print Farm</title>
     <style>
         :root, [data-theme="dark"] {
-            --bg: #111318;
-            --card: #191c22;
-            --card-raised: #222630;
-            --surface-soft: rgba(255, 255, 255, 0.05);
-            --border: #303540;
+            --bg: #0f1117;
+            --card: #1a1d27;
+            --card-raised: #202431;
+            --surface-soft: rgba(255, 255, 255, 0.035);
+            --border: #2a2d3a;
             --line-soft: rgba(148, 163, 184, 0.14);
-            --text: #e7e9ee;
-            --text-muted: #8b93a1;
-            --accent: #6d8dff;
-            --brand-secondary: #9aa7bd;
-            --brand-ink: #ffffff;
-            --accent-dim: rgba(109, 141, 255, 0.15);
-            --accent-glow: rgba(109, 141, 255, 0.22);
-            --success: #37b46a;
-            --success-dim: rgba(55, 180, 106, 0.14);
+            --text: #e4e4e7;
+            --text-muted: #71717a;
+            --accent: #22c55e;
+            --brand-secondary: #38bdf8;
+            --brand-ink: #07120c;
+            --accent-dim: rgba(34, 197, 94, 0.15);
+            --accent-glow: rgba(34, 197, 94, 0.3);
+            --success: #22c55e;
+            --success-dim: rgba(34, 197, 94, 0.15);
             --warning: #f59e0b;
             --warning-dim: rgba(245, 158, 11, 0.15);
             --danger: #ef4444;
@@ -29,27 +29,27 @@
             --info-dim: rgba(59, 130, 246, 0.15);
             --idle: #6b7280;
             --input-bg: var(--bg);
-            --surface: #191c22;
-            --shadow: 0 8px 22px rgba(0,0,0,0.16);
+            --surface: #1a1d27;
+            --shadow: 0 12px 30px rgba(0,0,0,0.18);
             color-scheme: dark;
         }
 
         [data-theme="light"] {
-            --bg: #f4f5f7;
+            --bg: #f0f2f5;
             --card: #ffffff;
             --card-raised: #ffffff;
-            --surface-soft: #f1f3f6;
-            --border: #dde1e7;
-            --line-soft: rgba(23, 32, 51, 0.1);
-            --text: #172033;
-            --text-muted: #737d8c;
-            --accent: #3159d9;
-            --brand-secondary: #63708a;
-            --brand-ink: #ffffff;
-            --accent-dim: rgba(49, 89, 217, 0.10);
-            --accent-glow: rgba(49, 89, 217, 0.18);
-            --success: #218a4a;
-            --success-dim: rgba(33, 138, 74, 0.10);
+            --surface-soft: rgba(15, 23, 42, 0.035);
+            --border: #d9d9d9;
+            --line-soft: rgba(15, 23, 42, 0.1);
+            --text: #1f1f1f;
+            --text-muted: #8c8c8c;
+            --accent: #22c55e;
+            --brand-secondary: #0284c7;
+            --brand-ink: #052e16;
+            --accent-dim: rgba(34, 197, 94, 0.10);
+            --accent-glow: rgba(34, 197, 94, 0.2);
+            --success: #22c55e;
+            --success-dim: rgba(34, 197, 94, 0.10);
             --warning: #d97706;
             --warning-dim: rgba(217, 119, 6, 0.10);
             --danger: #dc2626;
@@ -59,7 +59,7 @@
             --idle: #9ca3af;
             --input-bg: #ffffff;
             --surface: #ffffff;
-            --shadow: 0 6px 18px rgba(23,32,51,0.07);
+            --shadow: 0 12px 30px rgba(15,23,42,0.08);
             color-scheme: light;
         }
 
@@ -99,7 +99,7 @@
             width: 36px;
             height: 36px;
             border-radius: 10px;
-            background: linear-gradient(145deg, #4169e1, #243f9d);
+            background: linear-gradient(145deg, var(--accent), #16a34a);
             color: var(--brand-ink);
             display: flex;
             align-items: center;
@@ -1724,6 +1724,80 @@
         }
         body.is-admin .queue-count-badge.has-jobs { display: inline-flex; }
 
+        .queue-subtabs {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin: 0 0 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .queue-subtab {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            min-height: 38px;
+            padding: 8px 13px;
+            border: 0;
+            border-bottom: 2px solid transparent;
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            font: inherit;
+            font-size: 13px;
+            font-weight: 650;
+        }
+
+        .queue-subtab.admin-only { display: none; }
+        body.is-admin .queue-subtab.admin-only { display: inline-flex; }
+
+        .queue-subtab:hover {
+            color: var(--text);
+            background: var(--surface-soft);
+        }
+
+        .queue-subtab.active {
+            color: var(--text);
+            border-bottom-color: var(--accent);
+        }
+
+        .queue-subtab-count {
+            min-width: 20px;
+            padding: 2px 6px;
+            border-radius: 999px;
+            background: var(--surface-soft);
+            color: var(--text-muted);
+            font-size: 10px;
+            font-variant-numeric: tabular-nums;
+            text-align: center;
+        }
+
+        .queue-subtab.active .queue-subtab-count {
+            background: var(--accent-dim);
+            color: var(--accent);
+        }
+
+        .queued-jobs-footer {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 14px;
+            padding: 10px 12px 20px;
+            color: var(--text-muted);
+            font-size: 11px;
+        }
+
+        .queued-jobs-footer button {
+            border: 0;
+            background: transparent;
+            color: var(--accent);
+            cursor: pointer;
+            font: inherit;
+            font-weight: 700;
+        }
+
+        .queued-jobs-footer button:hover { text-decoration: underline; }
+
         .upload-area {
             display: grid;
             grid-template-columns: 38px minmax(0, 1fr);
@@ -2218,6 +2292,19 @@
                 <input type="file" id="fileInput" accept=".gcode,.3mf" style="display:none" multiple>
             </div>
             <div id="printAccessNotice" style="display:none; margin:12px 0; padding:12px; border:1px solid var(--border); border-radius:8px; background:var(--card); color:var(--text-muted); font-size:13px;"></div>
+
+            <div class="queue-subtabs" role="tablist" aria-label="Job queue views">
+                <button type="button" class="queue-subtab admin-only" id="queueSubtabQueued"
+                    role="tab" aria-selected="false" aria-controls="jobTableContainer"
+                    onclick="switchJobQueueView('queued')">
+                    Queued Jobs <span class="queue-subtab-count" id="queueSubtabQueuedCount">0</span>
+                </button>
+                <button type="button" class="queue-subtab active" id="queueSubtabHistory"
+                    role="tab" aria-selected="true" aria-controls="jobTableContainer"
+                    onclick="switchJobQueueView('history')">
+                    Job History
+                </button>
+            </div>
 
             <div style="margin:16px 0 8px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
                 <span id="queueStats" style="font-size:12px; color:var(--text-muted);"></span>
@@ -3264,6 +3351,8 @@
         let printDeniedReason = '';
         let adEnabled = false;
         let hasLocalUsers = false;
+        let jobQueueView = 'history';
+        let jobQueueViewTouched = false;
         let myActivePrinters = new Set();  // printers with the current user's active jobs
         let cameraStreaming = {};   // {printerName: true/false}
         let cameraRefreshTimers = {};  // per-printer snapshot refresh intervals
@@ -3296,6 +3385,11 @@
 
         async function updateAuthUI() {
             const area = document.getElementById('authArea');
+            if (isAdmin && !jobQueueViewTouched) {
+                jobQueueView = 'queued';
+            } else if (!isAdmin) {
+                jobQueueView = 'history';
+            }
             if (isAuthenticated) {
                 if (isAdmin) {
                     document.body.classList.add('is-admin');
@@ -3410,6 +3504,7 @@
             userName = '';
             printAllowed = false;
             printDeniedReason = '';
+            jobQueueViewTouched = false;
             updateAuthUI();
         }
 
@@ -4313,6 +4408,8 @@
         let lastPrinterNames = [];  // Track which printers are in the grid
         let availablePrinters = [];  // Track available printers for manual assign
         let latestJobs = [];  // Paginated job history
+        let latestQueuedJobs = [];  // Complete staff queue
+        let queuedJobsVisibleCount = 25;
         let spoolmanConfigured = false;
 
         function renderPrinterCard(name, p) {
@@ -5877,6 +5974,87 @@
             return 'Week of ' + jobWeek.toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: tz });
         }
 
+        function updateJobQueueSubtabs() {
+            const queuedTab = document.getElementById('queueSubtabQueued');
+            const historyTab = document.getElementById('queueSubtabHistory');
+            const queuedCount = document.getElementById('queueSubtabQueuedCount');
+            if (!queuedTab || !historyTab || !queuedCount) return;
+
+            const showQueued = isAdmin && jobQueueView === 'queued';
+            queuedTab.classList.toggle('active', showQueued);
+            historyTab.classList.toggle('active', !showQueued);
+            queuedTab.setAttribute('aria-selected', String(showQueued));
+            historyTab.setAttribute('aria-selected', String(!showQueued));
+            queuedCount.textContent = latestQueuedJobs.length;
+        }
+
+        function switchJobQueueView(view) {
+            if (view === 'queued' && !isAdmin) return;
+            jobQueueView = view === 'queued' ? 'queued' : 'history';
+            jobQueueViewTouched = true;
+            clearBulkSelection();
+            renderCurrentJobView();
+        }
+
+        function renderCurrentJobView() {
+            if (!isAdmin && jobQueueView === 'queued') {
+                jobQueueView = 'history';
+            }
+            updateJobQueueSubtabs();
+            if (jobQueueView === 'queued') {
+                renderQueuedJobs(latestQueuedJobs);
+                return;
+            }
+            const historyJobs = isAdmin
+                ? latestJobs.filter(job => String(job.status || '').toLowerCase() !== 'queued')
+                : latestJobs;
+            renderJobsGroupedByWeek(historyJobs);
+        }
+
+        function renderQueuedJobs(jobs) {
+            const container = document.getElementById('jobTableContainer');
+            const queued = (Array.isArray(jobs) ? jobs : [])
+                .filter(job => String(job.status || '').toLowerCase() === 'queued')
+                .sort((a, b) =>
+                    new Date(b.created_at || 0) - new Date(a.created_at || 0)
+                    || (Number(b.id) || 0) - (Number(a.id) || 0)
+                );
+            if (queued.length === 0) {
+                container.innerHTML = '<p style="text-align:center;color:var(--text-muted);margin:24px 0;">No jobs are queued.</p>';
+                return;
+            }
+
+            const visibleJobs = queued.slice(0, queuedJobsVisibleCount);
+            const remaining = queued.length - visibleJobs.length;
+            const weekId = 'queued_jobs';
+            const footer = remaining > 0 ? `
+                <div class="queued-jobs-footer">
+                    <span>Showing ${visibleJobs.length} of ${queued.length} queued jobs</span>
+                    <button type="button" onclick="showMoreQueuedJobs()">Show ${Math.min(25, remaining)} more</button>
+                </div>` : `
+                <div class="queued-jobs-footer">
+                    <span>Showing all ${queued.length} queued job${queued.length !== 1 ? 's' : ''}</span>
+                </div>`;
+
+            container.innerHTML = `
+                <table class="job-table" id="queuedJobsTable">
+                    <thead>
+                        <tr>
+                            <th style="width:32px;"><input type="checkbox" id="${weekId}_all" aria-label="Select all visible queued jobs" onchange="toggleWeekSelection('${weekId}')"></th>
+                            <th>#</th><th>File</th><th>Status</th><th>Printer</th>
+                            <th>Submitted By</th><th>Copies</th><th>Est. Time</th><th>Priority</th><th>Created</th><th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>${visibleJobs.map(job => renderJobRow(job, weekId)).join('')}</tbody>
+                </table>
+                ${footer}`;
+        }
+
+        function showMoreQueuedJobs() {
+            queuedJobsVisibleCount += 25;
+            renderQueuedJobs(latestQueuedJobs);
+        }
+
         function renderJobsGroupedByWeek(jobs) {
             const container = document.getElementById('jobTableContainer');
             if (!jobs || jobs.length === 0) {
@@ -6258,9 +6436,25 @@
 
         async function refreshJobs() {
             try {
+                const queuedRequest = isAdmin
+                    ? fetch(BASE + '/api/jobs/queued').catch(() => null)
+                    : null;
                 const res = await fetch(BASE + '/api/jobs');
                 const data = await res.json();
                 latestJobs = Array.isArray(data.jobs) ? data.jobs : [];
+                if (queuedRequest) {
+                    const queuedRes = await queuedRequest;
+                    if (queuedRes?.ok) {
+                        const queuedData = await queuedRes.json();
+                        latestQueuedJobs = Array.isArray(queuedData) ? queuedData : [];
+                    } else {
+                        latestQueuedJobs = latestJobs.filter(job =>
+                            String(job.status || '').toLowerCase() === 'queued'
+                        );
+                    }
+                } else {
+                    latestQueuedJobs = [];
+                }
 
                 // Track which printers have the current user's active jobs
                 const newMyPrinters = new Set();
@@ -6283,14 +6477,15 @@
                 document.getElementById('queueStats').textContent =
                     `${data.stats.queued || 0} queued · ${data.stats.printing || 0} printing · ${data.stats.completed || 0} completed`;
                 const navCount = document.getElementById('queueNavCount');
-                const queuedCount = data.stats.queued || 0;
+                const queuedCount = isAdmin ? latestQueuedJobs.length : (data.stats.queued || 0);
                 navCount.textContent = queuedCount;
                 navCount.classList.toggle('has-jobs', queuedCount > 0);
+                updateJobQueueSubtabs();
 
                 // Don't re-render while a dropdown is open — it would clobber it mid-interaction
                 if (document.querySelector('.send-dropdown.open')) return;
 
-                renderJobsGroupedByWeek(latestJobs);
+                renderCurrentJobView();
             } catch (err) {
                 console.error('Failed to refresh jobs:', err);
             }

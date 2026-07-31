@@ -220,7 +220,7 @@ class SecurityTests(unittest.TestCase):
             response.data,
         )
 
-    def test_dashboard_has_original_queue_and_details_drawer(self):
+    def test_dashboard_has_queue_subtabs_and_details_drawer(self):
         app = create_app(
             self.farm,
             self.queue,
@@ -232,8 +232,12 @@ class SecurityTests(unittest.TestCase):
         self.assertIn(b'<nav class="tabs" aria-label="Primary navigation">', response.data)
         self.assertIn(b'class="details-drawer"', response.data)
         self.assertIn(b"fetch(BASE + '/api/jobs')", response.data)
+        self.assertIn(b"fetch(BASE + '/api/jobs/queued')", response.data)
+        self.assertIn(b'id="queueSubtabQueued"', response.data)
+        self.assertIn(b'id="queueSubtabHistory"', response.data)
+        self.assertIn(b"function renderQueuedJobs(jobs)", response.data)
+        self.assertIn(b"new Date(b.created_at || 0) - new Date(a.created_at || 0)", response.data)
         self.assertIn(b"['completed', 'failed', 'cancelled'].includes(status)", response.data)
-        self.assertNotIn(b"fetch(BASE + '/api/jobs/queued')", response.data)
         self.assertNotIn(b'class="job-table waiting-table"', response.data)
         self.assertNotIn(b'id="teacherDispatchLane"', response.data)
         self.assertNotIn(

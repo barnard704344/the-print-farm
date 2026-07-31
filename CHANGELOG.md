@@ -5,7 +5,7 @@ changes to The Print Farm.
 
 ### Changed
 
-- Introduced a restrained slate-and-blue Print Farm visual identity with
+- Restored the original green Print Farm colour palette with
   consistent interface icons, solid page backgrounds, flatter cards, and fewer
   nested borders.
 - Merged primary navigation into the application header, removing the detached
@@ -13,9 +13,9 @@ changes to The Print Farm.
   narrower screens.
 - Printer Details now opens in a responsive right-side panel so the printer grid
   remains visible in context.
-- Simplified the Job Queue by removing the separate teacher dispatch lane and
-  special waiting-approval block. The original chronological job table and its
-  existing actions remain the single queue interface.
+- Split the Job Queue into Queued Jobs and Job History sub-tabs. Staff can view
+  the complete queue separately from chronological history while retaining the
+  original dispatch and job actions.
 
 ### Documentation
 
