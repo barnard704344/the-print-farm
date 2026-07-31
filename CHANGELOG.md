@@ -3,7 +3,7 @@
 This file records notable user-facing, security, deployment, and compatibility
 changes to The Print Farm.
 
-## Unreleased
+## v1.0.11 - 2026-07-31 - Lightweight printer readiness
 
 ### Changed
 
