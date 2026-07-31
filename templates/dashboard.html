@@ -6,19 +6,21 @@
     <title>The Print Farm</title>
     <style>
         :root, [data-theme="dark"] {
-            --bg: #0f1117;
-            --card: #1a1d27;
-            --card-raised: #202431;
-            --surface-soft: rgba(255, 255, 255, 0.035);
-            --border: #2a2d3a;
+            --bg: #111318;
+            --card: #191c22;
+            --card-raised: #222630;
+            --surface-soft: rgba(255, 255, 255, 0.05);
+            --border: #303540;
             --line-soft: rgba(148, 163, 184, 0.14);
-            --text: #e4e4e7;
-            --text-muted: #71717a;
-            --accent: #22c55e;
-            --brand-cyan: #38bdf8;
-            --brand-ink: #07120c;
-            --accent-dim: rgba(34, 197, 94, 0.15);
-            --accent-glow: rgba(34, 197, 94, 0.3);
+            --text: #e7e9ee;
+            --text-muted: #8b93a1;
+            --accent: #6d8dff;
+            --brand-secondary: #9aa7bd;
+            --brand-ink: #ffffff;
+            --accent-dim: rgba(109, 141, 255, 0.15);
+            --accent-glow: rgba(109, 141, 255, 0.22);
+            --success: #37b46a;
+            --success-dim: rgba(55, 180, 106, 0.14);
             --warning: #f59e0b;
             --warning-dim: rgba(245, 158, 11, 0.15);
             --danger: #ef4444;
@@ -27,26 +29,27 @@
             --info-dim: rgba(59, 130, 246, 0.15);
             --idle: #6b7280;
             --input-bg: var(--bg);
-            --surface: #1a1d27;
-            --shadow: 0 12px 30px rgba(0,0,0,0.18);
-            --page-grid: rgba(255,255,255,0.018);
+            --surface: #191c22;
+            --shadow: 0 8px 22px rgba(0,0,0,0.16);
             color-scheme: dark;
         }
 
         [data-theme="light"] {
-            --bg: #f0f2f5;
+            --bg: #f4f5f7;
             --card: #ffffff;
             --card-raised: #ffffff;
-            --surface-soft: rgba(15, 23, 42, 0.035);
-            --border: #d9d9d9;
-            --line-soft: rgba(15, 23, 42, 0.1);
-            --text: #1f1f1f;
-            --text-muted: #8c8c8c;
-            --accent: #22c55e;
-            --brand-cyan: #0284c7;
-            --brand-ink: #052e16;
-            --accent-dim: rgba(34, 197, 94, 0.10);
-            --accent-glow: rgba(34, 197, 94, 0.2);
+            --surface-soft: #f1f3f6;
+            --border: #dde1e7;
+            --line-soft: rgba(23, 32, 51, 0.1);
+            --text: #172033;
+            --text-muted: #737d8c;
+            --accent: #3159d9;
+            --brand-secondary: #63708a;
+            --brand-ink: #ffffff;
+            --accent-dim: rgba(49, 89, 217, 0.10);
+            --accent-glow: rgba(49, 89, 217, 0.18);
+            --success: #218a4a;
+            --success-dim: rgba(33, 138, 74, 0.10);
             --warning: #d97706;
             --warning-dim: rgba(217, 119, 6, 0.10);
             --danger: #dc2626;
@@ -56,8 +59,7 @@
             --idle: #9ca3af;
             --input-bg: #ffffff;
             --surface: #ffffff;
-            --shadow: 0 12px 30px rgba(15,23,42,0.08);
-            --page-grid: rgba(15,23,42,0.025);
+            --shadow: 0 6px 18px rgba(23,32,51,0.07);
             color-scheme: light;
         }
 
@@ -65,11 +67,7 @@
 
         body {
             font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background-color: var(--bg);
-            background-image:
-                linear-gradient(var(--page-grid) 1px, transparent 1px),
-                linear-gradient(90deg, var(--page-grid) 1px, transparent 1px);
-            background-size: 32px 32px;
+            background: var(--bg);
             color: var(--text);
             min-height: 100vh;
         }
@@ -78,7 +76,7 @@
             position: sticky;
             top: 0;
             z-index: 800;
-            background: color-mix(in srgb, var(--card) 92%, transparent);
+            background: var(--card);
             border-bottom: 1px solid var(--line-soft);
             padding: 13px 24px;
             display: flex;
@@ -99,7 +97,7 @@
             width: 36px;
             height: 36px;
             border-radius: 10px;
-            background: linear-gradient(145deg, var(--accent), #16a34a);
+            background: linear-gradient(145deg, #4169e1, #243f9d);
             color: var(--brand-ink);
             display: flex;
             align-items: center;
@@ -212,7 +210,7 @@
             border-radius: 50%;
         }
 
-        .dot-connected { background: var(--accent); }
+        .dot-connected { background: var(--success); }
         .dot-printing { background: var(--info); }
         .dot-idle { background: var(--idle); }
         .dot-error { background: var(--danger); }
@@ -286,7 +284,7 @@
         }
 
         .printer-card.status-running { border-left: 3px solid var(--info); }
-        .printer-card.status-idle, .printer-card.status-finish { border-left: 3px solid var(--accent); }
+        .printer-card.status-idle, .printer-card.status-finish { border-left: 3px solid var(--success); }
         .printer-card.status-paused { border-left: 3px solid var(--warning); }
         .printer-card.status-failed, .printer-card.status-pause_filament { border-left: 3px solid var(--danger); }
         .printer-card.status-unknown { border-left: 3px solid var(--idle); }
@@ -359,7 +357,7 @@
         }
 
         .status-badge-running { background: var(--info-dim); color: var(--info); }
-        .status-badge-idle, .status-badge-finish { background: var(--accent-dim); color: var(--accent); }
+        .status-badge-idle, .status-badge-finish { background: var(--success-dim); color: var(--success); }
         .status-badge-paused { background: var(--warning-dim); color: var(--warning); }
         .status-badge-failed, .status-badge-pause_filament { background: var(--danger-dim); color: var(--danger); }
         .status-badge-unknown { background: rgba(107,114,128,0.15); color: var(--idle); }
@@ -979,7 +977,7 @@
         }
         .hh-gate-card.active { border-color: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
         .hh-gate-card.empty { opacity: 0.35; }
-        .hh-gate-card.loaded { border-color: rgba(34,197,94,0.3); }
+        .hh-gate-card.loaded { border-color: var(--accent-glow); }
         .hh-gate-swatch-lg {
             width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.15);
             position: relative; overflow: hidden;
@@ -1015,7 +1013,7 @@
             min-width: 30px; position: relative; overflow: hidden;
         }
         .hh-filpath-line.active {
-            background: linear-gradient(90deg, var(--accent), rgba(34,197,94,0.3));
+            background: linear-gradient(90deg, var(--accent), var(--accent-dim));
         }
         .hh-filpath-line.active::after {
             content: ''; position: absolute; top: 0; left: -30%; width: 30%; height: 100%;
@@ -1056,7 +1054,7 @@
             cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text);
             transition: all 0.15s;
         }
-        .hh-action-btn:hover { border-color: var(--accent); background: rgba(34,197,94,0.05); }
+        .hh-action-btn:hover { border-color: var(--accent); background: var(--accent-dim); }
         .hh-action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
         .hh-action-btn.danger { color: var(--danger); }
         .hh-action-btn.danger:hover { border-color: var(--danger); background: rgba(255,70,70,0.05); }
@@ -1186,7 +1184,7 @@
             min-width: 30px; position: relative; overflow: hidden;
         }
         .ams-pop-filpath-line.active {
-            background: linear-gradient(90deg, var(--accent), rgba(34,197,94,0.3));
+            background: linear-gradient(90deg, var(--accent), var(--accent-dim));
         }
         .ams-pop-filpath-line.active::after {
             content: ''; position: absolute; top: 0; left: -30%; width: 30%; height: 100%;
@@ -1220,7 +1218,7 @@
             cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text);
             transition: all 0.15s;
         }
-        .ams-pop-action-btn:hover { border-color: var(--accent); background: rgba(34,197,94,0.05); }
+        .ams-pop-action-btn:hover { border-color: var(--accent); background: var(--accent-dim); }
         .ams-pop-action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
         /* Tray selection buttons in popup */
@@ -1708,10 +1706,8 @@
             overflow: hidden;
             margin-bottom: 20px;
             padding: 0;
-            border-radius: 12px;
-            background:
-                linear-gradient(120deg, rgba(34,197,94,0.14), transparent 42%),
-                color-mix(in srgb, var(--card) 96%, transparent);
+            border-radius: 10px;
+            background: var(--card);
             box-shadow: var(--shadow);
         }
         body.is-admin .teacher-dispatch-lane { display: block; }
@@ -1719,32 +1715,32 @@
             content: '';
             position: absolute;
             inset: 0 auto 0 0;
-            width: 4px;
-            background: linear-gradient(var(--accent), var(--brand-cyan));
+            width: 3px;
+            background: var(--accent);
         }
         .dispatch-lane-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 16px;
-            padding: 19px 22px 15px 25px;
+            padding: 15px 20px 13px 22px;
         }
         .dispatch-lane-heading {
             display: flex;
             align-items: center;
-            gap: 13px;
+            gap: 11px;
         }
         .dispatch-lane-icon {
-            width: 38px;
-            height: 38px;
-            border-radius: 10px;
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            background: var(--accent);
-            color: var(--brand-ink);
+            background: var(--accent-dim);
+            color: var(--accent);
         }
-        .dispatch-lane-icon .ui-icon { width: 21px; height: 21px; }
+        .dispatch-lane-icon .ui-icon { width: 19px; height: 19px; }
         .dispatch-lane-eyebrow {
             color: var(--accent);
             font-size: 9px;
@@ -1754,7 +1750,7 @@
         }
         .dispatch-lane-title {
             margin-top: 2px;
-            font-size: 17px;
+            font-size: 16px;
             line-height: 1.2;
             letter-spacing: -0.015em;
         }
@@ -1778,19 +1774,17 @@
             font-weight: 600;
         }
         .dispatch-summary-pill strong { color: var(--text); font-variant-numeric: tabular-nums; }
-        .dispatch-summary-pill.ready { color: var(--accent); }
+        .dispatch-summary-pill.ready { color: var(--success); }
         .dispatch-list {
-            padding: 0 22px 7px 25px;
-            max-height: 440px;
-            overflow: auto;
+            padding: 0 20px 6px 22px;
         }
         .dispatch-row {
             display: grid;
-            grid-template-columns: minmax(190px, 1.35fr) minmax(120px, 0.7fr) minmax(176px, 0.8fr);
+            grid-template-columns: minmax(220px, 1.35fr) minmax(130px, 0.55fr) minmax(280px, 0.85fr);
             gap: 16px;
             align-items: center;
-            min-height: 68px;
-            padding: 12px 0;
+            min-height: 58px;
+            padding: 9px 0;
             border-top: 1px solid var(--line-soft);
         }
         .dispatch-job-name {
@@ -1801,7 +1795,7 @@
             font-size: 13px;
             font-weight: 650;
         }
-        .dispatch-job-name .ui-icon { color: var(--brand-cyan); }
+        .dispatch-job-name .ui-icon { color: var(--brand-secondary); }
         .dispatch-job-name span {
             overflow: hidden;
             text-overflow: ellipsis;
@@ -1816,10 +1810,11 @@
             display: flex;
             align-items: center;
             gap: 7px;
-            color: var(--warning);
+            color: var(--text-muted);
             font-size: 11px;
             font-weight: 650;
         }
+        .dispatch-waiting .ui-icon { color: var(--warning); }
         .dispatch-controls {
             display: flex;
             align-items: center;
@@ -1830,7 +1825,7 @@
             min-width: 0;
             flex: 1;
             padding: 7px 28px 7px 9px;
-            border: 0;
+            border: 1px solid var(--line-soft);
             border-radius: 7px;
             background: var(--surface-soft);
             color: var(--text);
@@ -1849,7 +1844,34 @@
             color: var(--brand-ink);
             font-weight: 750;
         }
-        .dispatch-button:hover { background: #4ade80; color: var(--brand-ink); }
+        .dispatch-button:hover {
+            background: color-mix(in srgb, var(--accent) 86%, #000);
+            color: var(--brand-ink);
+        }
+        .dispatch-lane-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 0 8px;
+            border-top: 1px solid var(--line-soft);
+            color: var(--text-muted);
+            font-size: 11px;
+        }
+        .dispatch-lane-toggle {
+            border: 0;
+            background: transparent;
+            color: var(--accent);
+            cursor: pointer;
+            font: inherit;
+            font-weight: 700;
+        }
+        .dispatch-lane-toggle:hover { text-decoration: underline; }
+        .dispatch-lane-footer-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 14px;
+        }
         .dispatch-empty {
             display: flex;
             align-items: center;
@@ -1877,11 +1899,16 @@
         body.is-admin .queue-count-badge.has-jobs { display: inline-flex; }
 
         .upload-area {
+            display: grid;
+            grid-template-columns: 38px minmax(0, 1fr);
+            grid-template-rows: auto auto;
+            align-items: center;
+            column-gap: 12px;
             background: color-mix(in srgb, var(--card) 92%, transparent);
             border: 1px dashed var(--border);
             border-radius: 10px;
-            padding: 30px;
-            text-align: center;
+            padding: 15px 18px;
+            text-align: left;
             margin-bottom: 24px;
             cursor: pointer;
             transition: border-color 0.2s, background 0.2s;
@@ -1895,7 +1922,8 @@
         .upload-area-icon {
             width: 34px;
             height: 34px;
-            margin: 0 auto 9px;
+            margin: 0;
+            grid-row: 1 / span 2;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -1906,12 +1934,14 @@
 
         .upload-area h3 {
             font-size: 16px;
-            margin-bottom: 8px;
+            margin-bottom: 2px;
+            align-self: end;
         }
 
         .upload-area p {
             font-size: 13px;
             color: var(--text-muted);
+            align-self: start;
         }
 
         .upload-options {
@@ -1999,7 +2029,7 @@
             margin-right: 6px;
             vertical-align: middle;
         }
-        .conn-online { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+        .conn-online { background: var(--success); box-shadow: 0 0 6px var(--success); }
         .conn-offline { background: var(--danger); }
 
         /* ─── Responsive ─── */
@@ -2373,7 +2403,7 @@
                     </div>
                     <div class="dispatch-lane-summary">
                         <span class="dispatch-summary-pill"><strong id="dispatchWaitingCount">0</strong> waiting</span>
-                        <span class="dispatch-summary-pill ready"><strong id="dispatchReadyCount">0</strong> printers ready</span>
+                        <span class="dispatch-summary-pill ready"><strong id="dispatchReadyCount">0</strong> <span id="dispatchReadyLabel">printers ready</span></span>
                     </div>
                 </div>
                 <div class="dispatch-list" id="teacherDispatchList">
@@ -4481,7 +4511,9 @@
 
         let lastPrinterNames = [];  // Track which printers are in the grid
         let availablePrinters = [];  // Track available printers for manual assign
-        let latestJobs = [];  // Shared by the full queue and teacher dispatch lane
+        let latestJobs = [];  // Paginated job history
+        let latestQueuedJobs = [];  // Complete staff approval queue
+        let dispatchLaneVisibleCount = 4;
         let spoolmanConfigured = false;
 
         function renderPrinterCard(name, p) {
@@ -6033,12 +6065,17 @@
 
         const priorityLabels = { 0: 'Normal', 1: 'High', 2: 'Urgent' };
 
-        function renderTeacherDispatchLane(jobs = latestJobs) {
+        function renderTeacherDispatchLane(jobs = latestQueuedJobs) {
             const list = document.getElementById('teacherDispatchList');
             const waitingCount = document.getElementById('dispatchWaitingCount');
             const readyCount = document.getElementById('dispatchReadyCount');
+            const readyLabel = document.getElementById('dispatchReadyLabel');
             const navCount = document.getElementById('queueNavCount');
-            if (!list || !waitingCount || !readyCount || !navCount) return;
+            if (!list || !waitingCount || !readyCount || !readyLabel || !navCount) return;
+            const selectedPrinters = {};
+            list.querySelectorAll('.dispatch-printer-select[id]').forEach(select => {
+                selectedPrinters[select.id] = select.value;
+            });
 
             const queued = (jobs || [])
                 .filter(job => String(job.status || '').toLowerCase() === 'queued')
@@ -6047,6 +6084,7 @@
 
             waitingCount.textContent = queued.length;
             readyCount.textContent = availablePrinters.length;
+            readyLabel.textContent = availablePrinters.length === 1 ? 'printer ready' : 'printers ready';
             navCount.textContent = queued.length;
             navCount.classList.toggle('has-jobs', queued.length > 0);
 
@@ -6056,10 +6094,12 @@
                 return;
             }
 
-            list.innerHTML = queued.map(job => {
+            const visibleJobs = queued.slice(0, dispatchLaneVisibleCount);
+            const rows = visibleJobs.map(job => {
                 const jobId = Number(job.id);
                 const assignedPrinter = job.printer_name ? String(job.printer_name) : '';
-                const priority = priorityLabels[job.priority] || 'Normal';
+                const priority = priorityLabels[job.priority]
+                    || (job.priority != null ? `Priority ${job.priority}` : 'Normal');
                 const fileName = job.original_name || job.filename || `Job ${jobId}`;
                 const submittedBy = job.submitted_by || 'Unknown user';
                 let controls = '';
@@ -6089,10 +6129,39 @@
                             <div class="dispatch-job-name">${iconMarkup('file')}<span title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</span></div>
                             <div class="dispatch-job-meta">${escapeHtml(submittedBy)} · ${escapeHtml(priority)} · ${escapeHtml(formatDate(job.created_at))}</div>
                         </div>
-                        <div class="dispatch-waiting">${iconMarkup('clock')} Waiting for teacher</div>
+                        <div class="dispatch-waiting">${iconMarkup('clock')} Awaiting approval</div>
                         <div class="dispatch-controls">${controls}</div>
                     </div>`;
             }).join('');
+
+            const remaining = queued.length - visibleJobs.length;
+            const footer = queued.length > 4 ? `
+                <div class="dispatch-lane-footer">
+                    <span>Showing ${visibleJobs.length} of ${queued.length} waiting jobs</span>
+                    <span class="dispatch-lane-footer-actions">
+                        ${dispatchLaneVisibleCount > 4 ? '<button class="dispatch-lane-toggle" onclick="collapseDispatchLane()">Collapse</button>' : ''}
+                        ${remaining > 0 ? `<button class="dispatch-lane-toggle" onclick="showMoreDispatchJobs()">Show ${Math.min(4, remaining)} more</button>` : ''}
+                    </span>
+                </div>` : '';
+            list.innerHTML = rows + footer;
+
+            Object.entries(selectedPrinters).forEach(([id, value]) => {
+                const select = document.getElementById(id);
+                if (select && [...select.options].some(option => option.value === value)) {
+                    select.value = value;
+                }
+            });
+        }
+
+        function showMoreDispatchJobs() {
+            dispatchLaneVisibleCount += 4;
+            renderTeacherDispatchLane();
+        }
+
+        function collapseDispatchLane() {
+            dispatchLaneVisibleCount = 4;
+            renderTeacherDispatchLane();
+            document.getElementById('teacherDispatchLane')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
         async function dispatchFromLane(jobId) {
@@ -6498,9 +6567,27 @@
 
         async function refreshJobs() {
             try {
+                const queuedRequest = isAdmin
+                    ? fetch(BASE + '/api/jobs/queued').catch(() => null)
+                    : null;
                 const res = await fetch(BASE + '/api/jobs');
                 const data = await res.json();
                 latestJobs = Array.isArray(data.jobs) ? data.jobs : [];
+                if (queuedRequest) {
+                    const queuedRes = await queuedRequest;
+                    if (queuedRes?.ok) {
+                        const queuedData = await queuedRes.json();
+                        latestQueuedJobs = Array.isArray(queuedData) ? queuedData : [];
+                    } else if (latestQueuedJobs.length === 0) {
+                        latestQueuedJobs = latestJobs.filter(job =>
+                            String(job.status || '').toLowerCase() === 'queued'
+                        );
+                    }
+                } else {
+                    latestQueuedJobs = latestJobs.filter(job =>
+                        String(job.status || '').toLowerCase() === 'queued'
+                    );
+                }
 
                 // Track which printers have the current user's active jobs
                 const newMyPrinters = new Set();
@@ -6522,7 +6609,7 @@
 
                 document.getElementById('queueStats').textContent =
                     `${data.stats.queued || 0} queued · ${data.stats.printing || 0} printing · ${data.stats.completed || 0} completed`;
-                renderTeacherDispatchLane(latestJobs);
+                renderTeacherDispatchLane();
 
                 // Don't re-render while a dropdown is open — it would clobber it mid-interaction
                 if (document.querySelector('.send-dropdown.open')) return;

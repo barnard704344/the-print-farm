@@ -233,6 +233,8 @@ class SecurityTests(unittest.TestCase):
         self.assertIn(b'id="teacherDispatchList"', response.data)
         self.assertIn(b'class="details-drawer"', response.data)
         self.assertIn(b"function dispatchFromLane(jobId)", response.data)
+        self.assertIn(b"fetch(BASE + '/api/jobs/queued')", response.data)
+        self.assertIn(b"let dispatchLaneVisibleCount = 4", response.data)
         self.assertNotIn(
             b'class="modal-overlay" id="printerDetailsOverlay"',
             response.data,

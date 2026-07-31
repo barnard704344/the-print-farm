@@ -5,13 +5,14 @@ changes to The Print Farm.
 
 ### Changed
 
-- Introduced a distinct Print Farm visual identity with consistent interface
-  icons, a flatter card treatment, and fewer nested borders.
+- Introduced a restrained slate-and-blue Print Farm visual identity with
+  consistent interface icons, solid page backgrounds, flatter cards, and fewer
+  nested borders.
 - Printer Details now opens in a responsive right-side panel so the printer grid
   remains visible in context.
-- Added a staff-only Approval & Dispatch lane that prioritises queued jobs,
-  shows ready-printer capacity, and reuses the existing filament checks and
-  dispatch path.
+- Added a compact staff-only Approval & Dispatch lane that reads the complete
+  queued-job feed, shows ready-printer capacity, preserves selections during
+  refreshes, and reuses the existing filament checks and dispatch path.
 
 ### Documentation
 
