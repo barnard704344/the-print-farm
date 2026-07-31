@@ -78,9 +78,11 @@
             z-index: 800;
             background: var(--card);
             border-bottom: 1px solid var(--line-soft);
-            padding: 13px 24px;
-            display: flex;
-            justify-content: space-between;
+            min-height: 64px;
+            padding: 0 24px;
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) auto;
+            gap: 22px;
             align-items: center;
             backdrop-filter: blur(18px);
         }
@@ -184,6 +186,7 @@
             display: flex;
             align-items: center;
             gap: 20px;
+            justify-self: end;
         }
 
         .header-controls {
@@ -224,28 +227,32 @@
         /* Tabs */
         .tabs {
             display: flex;
-            gap: 5px;
-            margin-bottom: 22px;
-            border-bottom: 0;
-            padding: 4px;
+            align-self: stretch;
+            justify-self: center;
+            gap: 2px;
+            margin: 0;
+            border: 0;
+            padding: 0;
             width: max-content;
             max-width: 100%;
-            border-radius: 11px;
-            background: color-mix(in srgb, var(--card) 88%, transparent);
-            box-shadow: 0 1px 0 var(--line-soft), 0 8px 24px rgba(0,0,0,0.06);
+            border-radius: 0;
+            background: transparent;
+            box-shadow: none;
         }
 
         .tab {
             display: inline-flex;
             align-items: center;
             gap: 7px;
-            padding: 8px 13px;
+            min-height: 63px;
+            padding: 0 12px;
             font-size: 12px;
             font-weight: 600;
             color: var(--text-muted);
             cursor: pointer;
             border: 0;
-            border-radius: 8px;
+            border-bottom: 2px solid transparent;
+            border-radius: 0;
             transition: color 0.2s, background 0.2s, box-shadow 0.2s;
             background: transparent;
         }
@@ -253,8 +260,9 @@
         .tab:hover { color: var(--text); background: var(--surface-soft); }
         .tab.active {
             color: var(--text);
-            background: var(--card-raised);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+            background: var(--accent-dim);
+            border-bottom-color: var(--accent);
+            box-shadow: none;
         }
         .tab.active .ui-icon { color: var(--accent); }
 
@@ -2034,6 +2042,48 @@
 
         /* ─── Responsive ─── */
 
+        @media (max-width: 1500px) {
+            .farm-stats { display: none; }
+        }
+
+        @media (max-width: 1100px) {
+            .header {
+                grid-template-columns: minmax(0, 1fr) auto;
+                gap: 8px 12px;
+                padding: 10px 12px 0;
+            }
+            .brand { min-width: 0; grid-column: 1; grid-row: 1; }
+            .header-actions {
+                grid-column: 2;
+                grid-row: 1;
+                gap: 10px;
+                margin-left: 0;
+            }
+            .tabs {
+                grid-column: 1 / -1;
+                grid-row: 2;
+                width: calc(100% + 24px);
+                max-width: none;
+                margin: 0 -12px;
+                padding: 0 12px;
+                justify-self: stretch;
+                align-self: auto;
+                border-top: 1px solid var(--line-soft);
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+                flex-wrap: nowrap;
+                gap: 0;
+            }
+            .tabs::-webkit-scrollbar { display: none; }
+            .tab {
+                min-height: 44px;
+                padding: 0 14px;
+                white-space: nowrap;
+                flex-shrink: 0;
+            }
+        }
+
         /* Tablet breakpoint */
         @media (max-width: 1024px) {
             .printer-grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
@@ -2042,20 +2092,9 @@
         /* Small tablet / large phone */
         @media (max-width: 768px) {
             .printer-grid { grid-template-columns: 1fr; }
-            .farm-stats { display: none; }
             .main { padding: 12px; }
-            .header { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
-            .brand { min-width: 0; }
             .brand-title { font-size: 16px; }
-            .header-actions { gap: 10px; margin-left: auto; }
-
-            /* Tabs: horizontal scroll */
-            .tabs {
-                overflow-x: auto; -webkit-overflow-scrolling: touch;
-                scrollbar-width: none; flex-wrap: nowrap; gap: 0;
-            }
-            .tabs::-webkit-scrollbar { display: none; }
-            .tab { padding: 10px 14px; font-size: 13px; white-space: nowrap; flex-shrink: 0; }
+            .tab { font-size: 13px; }
 
             .dispatch-lane-header { align-items: flex-start; }
             .dispatch-row {
@@ -2098,14 +2137,14 @@
         /* Phone breakpoint */
         @media (max-width: 480px) {
             .main { padding: 8px; }
-            .header { padding: 10px 12px; }
             .brand { gap: 8px; }
             .brand-mark { width: 31px; height: 31px; border-radius: 8px; }
             .brand-mark svg { width: 21px; height: 21px; }
             .brand-title { font-size: 14px; }
             .brand-kicker { display: none; }
+            #authArea > span { display: none; }
 
-            .tab { padding: 10px 12px; font-size: 12px; }
+            .tab { padding: 0 12px; font-size: 12px; }
 
             /* Printer card */
             .printer-card { border-radius: 10px; }
@@ -2352,6 +2391,14 @@
                 <span class="brand-kicker">School print operations</span>
             </span>
         </div>
+        <nav class="tabs" aria-label="Primary navigation">
+            <button class="tab active" data-tab="printers"><svg class="ui-icon" aria-hidden="true"><use href="#icon-printers"></use></svg>Printers</button>
+            <button class="tab" data-tab="queue"><svg class="ui-icon" aria-hidden="true"><use href="#icon-queue"></use></svg>Job Queue <span class="queue-count-badge" id="queueNavCount">0</span></button>
+            <button class="tab" data-tab="library"><svg class="ui-icon" aria-hidden="true"><use href="#icon-library"></use></svg>File Library</button>
+            <button class="tab" data-tab="orca"><svg class="ui-icon" aria-hidden="true"><use href="#icon-network"></use></svg>OrcaSlicer Setup</button>
+            <a class="tab" id="spoolmanTab" href="#" target="_blank" rel="noopener" style="text-decoration:none;display:none;"><svg class="ui-icon" aria-hidden="true"><use href="#icon-spool"></use></svg>Spoolman ↗</a>
+            <button class="tab admin-only" data-tab="settings"><svg class="ui-icon" aria-hidden="true"><use href="#icon-settings"></use></svg>Settings</button>
+        </nav>
         <div class="header-actions">
             <div class="farm-stats" id="farmStats">
                 <div class="farm-stat"><span class="dot dot-connected"></span> <span id="statConnected">0</span> Connected</div>
@@ -2372,15 +2419,6 @@
     </div>
 
     <div class="main">
-        <div class="tabs">
-            <button class="tab active" data-tab="printers"><svg class="ui-icon" aria-hidden="true"><use href="#icon-printers"></use></svg>Printers</button>
-            <button class="tab" data-tab="queue"><svg class="ui-icon" aria-hidden="true"><use href="#icon-queue"></use></svg>Job Queue <span class="queue-count-badge" id="queueNavCount">0</span></button>
-            <button class="tab" data-tab="library"><svg class="ui-icon" aria-hidden="true"><use href="#icon-library"></use></svg>File Library</button>
-            <button class="tab" data-tab="orca"><svg class="ui-icon" aria-hidden="true"><use href="#icon-network"></use></svg>OrcaSlicer Setup</button>
-            <a class="tab" id="spoolmanTab" href="#" target="_blank" rel="noopener" style="text-decoration:none;display:none;"><svg class="ui-icon" aria-hidden="true"><use href="#icon-spool"></use></svg>Spoolman ↗</a>
-            <button class="tab admin-only" data-tab="settings"><svg class="ui-icon" aria-hidden="true"><use href="#icon-settings"></use></svg>Settings</button>
-        </div>
-
         <!-- Printers Tab -->
         <div class="tab-content active" id="tab-printers">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">

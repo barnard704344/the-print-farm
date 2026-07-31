@@ -231,6 +231,7 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'id="teacherDispatchLane"', response.data)
         self.assertIn(b'id="teacherDispatchList"', response.data)
+        self.assertIn(b'<nav class="tabs" aria-label="Primary navigation">', response.data)
         self.assertIn(b'class="details-drawer"', response.data)
         self.assertIn(b"function dispatchFromLane(jobId)", response.data)
         self.assertIn(b"fetch(BASE + '/api/jobs/queued')", response.data)

@@ -8,6 +8,9 @@ changes to The Print Farm.
 - Introduced a restrained slate-and-blue Print Farm visual identity with
   consistent interface icons, solid page backgrounds, flatter cards, and fewer
   nested borders.
+- Merged primary navigation into the application header, removing the detached
+  floating navigation bar while retaining an integrated scrolling row on
+  narrower screens.
 - Printer Details now opens in a responsive right-side panel so the printer grid
   remains visible in context.
 - Added a compact staff-only Approval & Dispatch lane that reads the complete
