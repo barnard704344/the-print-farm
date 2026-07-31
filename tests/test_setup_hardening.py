@@ -88,6 +88,7 @@ class PrivilegedHelperTests(unittest.TestCase):
             'ProxyPassMatch "^/api/(version|connection|printer|files/local)$"',
             managed,
         )
+        self.assertIn("ProxyPreserveHost On", managed)
         self.assertIn("ProxyPass /the-print-farm ", managed)
         self.assertNotIn("ProxyPass /api ", managed)
         self.assertNotIn("LimitRequestBody", managed)

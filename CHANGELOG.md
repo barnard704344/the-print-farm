@@ -12,6 +12,9 @@ changes to The Print Farm.
   upgrade fully through the UI without requiring shell access.
 - Queue the post-update service restart asynchronously so the updater does not
   wait on the application process that issued its own restart request.
+- Preserve the public request host through the managed Apache proxy so CSRF
+  origin validation accepts same-origin dashboard actions such as deleting
+  queued jobs.
 
 ## v1.0.13 - 2026-07-31 - Zero-touch Orca credential split
 
