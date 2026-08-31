@@ -411,6 +411,21 @@ class BambuClient:
                 use_ams = False
                 logger.info(f"[{self.name}] External-spool-only job: setting use_ams=False")
 
+            if not use_ams and all(
+                tray_id is None or int(tray_id) < 0 or int(tray_id) >= 254
+                for tray_id in ams_mapping
+            ):
+                # The slicer can represent an external-only project as logical
+                # slot 4, producing a five-entry table such as
+                # [-1, -1, -1, -1, 254].  That is project metadata, not the
+                # runtime mapping accepted by current P1/X1/A1 firmware.  The
+                # project_file command must contain exactly one unmapped
+                # filament and name the single-nozzle external feed in
+                # ams_mapping2.  Duplicate virtual-feed entries cause HMS
+                # 07FF-8012 ("Failed to get AMS mapping table").
+                flat_ams_mapping = [-1]
+                ams_mapping2 = [{"ams_id": 255, "slot_id": 0}]
+
         submission_id = str(int(time.time() * 1000) % 2_147_483_647 or 1)
 
         cmd = {

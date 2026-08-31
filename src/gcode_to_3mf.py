@@ -10,6 +10,7 @@ gcode headers, so we parse the OrcaSlicer gcode to extract real values
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import zipfile
 
@@ -275,6 +276,19 @@ def wrap_gcode_as_3mf(gcode_path: str, output_path: str) -> str:
         zf.writestr("Metadata/slice_info.config", _build_slice_info(meta))
         zf.writestr("Metadata/model_settings.config", MODEL_SETTINGS)
         zf.writestr("Metadata/project_settings.config", PROJECT_SETTINGS)
+        # The dispatch path reads this metadata to decide whether a Bambu job
+        # uses an AMS tray or the external/bypass spool.  Without it, wrapped
+        # raw G-code silently defaults to use_ams=True even when its startup
+        # G-code selects logical external slot 4, eventually causing HMS
+        # 07FF-8012 (failed to get AMS mapping table).
+        used_slots = meta["used_slots"] or [0]
+        zf.writestr(
+            "Metadata/plate_1.json",
+            json.dumps({
+                "first_extruder": used_slots[0],
+                "filament_ids": used_slots,
+            }),
+        )
         zf.write(gcode_path, "Metadata/plate_1.gcode")
         zf.writestr("Metadata/plate_1.gcode.md5", gcode_md5)
 
