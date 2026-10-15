@@ -5,7 +5,27 @@ changes to The Print Farm.
 
 ## Unreleased
 
-No changes yet.
+### Added
+
+- Added a staff-only **Reconnect** workflow for offline printers. It scans for
+  a changed IP address, verifies the cached printer identity, updates only the
+  host, and preserves credentials, ports, access rules, AMS/MMU assignments,
+  OrcaSlicer configuration, and integrations.
+- Added bounded `/21` through `/24` scans for routed printer VLANs, including
+  configurable default ranges under `discovery.scan_subnets`.
+
+### Fixed
+
+- Keep the Reconnect action in sync when an existing dashboard card transitions
+  from online to offline.
+- Exclude addresses assigned to other configured printers and require cached
+  access-code and serial verification before presenting port-scan-only BambuLab
+  candidates on networks containing multiple printers.
+
+### Documentation
+
+- Documented IP-change recovery, routed subnet scanning, identity safeguards,
+  and the new discovery configuration with an example `/21` printer VLAN.
 
 ## v1.0.14 - 2026-07-31 - Reliable updates and integration diagnostics
 

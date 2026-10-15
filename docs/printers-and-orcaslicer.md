@@ -36,6 +36,38 @@ printers:
 
 Klipper webcams are auto-detected from Moonraker's `/server/webcams/list` endpoint. Happy Hare MMU is auto-detected from Klipper printer objects.
 
+## Reconnecting After an IP Address Change
+
+When a configured printer is offline, staff see a **Reconnect** button on its
+dashboard card. The recovery scan listens for BambuLab announcements and scans
+the local subnet for the appropriate printer service. Choose the printer's new
+address to verify it with the already-saved serial, access code, or Moonraker
+settings before the address is updated.
+
+Reconnect automatically scans the `/24` containing the printer's saved IP as
+well as locally attached networks. For printers on a routed VLAN, staff can
+enter a specific range such as `10.136.32` or `10.136.32.0/24` in the subnet
+field. Routed networks from `/21` through `/24` are supported, including
+`10.136.32.0/21`; larger ranges are rejected to keep scans bounded. The Add
+Printer network scan supports the same field.
+
+Frequently used routed VLANs can be scanned by default:
+
+```yaml
+discovery:
+  scan_subnets:
+    - 10.136.32.0/21
+```
+
+When multiple Bambu printers share the scanned network, addresses already
+assigned to another configured printer are excluded. Port-scan-only results are
+shown only after the endpoint accepts the target printer's cached LAN access
+code and publishes a report for its cached serial number.
+
+Reconnect changes only the printer's `host`. Its name, credentials, ports,
+OrcaSlicer assignment, AMS/MMU configuration, access rules, and integrations
+remain in place. Candidates with a matching BambuLab serial are shown first.
+
 ## Printer Readiness After A Failed Print
 
 A printer that reports `FAILED` remains blocked for the configured cooldown.

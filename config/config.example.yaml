@@ -38,6 +38,12 @@ printers: []
 #      username: user@example.com
 #      password: CHANGE_ME
 
+# Optional routed printer VLANs used by Add Printer and Reconnect scans.
+# Networks from /21 through /24 are supported.
+discovery:
+  scan_subnets: []
+#  - 10.136.32.0/21
+
 web:
   host: 127.0.0.1            # Apache is the public-facing reverse proxy
   port: 5000

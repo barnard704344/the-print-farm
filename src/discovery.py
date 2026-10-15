@@ -103,7 +103,8 @@ def scan_port(host: str, port: int = MQTT_TLS_PORT, timeout: float = 1.5) -> boo
 
 
 def test_bambu_connection(host: str, access_code: str, serial: str,
-                          port: int = MQTT_TLS_PORT, timeout: float = 5.0) -> dict:
+                          port: int = MQTT_TLS_PORT, timeout: float = 5.0,
+                          require_report: bool = False) -> dict:
     """
     Test MQTT connection to a Bambu printer.
     Returns {"ok": True/False, "message": "...", "state": {...}}.
@@ -119,8 +120,6 @@ def test_bambu_connection(host: str, access_code: str, serial: str,
 
     def on_connect(client, userdata, flags, rc, properties=None):
         if rc == 0:
-            result["ok"] = True
-            result["message"] = "Connected successfully"
             client.subscribe(f"device/{serial}/report")
             # Request status
             client.publish(
@@ -132,7 +131,10 @@ def test_bambu_connection(host: str, access_code: str, serial: str,
                     }
                 }),
             )
-            connected_event.set()
+            if not require_report:
+                result["ok"] = True
+                result["message"] = "Connected successfully"
+                connected_event.set()
         else:
             result["message"] = f"MQTT connection refused (rc={rc})"
             connected_event.set()
@@ -147,6 +149,10 @@ def test_bambu_connection(host: str, access_code: str, serial: str,
                 state_data["bed_temper"] = p.get("bed_temper", 0)
                 state_data["subtask_name"] = p.get("subtask_name", "")
                 state_data["mc_percent"] = p.get("mc_percent", 0)
+                if require_report:
+                    result["ok"] = True
+                    result["message"] = "Connected and printer identity verified"
+                    connected_event.set()
         except Exception:
             pass
 
@@ -169,9 +175,11 @@ def test_bambu_connection(host: str, access_code: str, serial: str,
         client.loop_start()
         connected_event.wait(timeout=timeout)
 
-        if result["ok"]:
+        if result["ok"] and not require_report:
             # Wait a moment for status data
             time.sleep(2)
+            result["state"] = state_data
+        elif result["ok"]:
             result["state"] = state_data
 
         client.loop_stop()

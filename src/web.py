@@ -6,6 +6,7 @@ manage the job queue, and control individual printers.
 """
 
 import json
+import ipaddress
 import logging
 import os
 import re
@@ -17,6 +18,7 @@ import threading
 import time
 import uuid
 from collections import defaultdict, deque
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import wraps
 
 from flask import Flask, Response, jsonify, render_template, request, send_from_directory, session
@@ -31,6 +33,7 @@ from .file_library import parse_gcode_metadata
 from .file_validation import InvalidPrintFile, validate_print_file
 from .image_validation import save_normalized_image
 from .api_v1 import create_api_v1
+from .farm_manager import create_printer_client
 
 logger = logging.getLogger(__name__)
 
@@ -296,6 +299,44 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
                 continue
             filtered.append(p)
         return filtered
+
+    def _printer_config(name):
+        """Return a configured printer by name without exposing its secrets."""
+        return next(
+            (p for p in (app_config.get("printers") or []) if p.get("name") == name),
+            None,
+        )
+
+    def _scan_subnet_prefixes(value):
+        """Expand a small IPv4 network into the /24 prefixes scanners use."""
+        value = str(value or "").strip()
+        if not value:
+            return []
+        candidate = value if "/" in value else (
+            value + ".0/24" if value.count(".") == 2 else value + "/24"
+        )
+        network = ipaddress.ip_network(candidate, strict=False)
+        if network.version != 4 or not 21 <= network.prefixlen <= 24:
+            raise ValueError(
+                "Scan subnet must be an IPv4 /21 to /24, such as 10.136.32.0/21"
+            )
+        return [
+            ".".join(str(subnet.network_address).split(".")[:3])
+            for subnet in network.subnets(new_prefix=24)
+        ]
+
+    def _configured_scan_subnets():
+        """Return configured printer VLANs expanded to scanner /24 prefixes."""
+        values = (app_config.get("discovery") or {}).get("scan_subnets") or []
+        if isinstance(values, str):
+            values = [values]
+        prefixes = []
+        for value in values:
+            try:
+                prefixes.extend(_scan_subnet_prefixes(value))
+            except ValueError as exc:
+                logger.warning("Ignoring invalid discovery.scan_subnets entry %r: %s", value, exc)
+        return list(dict.fromkeys(prefixes))
 
     def _run_privileged_helper(*args, timeout=90):
         """Run one validated deployment operation through the fixed helper."""
@@ -1723,7 +1764,10 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         data = request.get_json(silent=True) or {}
         timeout = min(float(data.get("timeout", 5)), 15)
         do_port_scan = data.get("port_scan", False)
-        subnet = data.get("subnet", "")
+        try:
+            requested_subnets = _scan_subnet_prefixes(data.get("subnet", ""))
+        except ValueError as exc:
+            return jsonify({"ok": False, "message": str(exc)}), 400
 
         # UDP broadcast discovery (Bambu only)
         printers = _filter_discovery_results(discover_printers(timeout=timeout))
@@ -1731,10 +1775,9 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         # Optional port scan fallback
         scan_results = []
         if do_port_scan:
-            if not subnet:
-                subnets = get_local_subnets()
-            else:
-                subnets = [subnet]
+            subnets = requested_subnets or list(dict.fromkeys([
+                *_configured_scan_subnets(), *get_local_subnets(),
+            ]))
             for s in subnets:
                 # Scan for Bambu (8883) and Klipper/Moonraker (7125)
                 hosts = [
@@ -1755,6 +1798,233 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             "port_scan": scan_results,
             "subnets": get_local_subnets(),
         })
+
+    @app.route(prefix + "/api/discover/reconnect/scan", methods=["POST"])
+    @app.route("/api/discover/reconnect/scan", methods=["POST"])
+    @staff_session_required
+    def discover_reconnect_scan():
+        """Find possible new addresses for an existing offline printer."""
+        data = request.get_json(silent=True) or {}
+        name = str(data.get("name", "")).strip()
+        if not name:
+            return jsonify({"ok": False, "message": "name is required"}), 400
+
+        printer_cfg = _printer_config(name)
+        if not printer_cfg:
+            return jsonify({"ok": False, "message": f"Printer '{name}' not found"}), 404
+
+        timeout = min(max(float(data.get("timeout", 8)), 1), 15)
+        deep_scan = bool(data.get("port_scan", True))
+        printer_type = str(printer_cfg.get("type", "bambulab")).lower()
+        current_host = str(printer_cfg.get("host", "")).strip()
+        serial = str(printer_cfg.get("serial", "")).strip()
+        local_ips = _local_ipv4_addresses()
+        configured_hosts = {
+            str(configured.get("host", "")).strip()
+            for configured in (app_config.get("printers") or [])
+            if configured.get("name") != name and str(configured.get("host", "")).strip()
+        }
+        candidates = []
+        seen_hosts = set()
+
+        if printer_type == "bambulab":
+            for found in discover_printers(timeout=timeout):
+                host = str(found.get("host", "")).strip()
+                if (
+                    not host or host in local_ips or host == current_host
+                    or host in configured_hosts or host in seen_hosts
+                ):
+                    continue
+                found_serial = str(found.get("serial", "")).strip()
+                # Broadcast discovery exposes a stable serial, so never offer a
+                # different Bambu printer merely because it is on the same VLAN.
+                if serial and found_serial != serial:
+                    continue
+                candidates.append({
+                    "host": host,
+                    "name": found.get("name") or f"BambuLab ({host})",
+                    "model": found.get("model") or "BambuLab",
+                    "serial": found_serial,
+                    "type": "bambulab",
+                    "match": bool(serial and found_serial == serial),
+                })
+                seen_hosts.add(host)
+
+        try:
+            requested_subnets = _scan_subnet_prefixes(data.get("subnet", ""))
+            saved_subnets = _scan_subnet_prefixes(current_host) if current_host else []
+        except ValueError as exc:
+            return jsonify({"ok": False, "message": str(exc)}), 400
+
+        scanned_subnets = []
+        if deep_scan:
+            # A reconnect normally needs the printer VLAN, not the server LAN.
+            # Use an explicit range when supplied; otherwise scan the /24 from
+            # the cached printer address and the server's directly attached LANs.
+            subnets = (
+                requested_subnets
+                if requested_subnets else
+                list(dict.fromkeys([
+                    *_configured_scan_subnets(), *saved_subnets, *get_local_subnets(),
+                ]))
+            )
+            scanned_subnets = subnets
+            scan = scan_subnet if printer_type == "bambulab" else scan_moonraker_port
+            for subnet_prefix in subnets:
+                for host in scan(subnet_prefix, timeout=1.0):
+                    if (
+                        host in local_ips or host == current_host
+                        or host in configured_hosts or host in seen_hosts
+                    ):
+                        continue
+                    candidates.append({
+                        "host": host,
+                        "name": f"{('BambuLab' if printer_type == 'bambulab' else 'Klipper')} ({host})",
+                        "model": "Detected by port scan",
+                        "serial": "",
+                        "type": printer_type,
+                        "match": False,
+                    })
+                    seen_hosts.add(host)
+
+        if printer_type == "bambulab":
+            # Routed VLAN scans only reveal open MQTT ports, not printer serials.
+            # Authenticate the unassigned endpoints concurrently and require a
+            # report on the cached serial topic before showing them to staff.
+            unverified = [candidate for candidate in candidates if not candidate["match"]]
+            if unverified:
+                verified_hosts = set()
+                with ThreadPoolExecutor(max_workers=min(8, len(unverified))) as executor:
+                    futures = {
+                        executor.submit(
+                            test_bambu_connection,
+                            candidate["host"],
+                            str(printer_cfg.get("access_code", "")),
+                            serial,
+                            timeout=5.0,
+                            require_report=True,
+                        ): candidate
+                        for candidate in unverified
+                    }
+                    for future in as_completed(futures):
+                        candidate = futures[future]
+                        try:
+                            if future.result().get("ok"):
+                                verified_hosts.add(candidate["host"])
+                        except Exception as exc:
+                            logger.debug(
+                                "Reconnect identity check failed for %s at %s: %s",
+                                name, candidate["host"], exc,
+                            )
+                for candidate in candidates:
+                    if candidate["host"] in verified_hosts:
+                        candidate["match"] = True
+                        candidate["name"] = name
+                        candidate["model"] = "Saved serial and access code verified"
+                candidates = [candidate for candidate in candidates if candidate["match"]]
+
+        candidates.sort(key=lambda item: (not item["match"], item["host"]))
+        return jsonify({
+            "ok": True,
+            "name": name,
+            "type": printer_type,
+            "current_host": current_host,
+            "candidates": candidates,
+            "scanned_subnets": scanned_subnets,
+            "subnets": get_local_subnets(),
+        })
+
+    @app.route(prefix + "/api/discover/reconnect", methods=["POST"])
+    @app.route("/api/discover/reconnect", methods=["POST"])
+    @staff_session_required
+    def discover_reconnect():
+        """Move an existing printer to a verified address, preserving its config."""
+        data = request.get_json(silent=True) or {}
+        name = str(data.get("name", "")).strip()
+        host = str(data.get("host", "")).strip()
+        if not name or not host:
+            return jsonify({"ok": False, "message": "name and host are required"}), 400
+
+        config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
+        try:
+            config = load_yaml_config(config_path)
+            printer_cfg = next(
+                (p for p in (config.get("printers") or []) if p.get("name") == name),
+                None,
+            )
+            if not printer_cfg:
+                return jsonify({"ok": False, "message": f"Printer '{name}' not found"}), 404
+
+            old_host = str(printer_cfg.get("host", "")).strip()
+            if host == old_host:
+                return jsonify({"ok": False, "message": "Select a different printer address"}), 400
+
+            printer_type = str(printer_cfg.get("type", "bambulab")).lower()
+            if printer_type == "klipper":
+                result = test_klipper_connection(
+                    host,
+                    int(printer_cfg.get("moonraker_port", 7125)),
+                    str(printer_cfg.get("api_key", "")),
+                )
+            else:
+                result = test_bambu_connection(
+                    host,
+                    str(printer_cfg.get("access_code", "")),
+                    str(printer_cfg.get("serial", "")),
+                    require_report=True,
+                )
+            if not result.get("ok"):
+                return jsonify({
+                    "ok": False,
+                    "message": result.get("message") or "The saved printer settings did not authenticate at that address",
+                }), 409
+
+            # Build and connect the replacement before committing the address.
+            # Only the host changes; all other cached options are carried over.
+            printer_cfg["host"] = host
+            old_client = farm_manager.get_printer(name)
+            if old_client:
+                old_client.disconnect()
+
+            new_client = create_printer_client(printer_cfg)
+            connected = new_client.connect(timeout=10)
+            if not connected:
+                if old_client:
+                    old_client.connect(timeout=3)
+                return jsonify({
+                    "ok": False,
+                    "message": f"Verified {host}, but the live printer connection could not be started; no settings were changed",
+                }), 409
+
+            try:
+                save_yaml_config(config_path, config)
+            except Exception:
+                new_client.disconnect()
+                if old_client:
+                    old_client.connect(timeout=3)
+                raise
+
+            app_config["printers"] = config["printers"]
+            if camera_manager and camera_manager.is_streaming(name):
+                camera_manager.stop_camera(name)
+            with farm_manager._lock:
+                farm_manager._printers[name] = new_client
+                farm_manager._printer_types[name] = printer_type
+
+            logger.info(
+                "Reconnected printer %s from %s to %s (connected=%s)",
+                name, old_host, host, connected,
+            )
+            return jsonify({
+                "ok": True,
+                "connected": True,
+                "old_host": old_host,
+                "host": host,
+                "message": f"Printer '{name}' reconnected at {host}",
+            })
+        except Exception as exc:
+            logger.exception("Failed to reconnect printer %s", name)
+            return jsonify({"ok": False, "message": str(exc)}), 500
 
     @app.route(prefix + "/api/discover/test", methods=["POST"])
     @app.route("/api/discover/test", methods=["POST"])

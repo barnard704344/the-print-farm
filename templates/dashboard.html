@@ -2952,6 +2952,11 @@
                 <p style="color:var(--text-muted); margin-bottom:16px;">
                     Search for printers on your network (BambuLab and Klipper/Moonraker).
                 </p>
+                <div class="scan-subnet-field" style="max-width:360px;">
+                    <label>Subnet to scan <span style="font-size:11px;color:var(--text-muted);">(optional)</span></label>
+                    <input type="text" id="scanSubnet" placeholder="e.g. 10.136.32.0/21">
+                    <span style="font-size:11px;color:var(--text-muted);">Leave blank to scan networks attached directly to this server.</span>
+                </div>
                 <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
                     <button class="btn btn-primary" id="btnDeepScan" onclick="startScan(true)">
                         Scan Network
@@ -3018,6 +3023,27 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Reconnect Existing Printer Modal -->
+    <div class="modal-overlay" id="reconnectOverlay" style="display:none">
+        <div class="modal" style="max-width:560px;">
+            <div class="modal-header">
+                <h2 style="font-size:18px;">Reconnect <span id="reconnectPrinterName"></span></h2>
+                <button class="modal-close" onclick="closeReconnect()">&times;</button>
+            </div>
+            <p style="color:var(--text-muted); margin-bottom:16px;">
+                Scan for the printer's new address. Its saved credentials, ports, access rules, and other settings will be kept.
+            </p>
+            <div class="scan-subnet-field">
+                <label>Subnet to scan <span style="font-size:11px;color:var(--text-muted);">(optional)</span></label>
+                <input type="text" id="reconnectSubnet" placeholder="Defaults to the printer's saved IP range">
+                <span style="font-size:11px;color:var(--text-muted);">For example: 10.136.32.0/21 (supported range: /21 to /24)</span>
+            </div>
+            <button class="btn btn-primary" id="btnReconnectScan" onclick="scanForReconnect()">Scan Network</button>
+            <div id="reconnectStatus" style="font-size:13px; color:var(--text-muted); margin:14px 0 10px;"></div>
+            <div id="reconnectResults"></div>
         </div>
     </div>
 
@@ -3203,6 +3229,17 @@
         .wizard-form input:focus {
             outline: none; border-color: var(--accent);
         }
+        .scan-subnet-field { margin-bottom: 14px; }
+        .scan-subnet-field label {
+            display: block; font-size: 12px; font-weight: 500;
+            color: var(--text-muted); margin-bottom: 4px;
+        }
+        .scan-subnet-field input {
+            display: block; width: 100%; box-sizing: border-box;
+            padding: 8px 12px; border-radius: 6px;
+            border: 1px solid var(--border); background: var(--bg); color: var(--text);
+        }
+        .scan-subnet-field > span { display: block; margin-top: 4px; }
         .discovered-item {
             background: var(--bg); border: 1px solid var(--border);
             border-radius: 8px; padding: 12px; margin-bottom: 8px;
@@ -4456,6 +4493,7 @@
                         <div class="printer-header-actions">
                             <span class="printer-status ${statusBadge}" data-field="status">${escapeHtml(statusLabel)}</span>
                             ${isAuthenticated ? `<button class="btn printer-card-action" onclick="openPrinterDetails(${nameArg})" title="View printer details">${iconMarkup('details')} Details</button>` : ''}
+                            ${isAdmin ? `<button class="btn printer-card-action" data-field="reconnect" onclick="openReconnect(${nameArg})" title="Scan for this printer at a new IP address"${connected ? ' style="display:none"' : ''}>Reconnect</button>` : ''}
                             ${isAdmin ? `<button class="printer-remove-btn" onclick="removePrinter(${nameArg})" title="Remove printer">&times;</button>` : ''}
                         </div>
                     </div>
@@ -4884,6 +4922,11 @@
             const statusLabel = connected ? (p.display_status || p.status) : 'OFFLINE';
             const statusBadge = connected ? `status-badge-${status}` : 'status-badge-unknown';
             if (statusEl) { statusEl.textContent = statusLabel; statusEl.className = `printer-status ${statusBadge}`; }
+
+            // Header actions persist between polling updates, so explicitly
+            // reveal recovery when a printer transitions from online to offline.
+            const reconnectEl = card.querySelector('[data-field="reconnect"]');
+            if (reconnectEl) reconnectEl.style.display = connected ? 'none' : '';
 
             // Job name
             const jobEl = card.querySelector('[data-field="job"]');
@@ -7009,10 +7052,101 @@
             if (e.target === e.currentTarget) closeWizard();
         });
 
+        function openReconnect(name) {
+            window._reconnectPrinter = name;
+            window._reconnectCandidates = [];
+            document.getElementById('reconnectPrinterName').textContent = name;
+            document.getElementById('reconnectStatus').textContent = '';
+            document.getElementById('reconnectResults').innerHTML = '';
+            document.getElementById('reconnectSubnet').value = '';
+            document.getElementById('reconnectOverlay').style.display = 'flex';
+            scanForReconnect();
+        }
+
+        function closeReconnect() {
+            document.getElementById('reconnectOverlay').style.display = 'none';
+        }
+
+        document.getElementById('reconnectOverlay').addEventListener('click', e => {
+            if (e.target === e.currentTarget) closeReconnect();
+        });
+
+        async function scanForReconnect() {
+            const name = window._reconnectPrinter;
+            const statusEl = document.getElementById('reconnectStatus');
+            const resultsEl = document.getElementById('reconnectResults');
+            const button = document.getElementById('btnReconnectScan');
+            const subnet = document.getElementById('reconnectSubnet').value.trim();
+            if (!name) return;
+
+            button.disabled = true;
+            resultsEl.innerHTML = '';
+            statusEl.innerHTML = '<span class="spinner"></span> Scanning broadcasts and local subnets. This may take 15-30 seconds...';
+            try {
+                const res = await fetch(BASE + '/api/discover/reconnect/scan', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name, subnet, timeout: 8, port_scan: true}),
+                });
+                const data = await res.json();
+                if (!res.ok || !data.ok) throw new Error(apiErrorMessage(data, 'Network scan failed'));
+
+                const candidates = data.candidates || [];
+                window._reconnectCandidates = candidates;
+                const ranges = (data.scanned_subnets || []).map(value => `${value}.0/24`).join(', ');
+                if (!candidates.length) {
+                    statusEl.textContent = `No address matching this printer's saved identity was found${ranges ? ` in ${ranges}` : ''}. Check that the printer is powered on, LAN mode is enabled, and its LAN access code has not changed.`;
+                    return;
+                }
+                statusEl.textContent = `Found ${candidates.length} possible address${candidates.length === 1 ? '' : 'es'}${ranges ? ` in ${ranges}` : ''}. The saved settings will be verified before anything changes.`;
+                resultsEl.innerHTML = candidates.map((candidate, index) => `
+                    <div class="discovered-item">
+                        <div class="discovered-info">
+                            <div class="discovered-name">${escapeHtml(candidate.name || candidate.host)} ${candidate.match ? '<span class="test-ok">&#10003; Serial match</span>' : ''}</div>
+                            <div class="discovered-detail">${escapeHtml(candidate.host)} · ${escapeHtml(candidate.model || candidate.type || 'Printer')}</div>
+                        </div>
+                        <button class="btn ${candidate.match ? 'btn-success' : 'btn-primary'}" onclick="reconnectAt(${index}, this)">Reconnect</button>
+                    </div>
+                `).join('');
+            } catch (err) {
+                statusEl.textContent = 'Scan failed: ' + err.message;
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        async function reconnectAt(index, button) {
+            const name = window._reconnectPrinter;
+            const candidate = (window._reconnectCandidates || [])[index];
+            const statusEl = document.getElementById('reconnectStatus');
+            if (!name || !candidate) return;
+
+            button.disabled = true;
+            statusEl.innerHTML = `<span class="spinner"></span> Verifying saved settings at ${escapeHtml(candidate.host)}...`;
+            try {
+                const res = await fetch(BASE + '/api/discover/reconnect', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name, host: candidate.host}),
+                });
+                const data = await res.json();
+                if (!res.ok || !data.ok) throw new Error(apiErrorMessage(data, 'Could not reconnect printer'));
+                statusEl.innerHTML = `<span class="test-ok">&#10003; ${escapeHtml(data.message)}</span>`;
+                setTimeout(() => {
+                    closeReconnect();
+                    refreshPrinters();
+                }, 900);
+            } catch (err) {
+                statusEl.innerHTML = `<span class="test-fail">&#10007; ${escapeHtml(err.message)}</span>`;
+                button.disabled = false;
+            }
+        }
+
         async function startScan(deepScan) {
             const statusEl = document.getElementById('scanStatus');
             const resultsEl = document.getElementById('scanResults');
             const btnDeep = document.getElementById('btnDeepScan');
+            const subnet = document.getElementById('scanSubnet').value.trim();
 
             btnDeep.disabled = true;
             resultsEl.innerHTML = '';
@@ -7022,7 +7156,7 @@
                 const res = await fetch(BASE + '/api/discover/scan', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({timeout: deepScan ? 10 : 5, port_scan: deepScan}),
+                    body: JSON.stringify({subnet, timeout: deepScan ? 10 : 5, port_scan: deepScan}),
                 });
                 const data = await res.json();
                 const all = [...data.discovered, ...data.port_scan];

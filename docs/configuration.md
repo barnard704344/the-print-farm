@@ -62,6 +62,27 @@ around the error by making `.git` or the application tree world-writable.
 The live configuration is stored at `/etc/the-print-farm/config.yaml` with mode
 `0600`; `config/config.yaml` remains as a symlink for compatibility.
 
+## Printer Discovery Networks
+
+Add Printer and offline-printer Reconnect scans use networks attached directly
+to the server by default. Configure routed printer VLANs when the printers are
+on another network:
+
+```yaml
+discovery:
+  scan_subnets:
+    - 10.136.32.0/21
+```
+
+IPv4 networks from `/21` through `/24` are accepted. Reconnect also scans the
+`/24` containing the printer's saved address. Staff can temporarily override
+the configured defaults with the **Subnet to scan** field in either workflow.
+
+On BambuLab networks with multiple printers, the reconnect scan excludes IPs
+already assigned to another configured printer. Other port-scan candidates are
+shown only after the saved LAN access code succeeds and a report arrives for
+the saved serial number.
+
 ## API Credentials
 
 The server maintains two separate credentials:
