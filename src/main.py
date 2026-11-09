@@ -422,7 +422,7 @@ def cmd_run(args, config: dict):
     # Virtual printers — start first so DHCP IPs are known before web app init
     vp_manager = VirtualPrinterManager()
     uploads_dir = queue_cfg.get("upload_dir", "./uploads")
-    vp_manager.start_all(printers, farm, queue, uploads_dir)
+    vp_manager.start_all(printers, farm, queue, uploads_dir, file_library=library)
 
     app = create_app(farm, queue, camera_manager=camera_mgr,
                      admin_api_key=web_cfg.get("admin_api_key", ""),

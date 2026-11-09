@@ -829,6 +829,11 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         if not file_library:
             return _error("Library not available", 500)
         result = file_library.delete_file(file_id)
+        if not result.get("ok"):
+            message = result.get("error", "Could not delete file")
+            if message == "File not found":
+                return _error(message, 404, "FILE_NOT_FOUND")
+            return _error(message, 409, "FILE_IN_USE")
         return _ok(result)
 
     @bp.route("/library/files/<int:file_id>/print", methods=["POST"])

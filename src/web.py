@@ -1691,13 +1691,25 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         ok = job_queue.delete_job(job_id)
         # Optionally delete the matching library file
         delete_lib = request.args.get("delete_library", "").lower() == "true"
-        if ok and delete_lib and file_library and job:
-            file_path = job.get("file_path", "")
-            if file_path:
-                lib_file = file_library.find_by_path(file_path)
-                if lib_file:
-                    file_library.delete_file(lib_file["id"])
-        return jsonify({"ok": ok})
+        library_kept = []
+        if ok and delete_lib and job:
+            library_kept = _delete_library_copy(job)
+        return jsonify({"ok": ok, "library_kept": library_kept})
+
+    def _delete_library_copy(job):
+        """Delete the library entry for a deleted job's file.
+
+        Returns a list with the reason when the library refuses, e.g. because
+        another queued or printing job still uses the file.
+        """
+        file_path = job.get("file_path", "")
+        lib_file = file_library.find_by_path(file_path) if (file_library and file_path) else None
+        if not lib_file:
+            return []
+        result = file_library.delete_file(lib_file["id"])
+        if result.get("ok"):
+            return []
+        return [{"name": lib_file.get("original_name", ""), "error": result.get("error", "Could not delete")}]
 
     # ── File Library API ──────────────────────────────────
 
@@ -1711,6 +1723,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         if not ids or not isinstance(ids, list):
             return jsonify({"ok": False, "error": "No ids provided"}), 400
         deleted = 0
+        library_kept = []
         for job_id in ids[:1000]:
             try:
                 job_id = int(job_id)
@@ -1724,13 +1737,9 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             ok = job_queue.delete_job(job_id)
             if ok:
                 deleted += 1
-                if delete_lib and file_library and job:
-                    file_path = job.get("file_path", "")
-                    if file_path:
-                        lib_file = file_library.find_by_path(file_path)
-                        if lib_file:
-                            file_library.delete_file(lib_file["id"])
-        return jsonify({"ok": True, "deleted": deleted})
+                if delete_lib and job:
+                    library_kept.extend(_delete_library_copy(job))
+        return jsonify({"ok": True, "deleted": deleted, "library_kept": library_kept})
 
     @app.route(prefix + "/api/library/files")
     @app.route("/api/library/files")

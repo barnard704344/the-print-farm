@@ -88,6 +88,19 @@ changes to The Print Farm.
 
 ### Fixed
 
+- **Deleting a job no longer deletes a file another queued job needs.**
+  Reprints, per-printer copies and repeat OrcaSlicer uploads of the same model
+  share one file. Deleting one of those jobs used to remove the file if it
+  wasn't in the library, so the remaining job failed when sent. The file is
+  now kept while the library or any queued, uploading or printing job uses it.
+- **OrcaSlicer virtual-printer uploads go into the File Library straight away**
+  instead of only after a service restart. Repeat uploads of the same model are
+  added once.
+- **Job delete with "also delete from library" reports library files it had to
+  keep** because other jobs still use them, instead of silently claiming
+  success.
+- **API v1 `DELETE /library/files/<id>`** now returns 409 when the file is in
+  use and 404 when it doesn't exist, instead of 200 with an error inside.
 - **Print from library sent to the chosen printer.** It used to ignore the
   printer you picked and only queued the file.
 - **Folder names with quotes** no longer break that folder's buttons. Folder

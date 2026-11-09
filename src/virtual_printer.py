@@ -858,7 +858,7 @@ class VirtualFTPServer:
 
     def __init__(self, name: str, printer_name: str, virtual_ip: str,
                  access_code: str, certfile: str, keyfile: str,
-                 uploads_dir: str, job_queue):
+                 uploads_dir: str, job_queue, file_library=None):
         self.name = name
         self.printer_name = printer_name
         self.virtual_ip = virtual_ip
@@ -867,9 +867,32 @@ class VirtualFTPServer:
         self.keyfile = keyfile
         self.uploads_dir = uploads_dir
         self.job_queue = job_queue
+        self.file_library = file_library
         self.stopped = False
         self._ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
         self._server_sock: Optional[socket.socket] = None
+
+    def _add_to_library(self, path: str, filename: str, meta: dict):
+        """Put an OrcaSlicer upload in the File Library straight away.
+
+        Uploads are named by content hash, so sending the same model twice
+        reuses one file; it is added to the library only once.
+        """
+        if not self.file_library:
+            return
+        try:
+            if self.file_library.find_by_path(path):
+                return
+            self.file_library.add_file(
+                original_name=filename,
+                stored_name=os.path.basename(path),
+                file_path=path,
+                file_size=os.path.getsize(path),
+                uploaded_by=f"orca_virtual/{self.printer_name}",
+                metadata=meta,
+            )
+        except Exception as e:
+            logger.warning(f"[{self.name}] Failed to add upload to the library: {e}")
 
     def receive_file(self, filename: str, temp_path: str, size: int):
         """Save uploaded file and add it to the job queue."""
@@ -907,6 +930,7 @@ class VirtualFTPServer:
                 print_time_seconds=meta.get("print_time_seconds"),
             )
             logger.info(f"[{self.name}] Queued job from Orca upload: {filename}")
+            self._add_to_library(dest, filename, meta)
         except Exception as e:
             logger.error(f"[{self.name}] Failed to queue job: {e}")
             try:
@@ -1056,7 +1080,8 @@ class VirtualPrinterServer:
     """
 
     def __init__(self, printer_cfg: dict, farm_manager, job_queue,
-                 uploads_dir: str, cert_dir: str = "config/certs"):
+                 uploads_dir: str, cert_dir: str = "config/certs", file_library=None):
+        self._library = file_library
         self.printer_name = printer_cfg["name"]
         self.virtual_nic = printer_cfg.get("virtual_nic", "eth0")
         self.serial = printer_cfg.get("serial", "")
@@ -1114,6 +1139,7 @@ class VirtualPrinterServer:
             keyfile=keyfile,
             uploads_dir=self._uploads,
             job_queue=self._jq,
+            file_library=self._library,
         )
         t_ftp = threading.Thread(
             target=self._ftp.serve_forever,
@@ -1185,14 +1211,14 @@ class VirtualPrinterManager:
         self._servers: list = []
 
     def start_all(self, printer_configs: list, farm_manager, job_queue,
-                  uploads_dir: str, cert_dir: str = "config/certs"):
+                  uploads_dir: str, cert_dir: str = "config/certs", file_library=None):
         for cfg in printer_configs:
             if cfg.get("type", "bambulab").lower() != "bambulab":
                 continue
             if cfg.get("virtual_printer") is False:
                 continue  # Opt-out via virtual_printer: false
             srv = VirtualPrinterServer(cfg, farm_manager, job_queue,
-                                       uploads_dir, cert_dir)
+                                       uploads_dir, cert_dir, file_library=file_library)
             srv.start()
             self._servers.append(srv)
         if not self._servers:

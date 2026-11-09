@@ -345,21 +345,29 @@ class JobQueue:
             conn.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
             conn.commit()
 
-            # Only remove file if it's not in the file library
+            # Keep the file while the library or another live job still uses it.
+            # Reprints, per-printer copies and repeat OrcaSlicer uploads of the
+            # same model all share one file on disk.
             file_path = job.get("file_path", "")
-            in_library = False
+            still_used = False
             if file_path:
-                try:
-                    row = conn.execute(
-                        "SELECT id FROM files WHERE file_path = ? LIMIT 1", (file_path,)
-                    ).fetchone()
-                    in_library = row is not None
-                except Exception:
-                    pass  # files table may not exist yet
+                still_used = conn.execute(
+                    """SELECT 1 FROM jobs
+                       WHERE file_path = ? AND status IN ('queued', 'uploading', 'printing')
+                       LIMIT 1""",
+                    (file_path,),
+                ).fetchone() is not None
+                if not still_used:
+                    try:
+                        still_used = conn.execute(
+                            "SELECT 1 FROM files WHERE file_path = ? LIMIT 1", (file_path,)
+                        ).fetchone() is not None
+                    except Exception:
+                        pass  # files table may not exist yet
 
             conn.close()
 
-            if file_path and not in_library and os.path.exists(file_path):
+            if file_path and not still_used and os.path.exists(file_path):
                 try:
                     os.remove(file_path)
                 except OSError:

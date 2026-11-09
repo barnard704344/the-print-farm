@@ -7096,7 +7096,9 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ ids, delete_library: deleteLib })
                 });
-                if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || 'Bulk delete failed'); return; }
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) { alert(data.error || 'Bulk delete failed'); return; }
+                reportLibraryKept(data.library_kept);
             } catch (e) { alert('Network error during bulk delete'); return; }
             clearBulkSelection();
             refreshJobs();
@@ -7283,6 +7285,13 @@
             }
         }
 
+        // The library keeps a file while another queued or printing job uses it.
+        function reportLibraryKept(kept) {
+            if (!Array.isArray(kept) || !kept.length) return;
+            const names = kept.map(k => k.name).filter(Boolean).slice(0, 3).join(', ');
+            showToast(`${kept.length} library file${kept.length === 1 ? ' was' : 's were'} kept because other jobs still use ${kept.length === 1 ? 'it' : 'them'}${names ? `: ${names}` : ''}`, 'error');
+        }
+
         async function jobAction(id, action) {
             if (action === 'delete') {
                 if (!confirm('Delete this job?')) return;
@@ -7290,11 +7299,12 @@
                 const qs = deleteLib ? '?delete_library=true' : '';
                 try {
                     const res = await fetch(`${BASE}/api/jobs/${id}/delete${qs}`, { method: 'DELETE' });
+                    const data = await res.json().catch(() => ({}));
                     if (!res.ok) {
-                        const err = await res.json().catch(() => ({}));
-                        alert(err.error || 'Failed to delete job');
+                        alert(data.error || 'Failed to delete job');
                         return;
                     }
+                    reportLibraryKept(data.library_kept);
                 } catch (e) {
                     alert('Network error deleting job');
                     return;
