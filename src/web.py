@@ -1836,9 +1836,24 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
     @login_required
     @print_access_required
     def library_print_file(file_id):
-        """Create a new job from a library file."""
+        """Create a job from a library file, optionally sending it straight to a printer."""
         if not file_library:
             return jsonify({"error": "Library not available"}), 500
+        data = request.get_json(silent=True) or {}
+        printer = str(data.get("printer_name") or "").strip()
+        try:
+            copies = int(data.get("copies", 1))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Copies must be a number"}), 400
+        if not 1 <= copies <= 100:
+            return jsonify({"error": "Copies must be between 1 and 100"}), 400
+        if printer and not (is_admin() or _check_admin_api_key()) and _is_staff_only_printer(printer):
+            return jsonify({"error": f"Printer '{printer}' is restricted to staff"}), 403
+        if printer:
+            availability_error = _printer_availability_error(printer)
+            if availability_error:
+                return jsonify({"error": availability_error[0]}), availability_error[1]
+
         lib_file = file_library.get_file(file_id)
         if not lib_file:
             return jsonify({"error": "File not found"}), 404
@@ -1849,7 +1864,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             filename=lib_file["stored_name"],
             original_name=lib_file["original_name"],
             file_path=lib_file["file_path"],
-            copies=1,
+            copies=copies,
             priority=0,
             notes=f"Reprinted from library (file #{file_id})",
             submitted_by=session.get("username", ""),
@@ -1864,7 +1879,50 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             f"Job #{new_job_id} submitted from library by {session.get('username', 'unknown')}.\nFile: {lib_file['original_name']}",
         )
 
-        return jsonify({"ok": True, "job_id": new_job_id})
+        sent_to = None
+        if printer and job_queue.assign_job(new_job_id, printer):
+            threading.Thread(target=_send_job_to_printer, args=(new_job_id, printer), daemon=True).start()
+            sent_to = printer
+        return jsonify({"ok": True, "job_id": new_job_id, "printer_name": sent_to})
+
+    def _library_file_ids(data):
+        ids = data.get("file_ids")
+        if not isinstance(ids, list) or not ids or len(ids) > 500:
+            return None
+        try:
+            return [int(i) for i in ids]
+        except (TypeError, ValueError):
+            return None
+
+    @app.route(prefix + "/api/library/files/bulk-move", methods=["POST"])
+    @app.route("/api/library/files/bulk-move", methods=["POST"])
+    @admin_required
+    def library_bulk_move_files():
+        if not file_library:
+            return jsonify({"error": "Library not available"}), 500
+        data = request.get_json(silent=True) or {}
+        ids = _library_file_ids(data)
+        if ids is None:
+            return jsonify({"ok": False, "error": "file_ids must be a list of 1-500 file ids"}), 400
+        folder_id = data.get("folder_id")
+        if folder_id is not None:
+            try:
+                folder_id = int(folder_id)
+            except (TypeError, ValueError):
+                return jsonify({"ok": False, "error": "Invalid folder_id"}), 400
+        result = file_library.move_files(ids, folder_id)
+        return jsonify(result), (200 if result.get("ok") else 400)
+
+    @app.route(prefix + "/api/library/files/bulk-delete", methods=["POST"])
+    @app.route("/api/library/files/bulk-delete", methods=["POST"])
+    @admin_required
+    def library_bulk_delete_files():
+        if not file_library:
+            return jsonify({"error": "Library not available"}), 500
+        ids = _library_file_ids(request.get_json(silent=True) or {})
+        if ids is None:
+            return jsonify({"ok": False, "error": "file_ids must be a list of 1-500 file ids"}), 400
+        return jsonify(file_library.delete_files(ids))
 
     @app.route(prefix + "/api/library/folders", methods=["POST"])
     @app.route("/api/library/folders", methods=["POST"])

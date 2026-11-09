@@ -111,9 +111,11 @@ class FileLibrary:
         return False
 
     def create_folder(self, name: str, parent_id: Optional[int] = None) -> dict:
-        name = name.strip()
+        name = " ".join(str(name or "").split())
         if not name:
             return {"ok": False, "error": "Folder name is required"}
+        if len(name) > 100:
+            return {"ok": False, "error": "Folder name must be 100 characters or fewer"}
         with self._lock:
             conn = self._get_conn()
             now = datetime.now(timezone.utc).isoformat()
@@ -134,9 +136,11 @@ class FileLibrary:
                 return {"ok": False, "error": "Folder already exists"}
 
     def rename_folder(self, folder_id: int, name: str) -> dict:
-        name = name.strip()
+        name = " ".join(str(name or "").split())
         if not name:
             return {"ok": False, "error": "Folder name is required"}
+        if len(name) > 100:
+            return {"ok": False, "error": "Folder name must be 100 characters or fewer"}
         with self._lock:
             conn = self._get_conn()
             try:
@@ -303,6 +307,39 @@ class FileLibrary:
             conn.commit()
             conn.close()
             return {"ok": True}
+
+    def move_files(self, file_ids: list, folder_id: Optional[int]) -> dict:
+        """Move several files into one folder (None = library root)."""
+        ids = sorted({int(i) for i in file_ids})
+        if not ids:
+            return {"ok": False, "error": "No files selected"}
+        with self._lock:
+            conn = self._get_conn()
+            if folder_id is not None and not self._folder_exists(conn, folder_id):
+                conn.close()
+                return {"ok": False, "error": "Destination folder not found"}
+            marks = ",".join("?" * len(ids))
+            cur = conn.execute(
+                f"UPDATE files SET folder_id = ? WHERE id IN ({marks})",  # nosec B608 - placeholders only
+                [folder_id, *ids],
+            )
+            conn.commit()
+            conn.close()
+            return {"ok": True, "moved": cur.rowcount}
+
+    def delete_files(self, file_ids: list) -> dict:
+        """Delete several files; files used by active or queued jobs are skipped."""
+        ids = sorted({int(i) for i in file_ids})
+        if not ids:
+            return {"ok": False, "error": "No files selected"}
+        deleted, skipped = 0, []
+        for file_id in ids:
+            result = self.delete_file(file_id)
+            if result.get("ok"):
+                deleted += 1
+            else:
+                skipped.append({"id": file_id, "error": result.get("error", "Could not delete")})
+        return {"ok": deleted > 0 or not skipped, "deleted": deleted, "skipped": skipped}
 
     def delete_file(self, file_id: int) -> dict:
         with self._lock:

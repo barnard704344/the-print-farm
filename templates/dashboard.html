@@ -2406,19 +2406,44 @@
 
         <!-- File Library Tab -->
         <div class="tab-content" id="tab-library">
-            <div class="library-breadcrumb" id="libraryBreadcrumb">
-                <a onclick="navigateFolder(null)">Library</a>
-            </div>
-            <div class="library-toolbar">
-                <input type="text" id="librarySearch" placeholder="Search files..." oninput="debounceLibrarySearch()">
-                <div class="library-toolbar-actions">
-                    <span class="library-drop-pill library-drop-target" id="libraryRootDropHint" title="Drop files/folders here to move to root"
-                        ondragover="onLibraryDragOver(event)" ondragleave="onLibraryDragLeave(event)" ondrop="onLibraryDropToRoot(event)">Drop to Root</span>
-                    <button class="btn" onclick="showNewFolderDialog()">New Folder</button>
-                </div>
-            </div>
-            <div class="library-grid" id="libraryGrid">
-                <div class="library-empty">Loading...</div>
+            <div class="lib-layout">
+                <aside class="lib-sidebar" aria-label="Library folders">
+                    <div class="lib-sidebar-head">
+                        <span>Folders</span>
+                        <button type="button" class="folder-action-btn admin-only" onclick="showNewFolderDialog()" title="New folder in the current folder" aria-label="New folder">+</button>
+                    </div>
+                    <nav class="lib-tree" id="libraryTree"></nav>
+                    <p class="lib-sidebar-hint admin-only">Drag files or folders onto a folder to move them.</p>
+                </aside>
+                <section class="lib-main">
+                    <div class="library-breadcrumb" id="libraryBreadcrumb"></div>
+                    <div class="library-toolbar">
+                        <input type="search" id="librarySearch" placeholder="Search all files…" aria-label="Search all files" oninput="debounceLibrarySearch()">
+                        <div class="library-toolbar-actions">
+                            <label class="lib-sort">
+                                <span>Sort</span>
+                                <select id="librarySort" onchange="setLibrarySort(this.value)" aria-label="Sort files by">
+                                    <option value="created_at">Date added</option>
+                                    <option value="name">Name</option>
+                                    <option value="size">Size</option>
+                                    <option value="print_time">Print time</option>
+                                    <option value="last_printed_at">Last printed</option>
+                                    <option value="print_count">Times printed</option>
+                                </select>
+                            </label>
+                            <button type="button" class="btn lib-dir-btn" id="librarySortDir" onclick="toggleLibrarySortDir()" aria-label="Reverse sort order">↓</button>
+                            <div class="lib-view-toggle" role="group" aria-label="Layout">
+                                <button type="button" data-view="grid" onclick="setLibraryView('grid')">Grid</button>
+                                <button type="button" data-view="list" onclick="setLibraryView('list')">List</button>
+                            </div>
+                            <button class="btn admin-only" onclick="showNewFolderDialog()">New Folder</button>
+                        </div>
+                    </div>
+                    <div class="lib-selection-bar" id="librarySelectionBar" hidden></div>
+                    <div class="library-grid" id="libraryGrid">
+                        <div class="library-empty">Loading...</div>
+                    </div>
+                </section>
             </div>
         </div>
         <!-- OrcaSlicer Setup Tab -->
@@ -3018,13 +3043,34 @@
             </div>
             <div style="display:flex; flex-direction:column; gap:10px;">
                 <div id="libraryMoveModalContext" style="font-size:12px;color:var(--text-muted);"></div>
-                <select id="libraryMoveSelect"
-                    style="width:100%; padding:9px 10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:14px;">
-                </select>
+                <div class="lib-move-list" id="libraryMoveList" role="list"></div>
                 <div id="libraryMoveModalError" style="color:var(--danger); font-size:12px; min-height:16px;"></div>
                 <div style="display:flex; justify-content:flex-end; gap:8px;">
                     <button class="btn" onclick="closeLibraryMoveModal()">Cancel</button>
-                    <button class="btn btn-success" onclick="submitLibraryMoveModal()">Move</button>
+                    <button class="btn btn-success" id="libraryMoveSubmit" onclick="submitLibraryMoveModal()" disabled>Move</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Library Print Modal -->
+    <div class="modal-overlay" id="libraryPrintOverlay" style="display:none" onclick="if(event.target===this)closeLibraryPrintDialog()">
+        <div class="modal" style="max-width:480px;" role="dialog" aria-labelledby="libraryPrintTitle">
+            <div class="modal-header">
+                <h2 style="font-size:18px;" id="libraryPrintTitle">Print file</h2>
+                <button class="modal-close" onclick="closeLibraryPrintDialog()" aria-label="Close">&times;</button>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:12px;">
+                <div id="libraryPrintContext" style="font-size:12px;color:var(--text-muted);word-break:break-word;"></div>
+                <div class="lib-print-list" id="libraryPrintPrinters" role="radiogroup" aria-label="Where to print"></div>
+                <label style="display:flex; align-items:center; gap:8px; font-size:13px;">
+                    Copies
+                    <input type="number" id="libraryPrintCopies" min="1" max="100" value="1" class="temp-input" style="width:70px; padding:6px;">
+                </label>
+                <div id="libraryPrintError" style="color:var(--danger); font-size:12px; min-height:16px;"></div>
+                <div style="display:flex; justify-content:flex-end; gap:8px;">
+                    <button class="btn" onclick="closeLibraryPrintDialog()">Cancel</button>
+                    <button class="btn btn-success" id="libraryPrintSubmit" onclick="submitLibraryPrintDialog()">Print</button>
                 </div>
             </div>
         </div>
@@ -3484,6 +3530,162 @@
             border-left: 3px solid var(--info); box-shadow: 0 10px 30px rgba(0,0,0,0.25);
             transition: opacity 0.3s, transform 0.3s;
         }
+        /* ── File Library layout ── */
+        .lib-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 20px; align-items: start; }
+        .lib-sidebar {
+            position: sticky; top: 12px; max-height: calc(100vh - 120px); overflow-y: auto;
+            background: var(--surface); border-radius: 10px; padding: 10px 8px; box-shadow: var(--shadow);
+        }
+        .lib-sidebar-head {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 2px 6px 8px; font-size: 11px; font-weight: 600; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.6px;
+        }
+        .lib-sidebar-hint { font-size: 11px; color: var(--text-muted); padding: 10px 6px 2px; }
+        body.is-admin .lib-sidebar-hint.admin-only { display: block; }
+        .lib-tree-item {
+            display: flex; align-items: center; gap: 2px; border-radius: 6px;
+            padding-left: calc(var(--depth, 0) * 14px); border: 1px solid transparent;
+        }
+        .lib-tree-item:hover { background: var(--surface-soft); }
+        .lib-tree-item.active { background: var(--accent-dim); }
+        .lib-tree-item.active .lib-tree-name { color: var(--accent); font-weight: 600; }
+        .lib-tree-item.dragging { opacity: 0.45; }
+        .lib-tree-caret, .lib-tree-caret-spacer { flex: 0 0 20px; width: 20px; height: 26px; }
+        .lib-tree-caret {
+            border: 0; background: none; color: var(--text-muted); cursor: pointer; font-size: 11px; border-radius: 4px;
+        }
+        .lib-tree-caret:hover { color: var(--text); }
+        .lib-tree-name {
+            flex: 1; min-width: 0; text-align: left; border: 0; background: none; color: var(--text);
+            font: inherit; font-size: 13px; padding: 5px 6px 5px 2px; cursor: pointer;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        #tab-library .drag-over {
+            border-color: var(--accent) !important; background: var(--accent-dim) !important;
+            box-shadow: 0 0 0 2px var(--accent-glow) inset;
+        }
+        .library-breadcrumb .lib-crumb-current { color: var(--text); font-weight: 500; }
+        .library-breadcrumb a[data-drop-folder] { padding: 2px 4px; border-radius: 4px; border: 1px solid transparent; }
+        .library-toolbar input[type="search"] {
+            flex: 1; min-width: 200px; padding: 8px 12px; border-radius: 8px;
+            border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 13px;
+        }
+        .lib-sort { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
+        .lib-sort select {
+            padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border);
+            background: var(--surface); color: var(--text); font-size: 12px;
+        }
+        .lib-dir-btn { padding: 5px 10px; }
+        .lib-view-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+        .lib-view-toggle button {
+            border: 0; background: var(--bg); color: var(--text-muted); padding: 6px 12px; font-size: 12px; cursor: pointer;
+        }
+        .lib-view-toggle button + button { border-left: 1px solid var(--border); }
+        .lib-view-toggle button.active { background: var(--accent-dim); color: var(--accent); font-weight: 600; }
+
+        .lib-selection-bar {
+            display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+            padding: 8px 12px; margin-bottom: 14px; border-radius: 8px;
+            background: var(--surface); border: 1px solid var(--line-soft); font-size: 13px;
+        }
+        .lib-selection-bar[hidden] { display: none; }
+        .lib-check-all { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+        .lib-sel-hint { flex: 1; font-size: 12px; color: var(--text-muted); }
+        .lib-sel-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+        .lib-check-all input, .lib-check input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
+
+        .library-card.lib-file .lib-check {
+            position: absolute; top: 8px; left: 8px; z-index: 2;
+            background: color-mix(in srgb, var(--card) 85%, transparent); border-radius: 6px;
+            padding: 4px; display: flex; opacity: 0; transition: opacity 0.15s;
+        }
+        .library-card.lib-file:hover .lib-check, .library-card.lib-file.selected .lib-check,
+        .library-card.lib-file .lib-check:focus-within, .lib-has-selection .library-card.lib-file .lib-check { opacity: 1; }
+        @media (hover: none) { .library-card.lib-file .lib-check { opacity: 1; } }
+        .library-card.selected { box-shadow: 0 0 0 2px var(--accent), var(--shadow); }
+        .library-card.folder-card { border: 1px solid transparent; }
+        .lib-row-loc { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* List view */
+        .library-list { display: flex; flex-direction: column; background: var(--surface); border-radius: 10px; box-shadow: var(--shadow); overflow: hidden; }
+        .lib-list-head, .lib-row {
+            display: grid; align-items: center; gap: 10px;
+            grid-template-columns: 28px 40px minmax(160px, 1fr) 90px 90px 80px 100px auto;
+            padding: 6px 12px;
+        }
+        .lib-list-head { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 1px solid var(--line-soft); }
+        .lib-row { font-size: 13px; border-bottom: 1px solid var(--line-soft); border-left: 2px solid transparent; }
+        .lib-row:last-child { border-bottom: 0; }
+        .lib-row:hover { background: var(--surface-soft); }
+        .lib-row.selected { background: var(--accent-dim); border-left-color: var(--accent); }
+        .lib-row.dragging { opacity: 0.45; }
+        .lib-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+        .lib-row .lib-row-name { color: var(--text); font-weight: 500; white-space: normal; }
+        .lib-row .lib-row-name .lib-row-loc { display: block; font-weight: 400; margin: 0; }
+        .lib-row-thumb {
+            width: 40px; height: 40px; border-radius: 6px; background: var(--bg); cursor: pointer;
+            display: flex; align-items: center; justify-content: center; overflow: hidden;
+        }
+        .lib-row-thumb img { width: 100%; height: 100%; object-fit: contain; }
+        .lib-row-icon { font-size: 22px; text-align: center; }
+        .lib-link { border: 0; background: none; padding: 0; text-align: left; font: inherit; cursor: pointer; color: var(--text); }
+        .lib-link:hover { color: var(--accent); }
+        .lib-row-actions { display: flex; gap: 4px; justify-content: flex-end; overflow: visible !important; }
+        .lib-row-actions .btn { font-size: 11px; padding: 3px 8px; }
+        .lib-row-folder .library-folder-actions { opacity: 0; }
+        .lib-row-folder:hover .library-folder-actions, .lib-row-folder:focus-within .library-folder-actions { opacity: 1; }
+        .library-card.folder-card:focus-within .library-folder-actions { opacity: 1; }
+        .lib-drag-ghost {
+            position: fixed; top: -100px; left: -100px; padding: 6px 12px; border-radius: 6px;
+            background: var(--accent); color: var(--brand-ink); font-size: 13px; font-weight: 600;
+        }
+
+        /* Move picker */
+        .lib-move-list { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: 4px; border: 1px solid var(--border); border-radius: 8px; }
+        .lib-move-option {
+            display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+            padding: 7px 10px 7px calc(10px + var(--depth, 0) * 16px);
+            border: 0; border-radius: 6px; background: none; color: var(--text); font: inherit; font-size: 13px; cursor: pointer;
+        }
+        .lib-move-option:hover:not(:disabled) { background: var(--surface-soft); }
+        .lib-move-option.chosen { background: var(--accent-dim); color: var(--accent); font-weight: 600; }
+        .lib-move-option:disabled { opacity: 0.45; cursor: not-allowed; }
+        .lib-move-current { margin-left: auto; font-size: 11px; color: var(--text-muted); font-weight: 400; }
+
+        /* Print dialog */
+        .lib-print-list { display: flex; flex-direction: column; gap: 4px; max-height: 320px; overflow-y: auto; }
+        .lib-print-option {
+            display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 10px;
+            padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-size: 13px;
+        }
+        .lib-print-option:has(input:checked) { border-color: var(--accent); background: var(--accent-dim); }
+        .lib-print-option.disabled { opacity: 0.5; cursor: not-allowed; }
+        .lib-print-option input { accent-color: var(--accent); }
+        .lib-print-note { font-size: 11px; color: var(--text-muted); text-align: right; }
+        .lib-folder-grid {
+            grid-column: 1 / -1; display: grid; gap: 10px;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        }
+        .lib-folder-grid .library-card.folder-card { padding: 12px 14px; min-height: 0; }
+        .lib-folder-grid .folder-icon { font-size: 22px !important; }
+        .lib-print-ready { color: var(--success); font-weight: 600; }
+        .lib-print-multi, .lib-print-loading { font-size: 12px; color: var(--text-muted); padding: 4px 2px; }
+
+        .library-toolbar-actions { flex-wrap: wrap; }
+        @media (max-width: 768px) {
+            .lib-layout { grid-template-columns: 1fr; gap: 12px; }
+            .lib-main { min-width: 0; }
+            .library-toolbar input[type="search"] { flex-basis: 100%; min-width: 0; }
+            .library-toolbar-actions { width: 100%; }
+            .lib-sel-hint { display: none; }
+            .lib-sidebar { position: static; max-height: 220px; }
+            .lib-list-head { display: none; }
+            .lib-row { grid-template-columns: 28px 40px minmax(0, 1fr) auto; }
+            .lib-row > span:nth-child(4), .lib-row > span:nth-child(5), .lib-row > span:nth-child(6), .lib-row > span:nth-child(7) { display: none; }
+            .lib-row-actions { flex-wrap: wrap; }
+        }
+
         .toast-success { border-left-color: var(--success); }
         .toast-error { border-left-color: var(--danger); }
         .toast.leaving { opacity: 0; transform: translateY(6px); }
@@ -4476,6 +4678,12 @@
         }
 
         checkAuth().then(() => {
+            // A #library or #library/<folderId> link opens the File Library there.
+            const libraryFolder = libraryFolderFromHash();
+            if (libraryFolder !== undefined) {
+                libraryCurrentFolder = libraryFolder;
+                document.querySelector('.tab[data-tab="library"]')?.click();
+            }
             // If not authenticated and AD is enabled, attempt silent SSO via Kerberos
             if (!isAuthenticated && adEnabled) {
                 attemptSSO();
@@ -4624,7 +4832,13 @@
                 tab.classList.add('active');
                 document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
                 if (tab.dataset.tab === 'settings') { loadAuthConfig(); loadADConfig(); loadStudentAccessConfig(); populateObicoPrinterDropdown(); loadSpoolmanConfig(); loadPoolConfig(); loadNotificationConfig(); loadUiConfig(); }
-                if (tab.dataset.tab === 'library') refreshLibrary();
+                if (tab.dataset.tab === 'library') {
+                    const hash = libraryHashFor(libraryCurrentFolder);
+                    if (location.hash !== hash) history.replaceState(null, '', location.pathname + location.search + hash);
+                    refreshLibrary();
+                } else if (location.hash.startsWith('#library')) {
+                    history.replaceState(null, '', location.pathname + location.search);
+                }
             });
         });
 
@@ -7237,214 +7451,721 @@
         refreshCameraStatus();
 
         // ── File Library ─────────────────────────────────────
-        let libraryCurrentFolder = null;   // null = root
-        let libraryFolderPath = [];        // [{id, name}, ...]
+        // Folder tree on the left, files on the right. Everything is driven by
+        // data-lib-* attributes and one set of delegated listeners, so file and
+        // folder names never end up inside inline JavaScript.
+        const LIB_DRAG_TYPE = 'application/x-printfarm-library';
+
+        function libStore(key, fallback) {
+            try { return localStorage.getItem(key) ?? fallback; } catch (_) { return fallback; }
+        }
+        function libSave(key, value) {
+            try { localStorage.setItem(key, value); } catch (_) {}
+        }
+
+        let libraryCurrentFolder = null;   // null = library root
+        let libraryAllFolders = [];        // flat [{id, name, parent_id}]
+        let libraryFolders = [];           // sub-folders of the current folder
+        let libraryFiles = [];             // files currently listed (folder or search)
         let librarySearchTimer = null;
         let libraryLoaded = false;
-        let libraryAllFolders = [];
         let libraryFolderModalState = null;
-        let libraryMoveModalState = null;
-        let libraryDragState = null;
+        let libraryMovePicker = null;      // {disabled:Set, currentId, onConfirm, target}
+        let libraryPrintState = null;      // {fileIds:[...]}
+        let libraryDrag = null;            // {type:'files', ids:[...]} | {type:'folder', id}
+        let librarySelected = new Set();
+        let libraryLastClicked = null;
+        let libraryView = libStore('library-view', 'grid');
+        let librarySort = libStore('library-sort', 'created_at');
+        let librarySortDir = libStore('library-sort-dir', 'desc');
+        let libraryExpanded = new Set((() => {
+            try { return JSON.parse(libStore('library-expanded', '[]')).map(Number); } catch (_) { return []; }
+        })());
+
+        function libraryCanManage() { return isAdmin; }
+        function libraryCanSelect() { return isAdmin || printAllowed; }
+        function librarySearchQuery() { return document.getElementById('librarySearch').value.trim(); }
 
         function debounceLibrarySearch() {
             clearTimeout(librarySearchTimer);
             librarySearchTimer = setTimeout(() => refreshLibrary(), 300);
         }
 
-        async function refreshLibraryFolderTree() {
-            const res = await fetch(BASE + '/api/library/folders/tree');
-            const data = await res.json();
-            libraryAllFolders = data.folders || [];
+        // ── Folder tree helpers ──
+        function libraryFolderById(id) {
+            return libraryAllFolders.find(f => f.id === id) || null;
         }
 
-        function getFolderChildrenMap() {
-            const children = new Map();
-            libraryAllFolders.forEach(f => {
-                const pid = f.parent_id == null ? 'root' : String(f.parent_id);
-                if (!children.has(pid)) children.set(pid, []);
-                children.get(pid).push(f);
-            });
-            for (const list of children.values()) {
-                list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+        function libraryChildren(parentId) {
+            return libraryAllFolders
+                .filter(f => (f.parent_id ?? null) === parentId)
+                .sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true }));
+        }
+
+        function libraryFolderPath(folderId) {
+            const path = [];
+            const seen = new Set();
+            let f = libraryFolderById(folderId);
+            while (f && !seen.has(f.id)) {
+                seen.add(f.id);
+                path.unshift(f);
+                f = f.parent_id == null ? null : libraryFolderById(f.parent_id);
             }
-            return children;
+            return path;
         }
 
-        function flattenFolderTree() {
-            const out = [];
-            const children = getFolderChildrenMap();
-            const walk = (parentId, depth) => {
-                const key = parentId == null ? 'root' : String(parentId);
-                const list = children.get(key) || [];
-                for (const f of list) {
-                    out.push({ ...f, depth });
-                    walk(f.id, depth + 1);
+        function libraryDescendants(folderId) {
+            const out = new Set();
+            const stack = [folderId];
+            while (stack.length) {
+                const id = stack.pop();
+                for (const child of libraryChildren(id)) {
+                    if (!out.has(child.id)) { out.add(child.id); stack.push(child.id); }
                 }
-            };
-            walk(null, 0);
+            }
             return out;
         }
 
-        function getFolderDescendants(folderId) {
-            const children = getFolderChildrenMap();
-            const descendants = new Set();
-            const stack = [folderId];
-            while (stack.length) {
-                const current = stack.pop();
-                const list = children.get(String(current)) || [];
-                for (const child of list) {
-                    if (!descendants.has(child.id)) {
-                        descendants.add(child.id);
-                        stack.push(child.id);
-                    }
-                }
-            }
-            return descendants;
+        // ── URL state: #library or #library/<folderId> ──
+        function libraryHashFor(folderId) {
+            return folderId == null ? '#library' : `#library/${folderId}`;
         }
 
+        function libraryFolderFromHash() {
+            const m = /^#library(?:\/(\d+))?$/.exec(location.hash);
+            if (!m) return undefined;
+            return m[1] ? Number(m[1]) : null;
+        }
+
+        window.addEventListener('popstate', () => {
+            const folderId = libraryFolderFromHash();
+            if (folderId === undefined) return;
+            const tab = document.querySelector('.tab[data-tab="library"]');
+            if (tab && !tab.classList.contains('active')) tab.click();
+            navigateFolder(folderId, { push: false });
+        });
+
+        function navigateFolder(folderId, { push = true } = {}) {
+            libraryCurrentFolder = folderId == null ? null : Number(folderId);
+            document.getElementById('librarySearch').value = '';
+            librarySelected.clear();
+            libraryLastClicked = null;
+            // Opening a folder reveals it in the tree.
+            for (const f of libraryFolderPath(libraryCurrentFolder)) libraryExpanded.add(f.id);
+            saveLibraryExpanded();
+            const hash = libraryHashFor(libraryCurrentFolder);
+            if (location.hash !== hash) {
+                history[push ? 'pushState' : 'replaceState'](null, '', location.pathname + location.search + hash);
+            }
+            refreshLibrary();
+        }
+
+        function saveLibraryExpanded() {
+            libSave('library-expanded', JSON.stringify([...libraryExpanded]));
+        }
+
+        // ── Loading ──
         async function refreshLibrary() {
             const grid = document.getElementById('libraryGrid');
-            const query = document.getElementById('librarySearch').value.trim();
+            const query = librarySearchQuery();
             libraryLoaded = true;
             try {
-                await refreshLibraryFolderTree();
-                let files, folders = [];
-                if (query) {
-                    const res = await fetch(BASE + '/api/library/files/search?q=' + encodeURIComponent(query));
-                    const data = await res.json();
-                    files = data.files || [];
-                } else {
-                    const params = libraryCurrentFolder ? '?folder_id=' + libraryCurrentFolder : '';
-                    const res = await fetch(BASE + '/api/library/files' + params);
-                    const data = await res.json();
-                    files = data.files || [];
-                    folders = data.folders || [];
+                const listUrl = query
+                    ? `${BASE}/api/library/files/search?q=${encodeURIComponent(query)}`
+                    : `${BASE}/api/library/files${libraryCurrentFolder != null ? '?folder_id=' + libraryCurrentFolder : ''}`;
+                const [treeRes, listRes] = await Promise.all([
+                    fetch(BASE + '/api/library/folders/tree'),
+                    fetch(listUrl),
+                ]);
+                const tree = await treeRes.json();
+                const list = await listRes.json();
+                libraryAllFolders = tree.folders || [];
+                if (libraryCurrentFolder != null && !libraryFolderById(libraryCurrentFolder)) {
+                    // The folder was deleted or moved away; fall back to the root.
+                    navigateFolder(null, { push: false });
+                    return;
                 }
-                let html = '';
-                folders.forEach(f => { html += renderFolderCard(f); });
-                files.forEach(f => { html += renderFileCard(f); });
-                if (!folders.length && !files.length) {
-                    html = '<div class="library-empty">' + (query ? 'No files matching your search' : 'No files in this folder') + '</div>';
-                }
-                grid.innerHTML = html;
-                renderBreadcrumb();
+                libraryFiles = list.files || [];
+                libraryFolders = query ? [] : (list.folders || []);
+                const present = new Set(libraryFiles.map(f => f.id));
+                for (const id of [...librarySelected]) if (!present.has(id)) librarySelected.delete(id);
+                renderLibrary();
             } catch (err) {
                 console.error('Library load error:', err);
                 grid.innerHTML = '<div class="library-empty">Failed to load library</div>';
             }
         }
 
+        function renderLibrary() {
+            renderLibraryTree();
+            renderBreadcrumb();
+            renderLibraryToolbarState();
+            renderLibraryListing();
+            renderLibrarySelectionBar();
+        }
+
+        // ── Sorting ──
+        const LIBRARY_SORTS = {
+            created_at: f => f.created_at || '',
+            name: f => String(f.original_name || '').toLowerCase(),
+            size: f => Number(f.file_size) || 0,
+            print_time: f => Number(f.print_time_seconds) || 0,
+            last_printed_at: f => f.last_printed_at || '',
+            print_count: f => Number(f.print_count) || 0,
+        };
+
+        function sortedLibraryFiles() {
+            const key = LIBRARY_SORTS[librarySort] || LIBRARY_SORTS.created_at;
+            const dir = librarySortDir === 'asc' ? 1 : -1;
+            return [...libraryFiles].sort((a, b) => {
+                const va = key(a), vb = key(b);
+                if (va < vb) return -1 * dir;
+                if (va > vb) return 1 * dir;
+                return String(a.original_name).localeCompare(String(b.original_name));
+            });
+        }
+
+        function setLibrarySort(value) {
+            librarySort = LIBRARY_SORTS[value] ? value : 'created_at';
+            // Names read naturally A→Z; everything else is most useful biggest/newest first.
+            librarySortDir = librarySort === 'name' ? 'asc' : 'desc';
+            libSave('library-sort', librarySort);
+            libSave('library-sort-dir', librarySortDir);
+            renderLibrary();
+        }
+
+        function toggleLibrarySortDir() {
+            librarySortDir = librarySortDir === 'asc' ? 'desc' : 'asc';
+            libSave('library-sort-dir', librarySortDir);
+            renderLibrary();
+        }
+
+        function setLibraryView(view) {
+            libraryView = view === 'list' ? 'list' : 'grid';
+            libSave('library-view', libraryView);
+            renderLibrary();
+        }
+
+        function renderLibraryToolbarState() {
+            document.getElementById('librarySort').value = librarySort;
+            const dirBtn = document.getElementById('librarySortDir');
+            dirBtn.textContent = librarySortDir === 'asc' ? '↑' : '↓';
+            dirBtn.title = librarySortDir === 'asc' ? 'Ascending — click to reverse' : 'Descending — click to reverse';
+            document.querySelectorAll('.lib-view-toggle [data-view]').forEach(btn => {
+                const on = btn.dataset.view === libraryView;
+                btn.classList.toggle('active', on);
+                btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+            });
+        }
+
+        // ── Tree ──
+        function renderLibraryTree() {
+            const tree = document.getElementById('libraryTree');
+            const searching = !!librarySearchQuery();
+            const rootActive = !searching && libraryCurrentFolder == null;
+            const node = (folder, depth) => {
+                const kids = libraryChildren(folder.id);
+                const open = libraryExpanded.has(folder.id);
+                const active = !searching && folder.id === libraryCurrentFolder;
+                return `
+                    <div class="lib-tree-item${active ? ' active' : ''}" data-drop-folder="${folder.id}" style="--depth:${depth}"
+                        ${libraryCanManage() ? `draggable="true" data-drag-folder="${folder.id}"` : ''}>
+                        ${kids.length
+                            ? `<button type="button" class="lib-tree-caret" data-lib-action="toggle-folder" data-id="${folder.id}" aria-expanded="${open}" aria-label="${open ? 'Collapse' : 'Expand'} ${htmlEscape(folder.name)}">${open ? '▾' : '▸'}</button>`
+                            : '<span class="lib-tree-caret-spacer"></span>'}
+                        <button type="button" class="lib-tree-name" data-lib-action="open-folder" data-id="${folder.id}"${active ? ' aria-current="page"' : ''}>
+                            <span aria-hidden="true">📁</span> ${htmlEscape(folder.name)}
+                        </button>
+                    </div>
+                    ${kids.length && open ? kids.map(k => node(k, depth + 1)).join('') : ''}`;
+            };
+            tree.innerHTML = `
+                <div class="lib-tree-item lib-tree-root${rootActive ? ' active' : ''}" data-drop-folder="root" style="--depth:0">
+                    <span class="lib-tree-caret-spacer"></span>
+                    <button type="button" class="lib-tree-name" data-lib-action="open-folder" data-id=""${rootActive ? ' aria-current="page"' : ''}>
+                        <span aria-hidden="true">🗂</span> Library
+                    </button>
+                </div>
+                ${libraryChildren(null).map(f => node(f, 1)).join('')}`;
+        }
+
         function renderBreadcrumb() {
             const bc = document.getElementById('libraryBreadcrumb');
-            let html = '<a class="library-drop-target" onclick="navigateFolder(null)" ondragover="onLibraryDragOver(event)" ondragleave="onLibraryDragLeave(event)" ondrop="onLibraryDropToRoot(event)">Library</a>';
-            libraryFolderPath.forEach((f, i) => {
-                html += ' <span>/</span> ';
-                if (i < libraryFolderPath.length - 1) {
-                    html += `<a class="library-drop-target" onclick="navigateToPathIndex(${i})" ondragover="onLibraryDragOver(event)" ondragleave="onLibraryDragLeave(event)" ondrop="onLibraryDropToFolder(event, ${f.id})">${escapeHtml(f.name)}</a>`;
-                } else {
-                    html += `<span style="color:var(--text)">${escapeHtml(f.name)}</span>`;
-                }
+            const query = librarySearchQuery();
+            if (query) {
+                bc.innerHTML = `<span>Search results for “${htmlEscape(query)}” in all folders</span>
+                    <a href="#" data-lib-action="clear-search">Clear search</a>`;
+                return;
+            }
+            const path = libraryFolderPath(libraryCurrentFolder);
+            let html = path.length
+                ? `<a href="${libraryHashFor(null)}" data-lib-action="open-folder" data-id="" data-drop-folder="root">Library</a>`
+                : '<span class="lib-crumb-current">Library</span>';
+            path.forEach((f, i) => {
+                html += ' <span aria-hidden="true">/</span> ';
+                html += i < path.length - 1
+                    ? `<a href="${libraryHashFor(f.id)}" data-lib-action="open-folder" data-id="${f.id}" data-drop-folder="${f.id}">${htmlEscape(f.name)}</a>`
+                    : `<span class="lib-crumb-current">${htmlEscape(f.name)}</span>`;
             });
             bc.innerHTML = html;
         }
 
-        function navigateFolder(folderId, folderName) {
-            if (folderId === null) {
-                libraryCurrentFolder = null;
-                libraryFolderPath = [];
-            } else {
-                libraryCurrentFolder = folderId;
-                const existIdx = libraryFolderPath.findIndex(f => f.id === folderId);
-                if (existIdx >= 0) {
-                    libraryFolderPath = libraryFolderPath.slice(0, existIdx + 1);
-                } else {
-                    libraryFolderPath.push({ id: folderId, name: folderName });
-                }
-            }
-            document.getElementById('librarySearch').value = '';
-            refreshLibrary();
-        }
-
-        function navigateToPathIndex(idx) {
-            const target = libraryFolderPath[idx];
-            libraryFolderPath = libraryFolderPath.slice(0, idx + 1);
-            libraryCurrentFolder = target.id;
-            refreshLibrary();
-        }
-
-        function renderFolderCard(folder) {
-            const safeName = escapeHtml(folder.name).replace(/'/g, "\\'");
-            const folderActions = `
-                <div class="library-folder-actions" onclick="event.stopPropagation()">
-                    <button class="folder-action-btn" title="Rename" onclick="startRenameFolder(${folder.id}, '${safeName}')">✎</button>
-                    <button class="folder-action-btn" title="Move" onclick="showMoveFolderDialog(${folder.id}, '${safeName}')">↕</button>
-                    ${isAdmin ? `<button class="folder-action-btn delete" title="Delete" onclick="deleteFolder(${folder.id}, '${safeName}')">🗑</button>` : ''}
-                </div>`;
-            return `<div class="library-card folder-card library-drop-target" onclick="navigateFolder(${folder.id}, '${safeName}')"
-                    title="Click to open"
-                    draggable="true"
-                    ondragstart="onLibraryDragStart(event, 'folder', ${folder.id}, '${safeName}')"
-                    ondragend="onLibraryDragEnd(event)"
-                    ondragover="onLibraryDragOver(event)"
-                    ondragleave="onLibraryDragLeave(event)"
-                    ondrop="onLibraryDropToFolder(event, ${folder.id})">
-                <div class="folder-icon">📁</div>
-                <div class="library-folder-main">
-                    <div class="folder-name">${escapeHtml(folder.name)}</div>
-                </div>
-                ${folderActions}
-            </div>`;
-        }
-
-        function renderFileCard(file) {
-            const thumb = file.thumbnail_path
-                ? `<img src="${BASE}/api/library/files/${file.id}/thumbnail" alt="thumb" loading="lazy">`
-                : '<div class="no-thumb">📄</div>';
+        // ── Listing ──
+        function libraryFileMeta(file) {
             const meta = [];
             if (file.filament_type) meta.push(file.filament_type);
             if (file.print_time_seconds) meta.push(formatDuration(file.print_time_seconds));
             if (file.file_size) meta.push(formatFileSize(file.file_size));
-            if (file.print_count) meta.push('Printed ' + file.print_count + 'x');
-            const safeName = escapeHtml(file.original_name).replace(/'/g, "\\'");
-            const actions = (printAllowed ? `<button class="btn btn-sm" onclick="printFromLibrary(${file.id})">Print</button>` : '')
-                + ` <button class="btn btn-sm" onclick="open3DViewer(${file.id}, ${jsArg(file.original_name || '')})" title="Interactive 3D toolpath view">Toolpath</button>`
-                + (isAdmin ? ` <button class="btn btn-sm" onclick="showMoveDialog(${file.id}, '${safeName}')">Move</button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteLibraryFile(${file.id})">Delete</button>` : '');
-            return `<div class="library-card"
-                draggable="true"
-                ondragstart="onLibraryDragStart(event, 'file', ${file.id}, '${safeName}')"
-                ondragend="onLibraryDragEnd(event)">
-                <div class="library-card-thumb" onclick="open3DViewer(${file.id}, ${jsArg(file.original_name || '')})" style="cursor:pointer" title="Click for interactive 3D toolpath view">
-                    ${thumb}
-                </div>
-                <div class="library-card-info">
-                    <div class="library-card-name" title="${escapeHtml(file.original_name)}">${escapeHtml(file.original_name)}</div>
-                    <div class="library-card-meta">${meta.map(m => '<span>' + m + '</span>').join('')}</div>
-                </div>
-                <div class="library-card-actions">${actions}</div>
-            </div>`;
+            if (file.print_count) meta.push(`Printed ${file.print_count}×`);
+            return meta;
         }
 
-        function formatFileSize(bytes) {
-            if (bytes < 1024) return bytes + ' B';
-            if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
-            return (bytes / 1048576).toFixed(1) + ' MB';
+        function libraryFileLocation(file) {
+            const path = libraryFolderPath(file.folder_id ?? null);
+            return path.length ? path.map(f => f.name).join(' / ') : 'Library';
         }
 
-        function showNewFolderDialog() {
-            libraryFolderModalState = {
-                mode: 'create',
-                folderId: null,
-                parentId: libraryCurrentFolder,
-                folderName: ''
+        function libraryFileActions(file, compact) {
+            const id = Number(file.id);
+            const cls = compact ? 'btn btn-sm lib-row-btn' : 'btn btn-sm';
+            return (printAllowed ? `<button type="button" class="${cls}" data-lib-action="print" data-id="${id}">Print</button>` : '')
+                + `<button type="button" class="${cls}" data-lib-action="toolpath" data-id="${id}" title="Interactive 3D toolpath view">Toolpath</button>`
+                + (libraryCanManage()
+                    ? `<button type="button" class="${cls}" data-lib-action="move-file" data-id="${id}">Move</button>
+                       <button type="button" class="${cls} btn-danger" data-lib-action="delete-file" data-id="${id}">Delete</button>`
+                    : '');
+        }
+
+        function libraryCheckbox(file) {
+            if (!libraryCanSelect()) return '';
+            const name = htmlEscape(file.original_name || 'file');
+            return `<label class="lib-check"><input type="checkbox" data-lib-select="${Number(file.id)}" ${librarySelected.has(file.id) ? 'checked' : ''} aria-label="Select ${name}"></label>`;
+        }
+
+        function libraryFolderActions(folder) {
+            if (!libraryCanManage()) return '';
+            return `<div class="library-folder-actions">
+                    <button type="button" class="folder-action-btn" title="Rename" aria-label="Rename ${htmlEscape(folder.name)}" data-lib-action="rename-folder" data-id="${folder.id}">✎</button>
+                    <button type="button" class="folder-action-btn" title="Move" aria-label="Move ${htmlEscape(folder.name)}" data-lib-action="move-folder" data-id="${folder.id}">↕</button>
+                    <button type="button" class="folder-action-btn delete" title="Delete" aria-label="Delete ${htmlEscape(folder.name)}" data-lib-action="delete-folder" data-id="${folder.id}">🗑</button>
+                </div>`;
+        }
+
+        function renderLibraryListing() {
+            const grid = document.getElementById('libraryGrid');
+            const searching = !!librarySearchQuery();
+            const files = sortedLibraryFiles();
+            const folders = [...libraryFolders].sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true }));
+            grid.className = (libraryView === 'list' ? 'library-list' : 'library-grid') + (librarySelected.size ? ' lib-has-selection' : '');
+            if (!folders.length && !files.length) {
+                grid.innerHTML = `<div class="library-empty">${searching ? 'No files match your search' : 'This folder is empty'}</div>`;
+                return;
+            }
+            const drag = libraryCanManage();
+            if (libraryView === 'list') {
+                grid.innerHTML = `
+                    <div class="lib-list-head" aria-hidden="true">
+                        <span></span><span></span><span>Name</span><span>Filament</span><span>Print time</span><span>Size</span><span>Added</span><span></span>
+                    </div>
+                    ${folders.map(f => `
+                        <div class="lib-row lib-row-folder" data-drop-folder="${f.id}" ${drag ? `draggable="true" data-drag-folder="${f.id}"` : ''}>
+                            <span></span>
+                            <span class="lib-row-icon" aria-hidden="true">📁</span>
+                            <button type="button" class="lib-row-name lib-link" data-lib-action="open-folder" data-id="${f.id}">${htmlEscape(f.name)}</button>
+                            <span></span><span></span><span></span><span></span>
+                            <span class="lib-row-actions">${libraryFolderActions(f)}</span>
+                        </div>`).join('')}
+                    ${files.map(f => `
+                        <div class="lib-row${librarySelected.has(f.id) ? ' selected' : ''}" data-file-id="${Number(f.id)}" ${drag ? `draggable="true" data-drag-file="${Number(f.id)}"` : ''}>
+                            ${libraryCheckbox(f) || '<span></span>'}
+                            <span class="lib-row-thumb" data-lib-action="toolpath" data-id="${Number(f.id)}">
+                                ${f.thumbnail_path ? `<img src="${BASE}/api/library/files/${Number(f.id)}/thumbnail" alt="" loading="lazy">` : '📄'}
+                            </span>
+                            <span class="lib-row-name" title="${htmlEscape(f.original_name)}">
+                                ${htmlEscape(f.original_name)}
+                                ${searching ? `<span class="lib-row-loc">${htmlEscape(libraryFileLocation(f))}</span>` : ''}
+                            </span>
+                            <span>${htmlEscape(f.filament_type || '—')}</span>
+                            <span>${f.print_time_seconds ? formatDuration(f.print_time_seconds) : '—'}</span>
+                            <span>${f.file_size ? formatFileSize(f.file_size) : '—'}</span>
+                            <span>${f.created_at ? htmlEscape(new Date(f.created_at).toLocaleDateString()) : '—'}</span>
+                            <span class="lib-row-actions">${libraryFileActions(f, true)}</span>
+                        </div>`).join('')}`;
+                return;
+            }
+            const folderCards = folders.map(f => `
+                    <div class="library-card folder-card" data-lib-action="open-folder" data-id="${f.id}" data-drop-folder="${f.id}" title="Open folder"
+                        ${drag ? `draggable="true" data-drag-folder="${f.id}"` : ''}>
+                        <div class="folder-icon" aria-hidden="true">📁</div>
+                        <div class="library-folder-main"><div class="folder-name">${htmlEscape(f.name)}</div></div>
+                        ${libraryFolderActions(f)}
+                    </div>`).join('');
+            grid.innerHTML = (folderCards ? `<div class="lib-folder-grid">${folderCards}</div>` : '')
+                + files.map(f => `
+                    <div class="library-card lib-file${librarySelected.has(f.id) ? ' selected' : ''}" data-file-id="${Number(f.id)}" ${drag ? `draggable="true" data-drag-file="${Number(f.id)}"` : ''}>
+                        ${libraryCheckbox(f)}
+                        <div class="library-card-thumb" data-lib-action="toolpath" data-id="${Number(f.id)}" title="Click for interactive 3D toolpath view">
+                            ${f.thumbnail_path ? `<img src="${BASE}/api/library/files/${Number(f.id)}/thumbnail" alt="" loading="lazy">` : '<div class="no-thumb">📄</div>'}
+                        </div>
+                        <div class="library-card-info">
+                            <div class="library-card-name" title="${htmlEscape(f.original_name)}">${htmlEscape(f.original_name)}</div>
+                            ${searching ? `<div class="lib-row-loc">📁 ${htmlEscape(libraryFileLocation(f))}</div>` : ''}
+                            <div class="library-card-meta">${libraryFileMeta(f).map(m => `<span>${htmlEscape(m)}</span>`).join('')}</div>
+                        </div>
+                        <div class="library-card-actions">${libraryFileActions(f, false)}</div>
+                    </div>`).join('');
+        }
+
+        // ── Selection ──
+        function renderLibrarySelectionBar() {
+            const bar = document.getElementById('librarySelectionBar');
+            if (!libraryCanSelect() || !libraryFiles.length) {
+                bar.hidden = true;
+                bar.innerHTML = '';
+                return;
+            }
+            const n = librarySelected.size;
+            const all = n > 0 && n === libraryFiles.length;
+            bar.hidden = false;
+            bar.innerHTML = `
+                <label class="lib-check-all">
+                    <input type="checkbox" data-lib-action="select-all" ${all ? 'checked' : ''} aria-label="Select all files">
+                    ${n ? `<strong>${n} selected</strong>` : 'Select all'}
+                </label>
+                <span class="lib-sel-hint">${n ? '' : 'Tick files to print, move or delete several at once. Shift-click selects a range.'}</span>
+                <span class="lib-sel-actions">
+                    ${printAllowed ? `<button type="button" class="btn btn-sm btn-primary" data-lib-action="bulk-print" ${n ? '' : 'disabled'}>Print</button>` : ''}
+                    ${libraryCanManage() ? `
+                        <button type="button" class="btn btn-sm" data-lib-action="bulk-move" ${n ? '' : 'disabled'}>Move</button>
+                        <button type="button" class="btn btn-sm btn-danger" data-lib-action="bulk-delete" ${n ? '' : 'disabled'}>Delete</button>` : ''}
+                    ${n ? '<button type="button" class="btn btn-sm" data-lib-action="clear-selection">Clear</button>' : ''}
+                </span>`;
+            const allBox = bar.querySelector('[data-lib-action="select-all"]');
+            if (allBox) allBox.indeterminate = n > 0 && !all;
+        }
+
+        function onLibrarySelect(fileId, checked, shiftKey) {
+            const order = sortedLibraryFiles().map(f => f.id);
+            if (shiftKey && libraryLastClicked != null && order.includes(libraryLastClicked)) {
+                const a = order.indexOf(libraryLastClicked), b = order.indexOf(fileId);
+                for (const id of order.slice(Math.min(a, b), Math.max(a, b) + 1)) {
+                    if (checked) librarySelected.add(id); else librarySelected.delete(id);
+                }
+            } else if (checked) {
+                librarySelected.add(fileId);
+            } else {
+                librarySelected.delete(fileId);
+            }
+            libraryLastClicked = fileId;
+            renderLibraryListing();
+            renderLibrarySelectionBar();
+        }
+
+        function librarySelectAll(on) {
+            librarySelected = on ? new Set(libraryFiles.map(f => f.id)) : new Set();
+            libraryLastClicked = null;
+            renderLibraryListing();
+            renderLibrarySelectionBar();
+        }
+
+        // ── Delegated clicks ──
+        document.addEventListener('click', e => {
+            const root = document.getElementById('tab-library');
+            if (!root || !root.contains(e.target)) return;
+            const sel = e.target.closest('[data-lib-select]');
+            if (sel) {
+                onLibrarySelect(Number(sel.dataset.libSelect), sel.checked, e.shiftKey);
+                return;
+            }
+            const el = e.target.closest('[data-lib-action]');
+            if (!el) return;
+            const action = el.dataset.libAction;
+            const id = el.dataset.id === '' || el.dataset.id === undefined ? null : Number(el.dataset.id);
+            if (el.tagName === 'A') e.preventDefault();
+            if (action !== 'open-folder' && action !== 'select-all') e.stopPropagation();
+            const file = id != null ? libraryFiles.find(f => f.id === id) : null;
+            switch (action) {
+                case 'open-folder': navigateFolder(id); break;
+                case 'toggle-folder':
+                    if (libraryExpanded.has(id)) libraryExpanded.delete(id); else libraryExpanded.add(id);
+                    saveLibraryExpanded();
+                    renderLibraryTree();
+                    break;
+                case 'clear-search':
+                    document.getElementById('librarySearch').value = '';
+                    refreshLibrary();
+                    break;
+                case 'toolpath': if (file) open3DViewer(file.id, file.original_name || ''); break;
+                case 'print': if (file) openLibraryPrintDialog([file.id]); break;
+                case 'move-file': if (file) openLibraryMoveFiles([file.id]); break;
+                case 'delete-file': if (file) deleteLibraryFiles([file.id]); break;
+                case 'rename-folder': startRenameFolder(id); break;
+                case 'move-folder': openLibraryMoveFolder(id); break;
+                case 'delete-folder': deleteFolder(id); break;
+                case 'select-all': librarySelectAll(el.checked); break;
+                case 'clear-selection': librarySelectAll(false); break;
+                case 'bulk-print': openLibraryPrintDialog([...librarySelected]); break;
+                case 'bulk-move': openLibraryMoveFiles([...librarySelected]); break;
+                case 'bulk-delete': deleteLibraryFiles([...librarySelected]); break;
+            }
+        });
+
+        document.addEventListener('keydown', e => {
+            const tab = document.getElementById('tab-library');
+            if (!tab || !tab.classList.contains('active')) return;
+            if (document.querySelector('.modal-overlay[style*="flex"]')) return;
+            const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
+            if (e.key === 'Escape' && librarySelected.size && !typing) librarySelectAll(false);
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a' && !typing && libraryCanSelect() && libraryFiles.length) {
+                e.preventDefault();
+                librarySelectAll(true);
+            }
+        });
+
+        // ── Drag and drop: files and folders onto tree, folder cards or breadcrumb ──
+        function libraryCanDropOn(dest) {
+            if (!libraryDrag) return false;
+            if (libraryDrag.type === 'files') {
+                return libraryDrag.ids.some(id => {
+                    const f = libraryFiles.find(x => x.id === id);
+                    return !f || (f.folder_id ?? null) !== dest;
+                });
+            }
+            const folder = libraryFolderById(libraryDrag.id);
+            if (!folder || dest === folder.id || (folder.parent_id ?? null) === dest) return false;
+            return dest == null || !libraryDescendants(folder.id).has(dest);
+        }
+
+        function libraryDropDest(el) {
+            const raw = el.dataset.dropFolder;
+            return raw === 'root' ? null : Number(raw);
+        }
+
+        function clearLibraryDropHighlight() {
+            document.querySelectorAll('#tab-library .drag-over').forEach(el => el.classList.remove('drag-over'));
+        }
+
+        let libraryHoverExpandTimer = null;
+
+        document.addEventListener('dragstart', e => {
+            const tab = document.getElementById('tab-library');
+            if (!tab || !tab.contains(e.target) || !libraryCanManage()) return;
+            const fileEl = e.target.closest('[data-drag-file]');
+            const folderEl = e.target.closest('[data-drag-folder]');
+            if (fileEl) {
+                const id = Number(fileEl.dataset.dragFile);
+                const ids = librarySelected.has(id) ? [...librarySelected] : [id];
+                libraryDrag = { type: 'files', ids };
+                if (ids.length > 1) {
+                    const ghost = document.createElement('div');
+                    ghost.className = 'lib-drag-ghost';
+                    ghost.textContent = `${ids.length} files`;
+                    document.body.appendChild(ghost);
+                    e.dataTransfer.setDragImage(ghost, 10, 10);
+                    setTimeout(() => ghost.remove(), 0);
+                }
+            } else if (folderEl) {
+                libraryDrag = { type: 'folder', id: Number(folderEl.dataset.dragFolder) };
+            } else {
+                return;
+            }
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData(LIB_DRAG_TYPE, '1');
+            e.dataTransfer.setData('text/plain', '');
+            (fileEl || folderEl).classList.add('dragging');
+        });
+
+        document.addEventListener('dragend', () => {
+            libraryDrag = null;
+            clearTimeout(libraryHoverExpandTimer);
+            clearLibraryDropHighlight();
+            document.querySelectorAll('#tab-library .dragging').forEach(el => el.classList.remove('dragging'));
+        });
+
+        document.addEventListener('dragover', e => {
+            if (!libraryDrag) return;
+            const target = e.target.closest && e.target.closest('#tab-library [data-drop-folder]');
+            if (!target) return;
+            const dest = libraryDropDest(target);
+            if (!libraryCanDropOn(dest)) {
+                e.dataTransfer.dropEffect = 'none';
+                return;
+            }
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            if (!target.classList.contains('drag-over')) {
+                clearLibraryDropHighlight();
+                target.classList.add('drag-over');
+                // Hovering a collapsed tree folder for a moment opens it.
+                clearTimeout(libraryHoverExpandTimer);
+                if (dest != null && target.classList.contains('lib-tree-item') && !libraryExpanded.has(dest) && libraryChildren(dest).length) {
+                    libraryHoverExpandTimer = setTimeout(() => {
+                        libraryExpanded.add(dest);
+                        saveLibraryExpanded();
+                        renderLibraryTree();
+                    }, 700);
+                }
+            }
+        });
+
+        document.addEventListener('dragleave', e => {
+            const target = e.target.closest && e.target.closest('#tab-library [data-drop-folder]');
+            if (target && !target.contains(e.relatedTarget)) {
+                target.classList.remove('drag-over');
+                clearTimeout(libraryHoverExpandTimer);
+            }
+        });
+
+        document.addEventListener('drop', async e => {
+            if (!libraryDrag) return;
+            const target = e.target.closest && e.target.closest('#tab-library [data-drop-folder]');
+            if (!target) return;
+            e.preventDefault();
+            const dest = libraryDropDest(target);
+            const allowed = libraryCanDropOn(dest);
+            const drag = libraryDrag;
+            libraryDrag = null;
+            clearLibraryDropHighlight();
+            if (!allowed) return;
+            if (drag.type === 'files') await moveLibraryFiles(drag.ids, dest);
+            else await moveLibraryFolder(drag.id, dest);
+        });
+
+        function libraryDestName(dest) {
+            return dest == null ? 'Library' : (libraryFolderById(dest)?.name || 'folder');
+        }
+
+        async function moveLibraryFiles(ids, dest) {
+            const res = await apiPost(`${BASE}/api/library/files/bulk-move`, { file_ids: ids, folder_id: dest });
+            if (res.ok === false || res.error) {
+                showToast(res.error || res.message || 'Move failed', 'error');
+            } else {
+                const n = res.moved ?? ids.length;
+                showToast(`Moved ${n} file${n === 1 ? '' : 's'} to ${libraryDestName(dest)}`, 'success');
+                for (const id of ids) librarySelected.delete(id);
+            }
+            refreshLibrary();
+        }
+
+        async function moveLibraryFolder(folderId, dest) {
+            const name = libraryFolderById(folderId)?.name || 'Folder';
+            const res = await apiPost(`${BASE}/api/library/folders/${folderId}/move`, { parent_id: dest });
+            if (res.ok === false || res.error) {
+                showToast(res.error || res.message || 'Move failed', 'error');
+            } else {
+                showToast(`Moved “${name}” to ${libraryDestName(dest)}`, 'success');
+                if (dest != null) { libraryExpanded.add(dest); saveLibraryExpanded(); }
+            }
+            refreshLibrary();
+        }
+
+        // ── Move dialog: clickable folder list ──
+        function openLibraryMovePicker({ title, context, currentId, disabled = new Set(), onConfirm }) {
+            libraryMovePicker = { currentId, disabled, onConfirm, target: undefined };
+            document.getElementById('libraryMoveModalTitle').textContent = title;
+            document.getElementById('libraryMoveModalContext').textContent = context;
+            document.getElementById('libraryMoveModalError').textContent = '';
+            renderLibraryMovePicker();
+            document.getElementById('libraryMoveOverlay').style.display = 'flex';
+            document.querySelector('#libraryMoveList button:not(:disabled)')?.focus();
+        }
+
+        function renderLibraryMovePicker() {
+            const s = libraryMovePicker;
+            const rows = [{ id: null, name: 'Library (top level)', depth: 0 }];
+            const walk = (parentId, depth) => {
+                for (const f of libraryChildren(parentId)) {
+                    rows.push({ id: f.id, name: f.name, depth });
+                    walk(f.id, depth + 1);
+                }
             };
+            walk(null, 1);
+            document.getElementById('libraryMoveList').innerHTML = rows.map(r => {
+                const isCurrent = r.id === s.currentId;
+                const isDisabled = isCurrent || (r.id != null && s.disabled.has(r.id));
+                const chosen = s.target === r.id;
+                return `<button type="button" class="lib-move-option${chosen ? ' chosen' : ''}" style="--depth:${r.depth}"
+                            data-move-target="${r.id ?? ''}" ${isDisabled ? 'disabled' : ''} aria-pressed="${chosen}">
+                            <span aria-hidden="true">${r.id == null ? '🗂' : '📁'}</span> ${htmlEscape(r.name)}
+                            ${isCurrent ? '<span class="lib-move-current">current</span>' : ''}
+                        </button>`;
+            }).join('');
+            document.getElementById('libraryMoveSubmit').disabled = s.target === undefined;
+        }
+
+        document.getElementById('libraryMoveList').addEventListener('click', e => {
+            const btn = e.target.closest('[data-move-target]');
+            if (!btn || btn.disabled || !libraryMovePicker) return;
+            libraryMovePicker.target = btn.dataset.moveTarget === '' ? null : Number(btn.dataset.moveTarget);
+            renderLibraryMovePicker();
+        });
+        document.getElementById('libraryMoveList').addEventListener('dblclick', e => {
+            const btn = e.target.closest('[data-move-target]');
+            if (btn && !btn.disabled) submitLibraryMoveModal();
+        });
+
+        function closeLibraryMoveModal() {
+            document.getElementById('libraryMoveOverlay').style.display = 'none';
+            libraryMovePicker = null;
+        }
+
+        async function submitLibraryMoveModal() {
+            const s = libraryMovePicker;
+            if (!s || s.target === undefined) return;
+            closeLibraryMoveModal();
+            await s.onConfirm(s.target);
+        }
+
+        function openLibraryMoveFiles(ids) {
+            const files = ids.map(id => libraryFiles.find(f => f.id === id)).filter(Boolean);
+            if (!files.length) return;
+            const folderIds = new Set(files.map(f => f.folder_id ?? null));
+            openLibraryMovePicker({
+                title: files.length === 1 ? 'Move file' : `Move ${files.length} files`,
+                context: files.length === 1 ? files[0].original_name : 'Choose where to put the selected files.',
+                currentId: folderIds.size === 1 ? [...folderIds][0] : undefined,
+                onConfirm: dest => moveLibraryFiles(files.map(f => f.id), dest),
+            });
+        }
+
+        function openLibraryMoveFolder(folderId) {
+            const folder = libraryFolderById(folderId);
+            if (!folder) return;
+            openLibraryMovePicker({
+                title: `Move folder “${folder.name}”`,
+                context: 'A folder can’t be moved into itself or one of its sub-folders.',
+                currentId: folder.parent_id ?? null,
+                disabled: new Set([folder.id, ...libraryDescendants(folder.id)]),
+                onConfirm: dest => moveLibraryFolder(folder.id, dest),
+            });
+        }
+
+        // ── Folder create / rename / delete ──
+        function showNewFolderDialog() {
+            libraryFolderModalState = { mode: 'create', folderId: null, parentId: libraryCurrentFolder };
+            const where = libraryCurrentFolder == null ? 'the top level of the library' : `“${libraryFolderById(libraryCurrentFolder)?.name || 'this folder'}”`;
             document.getElementById('libraryFolderModalTitle').textContent = 'New Folder';
-            document.getElementById('libraryFolderModalContext').textContent = libraryCurrentFolder ? 'Create folder in current location' : 'Create folder in library root';
+            document.getElementById('libraryFolderModalContext').textContent = `Creates a folder in ${where}.`;
             document.getElementById('libraryFolderModalSubmitBtn').textContent = 'Create';
             document.getElementById('libraryFolderNameInput').value = '';
             document.getElementById('libraryFolderModalError').textContent = '';
             document.getElementById('libraryFolderOverlay').style.display = 'flex';
             document.getElementById('libraryFolderNameInput').focus();
+        }
+
+        function startRenameFolder(folderId) {
+            const folder = libraryFolderById(folderId);
+            if (!folder) return;
+            libraryFolderModalState = { mode: 'rename', folderId, parentId: null };
+            document.getElementById('libraryFolderModalTitle').textContent = 'Rename Folder';
+            document.getElementById('libraryFolderModalContext').textContent = `Currently “${folder.name}”`;
+            document.getElementById('libraryFolderModalSubmitBtn').textContent = 'Save';
+            const input = document.getElementById('libraryFolderNameInput');
+            input.value = folder.name;
+            document.getElementById('libraryFolderModalError').textContent = '';
+            document.getElementById('libraryFolderOverlay').style.display = 'flex';
+            input.focus();
+            input.select();
         }
 
         function closeLibraryFolderModal() {
@@ -7453,241 +8174,155 @@
         }
 
         async function submitLibraryFolderModal() {
+            const s = libraryFolderModalState;
+            if (!s) return;
             const errorEl = document.getElementById('libraryFolderModalError');
             const name = document.getElementById('libraryFolderNameInput').value.trim();
             errorEl.textContent = '';
-            if (!name) {
-                errorEl.textContent = 'Folder name is required.';
+            if (!name) { errorEl.textContent = 'Folder name is required.'; return; }
+            const res = s.mode === 'create'
+                ? await apiPost(`${BASE}/api/library/folders`, { name, parent_id: s.parentId })
+                : await apiPost(`${BASE}/api/library/folders/${s.folderId}/rename`, { name });
+            if (res.ok === false || res.error) {
+                errorEl.textContent = res.error || res.message || 'Request failed. Please try again.';
                 return;
             }
-
-            try {
-                let res;
-                if (libraryFolderModalState.mode === 'create') {
-                    res = await fetch(BASE + '/api/library/folders', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name, parent_id: libraryFolderModalState.parentId })
-                    });
-                } else {
-                    res = await fetch(BASE + `/api/library/folders/${libraryFolderModalState.folderId}/rename`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name })
-                    });
-                }
-                const data = await res.json();
-                if (data.error) {
-                    errorEl.textContent = data.error;
-                    return;
-                }
-                closeLibraryFolderModal();
-                refreshLibrary();
-            } catch (err) {
-                errorEl.textContent = 'Request failed. Please try again.';
-            }
+            closeLibraryFolderModal();
+            if (s.mode === 'create' && s.parentId != null) { libraryExpanded.add(s.parentId); saveLibraryExpanded(); }
+            showToast(s.mode === 'create' ? `Created folder “${name}”` : `Renamed folder to “${name}”`, 'success');
+            refreshLibrary();
         }
 
-        function startRenameFolder(folderId, folderName) {
-            libraryFolderModalState = {
-                mode: 'rename',
-                folderId,
-                parentId: null,
-                folderName
-            };
-            document.getElementById('libraryFolderModalTitle').textContent = 'Rename Folder';
-            document.getElementById('libraryFolderModalContext').textContent = 'Update folder name';
-            document.getElementById('libraryFolderModalSubmitBtn').textContent = 'Save';
-            document.getElementById('libraryFolderNameInput').value = folderName;
-            document.getElementById('libraryFolderModalError').textContent = '';
-            document.getElementById('libraryFolderOverlay').style.display = 'flex';
-            document.getElementById('libraryFolderNameInput').focus();
-        }
-
-        async function deleteFolder(folderId, folderName) {
-            if (!confirm('Delete folder "' + folderName + '" and all nested folders? Files will move to root.')) return;
-            const res = await fetch(BASE + `/api/library/folders/${folderId}/delete`, { method: 'DELETE' });
-            const data = await res.json();
-            if (data.error) alert(data.error);
-            else refreshLibrary();
-        }
-
-        async function openLibraryMoveModal(itemType, itemId, itemName) {
-            libraryMoveModalState = { type: itemType, id: itemId, name: itemName };
-            document.getElementById('libraryMoveModalTitle').textContent = itemType === 'file' ? 'Move File' : 'Move Folder';
-            document.getElementById('libraryMoveModalContext').textContent = itemName ? ('Moving: ' + itemName) : 'Choose destination';
-            document.getElementById('libraryMoveModalError').textContent = '';
-
-            await refreshLibraryFolderTree();
-            populateLibraryMoveSelect();
-            document.getElementById('libraryMoveOverlay').style.display = 'flex';
-        }
-
-        function populateLibraryMoveSelect() {
-            const select = document.getElementById('libraryMoveSelect');
-            const flattened = flattenFolderTree();
-            const excludeDescendants = libraryMoveModalState && libraryMoveModalState.type === 'folder'
-                ? getFolderDescendants(libraryMoveModalState.id)
-                : new Set();
-
-            let html = '<option value="">Root (no folder)</option>';
-            for (const f of flattened) {
-                if (libraryMoveModalState && libraryMoveModalState.type === 'folder') {
-                    if (f.id === libraryMoveModalState.id) continue;
-                    if (excludeDescendants.has(f.id)) continue;
-                }
-                const indent = '&nbsp;'.repeat(f.depth * 4);
-                html += `<option value="${f.id}">${indent}${escapeHtml(f.name)}</option>`;
-            }
-            select.innerHTML = html;
-        }
-
-        function closeLibraryMoveModal() {
-            document.getElementById('libraryMoveOverlay').style.display = 'none';
-            libraryMoveModalState = null;
-        }
-
-        async function submitLibraryMoveModal() {
-            const err = document.getElementById('libraryMoveModalError');
-            err.textContent = '';
-            if (!libraryMoveModalState) return;
-
-            const selected = document.getElementById('libraryMoveSelect').value;
-            const destinationId = selected === '' ? null : parseInt(selected, 10);
-            const isFile = libraryMoveModalState.type === 'file';
-            const url = isFile
-                ? `${BASE}/api/library/files/${libraryMoveModalState.id}/move`
-                : `${BASE}/api/library/folders/${libraryMoveModalState.id}/move`;
-            const payload = isFile
-                ? { folder_id: destinationId }
-                : { parent_id: destinationId };
-
-            try {
-                const res = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const data = await res.json();
-                if (data.error) {
-                    err.textContent = data.error;
-                    return;
-                }
-                closeLibraryMoveModal();
-                refreshLibrary();
-            } catch (e) {
-                err.textContent = 'Move failed. Please try again.';
-            }
-        }
-
-        function showMoveDialog(fileId, fileName) {
-            openLibraryMoveModal('file', fileId, fileName || 'File');
-        }
-
-        function showMoveFolderDialog(folderId, folderName) {
-            openLibraryMoveModal('folder', folderId, folderName || 'Folder');
-        }
-
-        function onLibraryDragStart(event, type, id, name) {
-            libraryDragState = { type, id, name };
-            event.currentTarget.classList.add('dragging');
-            event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData('text/plain', `${type}:${id}`);
-        }
-
-        function onLibraryDragEnd(event) {
-            event.currentTarget.classList.remove('dragging');
-            document.querySelectorAll('.library-drop-target.drag-over').forEach(el => el.classList.remove('drag-over'));
-            libraryDragState = null;
-        }
-
-        function onLibraryDragOver(event) {
-            if (!libraryDragState) return;
-            event.preventDefault();
-            event.currentTarget.classList.add('drag-over');
-        }
-
-        function onLibraryDragLeave(event) {
-            event.currentTarget.classList.remove('drag-over');
-        }
-
-        async function onLibraryDropToFolder(event, folderId) {
-            event.preventDefault();
-            event.currentTarget.classList.remove('drag-over');
-            if (!libraryDragState) return;
-
-            if (libraryDragState.type === 'file') {
-                await fetch(BASE + `/api/library/files/${libraryDragState.id}/move`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ folder_id: folderId })
-                });
+        async function deleteFolder(folderId) {
+            const folder = libraryFolderById(folderId);
+            if (!folder) return;
+            const nested = libraryDescendants(folderId).size;
+            const msg = `Delete folder “${folder.name}”${nested ? ` and its ${nested} sub-folder${nested === 1 ? '' : 's'}` : ''}?\n\nFiles inside are not deleted; they move to the top level of the library.`;
+            if (!confirm(msg)) return;
+            const res = await fetch(`${BASE}/api/library/folders/${folderId}/delete`, { method: 'DELETE' }).then(r => r.json()).catch(() => ({ error: 'Request failed' }));
+            if (res.error || res.ok === false) {
+                showToast(res.error || 'Could not delete folder', 'error');
             } else {
-                await fetch(BASE + `/api/library/folders/${libraryDragState.id}/move`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ parent_id: folderId })
-                });
+                showToast(`Deleted folder “${folder.name}”`, 'success');
+                if (libraryCurrentFolder === folderId || libraryDescendants(folderId).has(libraryCurrentFolder)) {
+                    navigateFolder(folder.parent_id ?? null, { push: false });
+                    return;
+                }
             }
             refreshLibrary();
         }
 
-        async function onLibraryDropToRoot(event) {
-            event.preventDefault();
-            event.currentTarget.classList.remove('drag-over');
-            if (!libraryDragState) return;
-
-            if (libraryDragState.type === 'file') {
-                await fetch(BASE + `/api/library/files/${libraryDragState.id}/move`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ folder_id: null })
-                });
+        // ── Delete files ──
+        async function deleteLibraryFiles(ids) {
+            if (!ids.length) return;
+            const one = ids.length === 1 ? libraryFiles.find(f => f.id === ids[0]) : null;
+            const label = one ? `“${one.original_name}”` : `${ids.length} files`;
+            if (!confirm(`Delete ${label} from the library? This removes the file from the server.`)) return;
+            const res = await apiPost(`${BASE}/api/library/files/bulk-delete`, { file_ids: ids });
+            const skipped = res.skipped || [];
+            if (res.ok === false && !res.deleted) {
+                showToast(res.error || skipped[0]?.error || 'Delete failed', 'error');
             } else {
-                await fetch(BASE + `/api/library/folders/${libraryDragState.id}/move`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ parent_id: null })
-                });
+                const n = res.deleted ?? 0;
+                showToast(`Deleted ${n} file${n === 1 ? '' : 's'}`, 'success');
+                if (skipped.length) {
+                    showToast(`${skipped.length} file${skipped.length === 1 ? ' was' : 's were'} kept because ${skipped.length === 1 ? 'it is' : 'they are'} used by a queued or active job`, 'error');
+                }
+                for (const id of ids) librarySelected.delete(id);
             }
             refreshLibrary();
         }
 
-        function deleteLibraryFile(fileId) {
-            if (!confirm('Delete this file from the library?')) return;
-            fetch(BASE + `/api/library/files/${fileId}/delete`, { method: 'DELETE' })
-                .then(r => r.json()).then(d => {
-                    if (d.error) alert(d.error);
-                    else refreshLibrary();
-                });
+        // ── Print dialog ──
+        function libraryPrinterUnavailable(p) {
+            if (!p.connected) return 'Offline';
+            if (p.staff_only && !isAdmin) return 'Staff only';
+            const status = String(p.status || '').toUpperCase();
+            if (!['IDLE', 'FINISH'].includes(status)) {
+                const text = String(p.display_status || status || 'busy').toLowerCase().replace(/_/g, ' ');
+                return text.charAt(0).toUpperCase() + text.slice(1);
+            }
+            if (p.plate_needs_clear) return 'Plate not cleared';
+            return '';
         }
 
-        async function printFromLibrary(fileId) {
+        async function openLibraryPrintDialog(ids) {
             if (!printAllowed) {
-                alert(printDeniedReason || 'Print access is not available for this account');
+                showToast(printDeniedReason || 'Print access is not available for this account', 'error');
                 return;
             }
+            const files = ids.map(id => libraryFiles.find(f => f.id === id)).filter(Boolean);
+            if (!files.length) return;
+            libraryPrintState = { fileIds: files.map(f => f.id), printer: '' };
+            document.getElementById('libraryPrintTitle').textContent = files.length === 1 ? 'Print file' : `Print ${files.length} files`;
+            document.getElementById('libraryPrintContext').textContent = files.length === 1
+                ? files[0].original_name
+                : files.map(f => f.original_name).slice(0, 3).join(', ') + (files.length > 3 ? ` and ${files.length - 3} more` : '');
+            document.getElementById('libraryPrintCopies').value = 1;
+            document.getElementById('libraryPrintError').textContent = '';
+            const list = document.getElementById('libraryPrintPrinters');
+            list.innerHTML = '<div class="lib-print-loading">Loading printers…</div>';
+            document.getElementById('libraryPrintOverlay').style.display = 'flex';
+
+            let printers = {};
             try {
-                const statusRes = await fetch(BASE + '/api/farm/status');
-                const statusData = await statusRes.json();
-                const allNames = Object.keys(statusData.printers || {});
-                const names = isAdmin ? allNames : allNames.filter(n => !statusData.printers[n].staff_only);
-                if (!names.length) { alert('No printers available'); return; }
-                const choice = prompt('Select printer:\n' + names.map((n, i) => (i + 1) + ': ' + n).join('\n') + '\n\nEnter number:');
-                if (!choice) return;
-                const idx = parseInt(choice) - 1;
-                if (isNaN(idx) || idx < 0 || idx >= names.length) { alert('Invalid selection'); return; }
-                const res = await fetch(BASE + `/api/library/files/${fileId}/print`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ printer_name: names[idx] })
-                });
-                const data = await res.json();
-                if (data.error) alert(data.error);
-                else alert('Print job queued!');
-            } catch (err) {
-                alert('Failed to queue print');
+                const res = await fetch(BASE + '/api/farm/status');
+                printers = (await res.json()).printers || {};
+            } catch (_) {}
+            const entries = Object.entries(printers)
+                .filter(([, p]) => isAdmin || !p.staff_only)
+                .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
+            const single = files.length === 1;
+            const option = (value, title, note, disabled, checked) => `
+                <label class="lib-print-option${disabled ? ' disabled' : ''}">
+                    <input type="radio" name="libraryPrintTarget" value="${htmlEscape(value)}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+                    <span class="lib-print-name">${title}</span>
+                    <span class="lib-print-note">${note}</span>
+                </label>`;
+            list.innerHTML = option('', '<strong>Add to the print queue</strong>', 'Sent to a printer when one is free', false, true)
+                + (single
+                    ? entries.map(([name, p]) => {
+                        const why = libraryPrinterUnavailable(p);
+                        return option(name, htmlEscape(name), why ? htmlEscape(why) : '<span class="lib-print-ready">Ready</span>', !!why, false);
+                    }).join('')
+                    : '<p class="lib-print-multi">Several files are added to the queue. To send one straight to a printer, print it on its own.</p>');
+        }
+
+        function closeLibraryPrintDialog() {
+            document.getElementById('libraryPrintOverlay').style.display = 'none';
+            libraryPrintState = null;
+        }
+
+        async function submitLibraryPrintDialog() {
+            const s = libraryPrintState;
+            if (!s) return;
+            const errorEl = document.getElementById('libraryPrintError');
+            const copies = parseInt(document.getElementById('libraryPrintCopies').value, 10);
+            if (!(copies >= 1 && copies <= 100)) { errorEl.textContent = 'Copies must be between 1 and 100.'; return; }
+            const printer = document.querySelector('input[name="libraryPrintTarget"]:checked')?.value || '';
+            const btn = document.getElementById('libraryPrintSubmit');
+            btn.disabled = true;
+            errorEl.textContent = '';
+            let ok = 0;
+            const errors = [];
+            for (const id of s.fileIds) {
+                const res = await apiPost(`${BASE}/api/library/files/${id}/print`, { printer_name: printer, copies });
+                if (res.ok === false || res.error) errors.push(res.error || res.message || 'Failed');
+                else ok++;
             }
+            btn.disabled = false;
+            if (!ok) { errorEl.textContent = errors[0] || 'Could not queue the print.'; return; }
+            closeLibraryPrintDialog();
+            showToast(printer ? `Sending to ${printer}` : `Added ${ok} file${ok === 1 ? '' : 's'} to the print queue`, 'success');
+            if (errors.length) showToast(`${errors.length} file${errors.length === 1 ? '' : 's'} could not be queued: ${errors[0]}`, 'error');
+            refreshLibrary();
+            if (typeof refreshJobs === 'function') refreshJobs();
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / 1048576).toFixed(1) + ' MB';
         }
 
         function escapeHtml(text) {

@@ -21,6 +21,23 @@ changes to The Print Farm.
 
 ### Added
 
+- **Reworked File Library.**
+  - **Folder tree:** a sidebar shows every folder. Folders expand when you open
+    them, or when you hover over one while dragging.
+  - **Folder in the address:** the current folder is part of the URL
+    (`#library/<id>`), so refresh, the back button and links keep your place.
+  - **Bulk actions:** tick files (Shift-click for a range, Ctrl/Cmd-A for all)
+    to print, move or delete them together. New staff-only endpoints:
+    `POST /api/library/files/bulk-move` and `/bulk-delete`.
+  - **Drag and drop:** drag files (or the whole selection) and folders onto
+    the tree, folder cards or breadcrumbs. Invalid drops are refused.
+  - **Move dialog:** a clickable folder list replaces the dropdown, and invalid
+    targets are greyed out.
+  - **Print dialog:** shows each printer's state, and you can add to the queue
+    or send straight to an idle printer, with a copies count.
+  - **Views:** grid or list, sorted by date, name, size, print time, last
+    printed or times printed. Remembered per browser.
+  - **Feedback:** success and error messages for every action.
 - **Single-user mode.** Small farms with one operator can tick **Disable
   login** in Settings (or set `web.auth_enabled: false`). Every visitor is
   then treated as staff, the header shows "Single-user mode", and a warning is
@@ -71,6 +88,11 @@ changes to The Print Farm.
 
 ### Fixed
 
+- **Print from library sent to the chosen printer.** It used to ignore the
+  printer you picked and only queued the file.
+- **Folder names with quotes** no longer break that folder's buttons. Folder
+  names are now limited to 100 characters, with extra spaces collapsed.
+- **Students no longer see folder rename/move buttons** that always failed.
 - **Filament load/unload now matches Bambu Studio and Bambuddy.**
   - **Printers without an AMS:** "Load Filament" used to send raw G-code that
     homed X and extruded 30 mm at 220 °C, with nothing to stop it during a print.
