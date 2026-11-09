@@ -267,6 +267,11 @@ class FarmManager:
                 "obico": s.obico,
             }
             state.update(self.get_plate_state(name))
+            # Bambu printers stay in FINISH until the next job starts. Once the
+            # plate is confirmed clear (or the check is off) the printer can
+            # take a job, so label it READY like an idle printer.
+            if status in (PrintStatus.IDLE, PrintStatus.FINISH) and not state["plate_needs_clear"]:
+                state["display_status"] = "READY"
 
             # Overlay persisted gate configs onto MMU gates when HH has cleared them.
             # HH resets gate_spool_id (and sometimes material/color) after a print

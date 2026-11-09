@@ -3717,8 +3717,6 @@
         .pc-chip-btn { cursor: pointer; border-color: var(--line-soft); }
         .pc-chip-btn:hover { border-color: currentColor; }
 
-        .staff-only-toggle { display: flex; align-items: center; gap: 12px; margin: -4px 0 10px; font-size: 11px; }
-        .staff-only-toggle label { display: flex; align-items: center; gap: 4px; cursor: pointer; color: var(--text-muted); }
         .printer-orca-port { margin: -4px 0 10px; font-size: 11px; color: var(--text-muted); }
         .printer-orca-port span { color: var(--accent); user-select: all; cursor: text; }
 
@@ -3748,6 +3746,11 @@
         .pc-job-stats span { display: inline-flex; align-items: center; gap: 4px; }
         .pc-job-stats .ui-icon { width: 12px; height: 12px; }
         .pc-eta { color: var(--success); font-weight: 500; }
+        .pd-toggle { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; cursor: pointer; }
+        .pd-toggle input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--accent); flex-shrink: 0; }
+        .pd-toggle strong { display: block; font-size: 13px; }
+        .pd-toggle small { display: block; font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+        .pc-job-last { font-size: 11px; color: var(--text-muted); margin: -4px 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
         /* Temperatures + print controls */
         .pc-vitals { display: flex; gap: 8px; align-items: stretch; margin-bottom: 12px; }
@@ -5127,6 +5130,7 @@
                     : `<span class="pc-chip${p.chamber_light ? ' pc-chip-on' : ''}">${iconMarkup('bulb')}${lightLabel}</span>`);
             }
             if (p.staff_only) chips.push(`<span class="pc-chip pc-chip-staff" title="Only staff can use this printer">${iconMarkup('lock')}Staff only</span>`);
+            if (isAdmin && p.plate_clear_required === false) chips.push(`<span class="pc-chip pc-chip-warn" title="Jobs are sent without anyone confirming the build plate is clear. Change this in Details.">${iconMarkup('alert')}Plate check off</span>`);
             return chips.join('');
         }
 
@@ -5161,9 +5165,11 @@
             const active = connected && (isRunning || isPaused);
             const percent = clampNumber(p.mc_percent, 0, 100);
 
+            const ready = connected && String(p.display_status || '').toUpperCase() === 'READY';
             let label = 'Idle';
             let title = p.plate_needs_clear ? 'Waiting for the plate to be cleared' : 'Ready to print';
             if (!connected) { label = 'Offline'; title = 'Not connected'; }
+            else if (ready) { label = 'Ready'; title = 'Ready to print'; }
             else if (isRunning) label = 'Printing';
             else if (status === 'pause_filament') label = 'Paused — filament';
             else if (isPaused) label = 'Paused';
@@ -5171,7 +5177,7 @@
             else if (status === 'failed') { label = 'Failed'; if (p.subtask_name) title = prettyJobName(p.subtask_name); }
             if (active) title = prettyJobName(p.subtask_name) || 'Untitled job';
 
-            const barWidth = active ? percent : (connected && status === 'finish' ? 100 : 0);
+            const barWidth = active ? percent : (connected && status === 'finish' && !ready ? 100 : 0);
             const barClass = isPaused ? 'paused' : status === 'finish' ? 'done' : status === 'failed' ? 'failed' : '';
             const remaining = Number(p.mc_remaining_time) || 0;
             const speedName = SPEED_LEVELS[p.spd_lvl] || '';
@@ -5186,6 +5192,7 @@
             return `
                 <div class="pc-job-label">${htmlEscape(label)}</div>
                 <div class="pc-job-name" title="${htmlEscape(p.subtask_name || title)}">${htmlEscape(title)}</div>
+                ${ready && p.subtask_name ? `<div class="pc-job-last" title="${htmlEscape(p.subtask_name)}">Last: ${htmlEscape(prettyJobName(p.subtask_name))}</div>` : ''}
                 <div class="pc-job-progress">
                     <div class="progress-bar-container"><div class="progress-bar ${barClass}" style="width:${barWidth}%"></div></div>
                     <span class="pc-job-pct">${active ? percent + '%' : '—'}</span>
@@ -5228,12 +5235,21 @@
         let queuedJobsVisibleCount = 25;
         let spoolmanConfigured = false;
 
+        // READY (plate clear, can take a job) is green; a finished print still on
+        // the plate is amber because someone needs to go and remove it.
+        function printerStatusBadgeClass(p, status) {
+            if (!p.connected) return 'status-badge-unknown';
+            if (String(p.display_status || '').toUpperCase() === 'READY') return 'status-badge-idle';
+            if (p.plate_needs_clear) return 'status-badge-paused';
+            return `status-badge-${status}`;
+        }
+
         function renderPrinterCard(name, p) {
             const status = String(p.status || 'unknown').toLowerCase().replace(/[^a-z_]/g, '');
             const connected = p.connected;
             const connClass = connected ? 'conn-online' : 'conn-offline';
             const statusLabel = connected ? (p.display_status || p.status) : 'OFFLINE';
-            const statusBadge = connected ? `status-badge-${status}` : 'status-badge-unknown';
+            const statusBadge = printerStatusBadgeClass(p, status);
             const cardClass = connected ? `status-${status}` : 'status-unknown';
             const pType = p.type || 'bambulab';
             const isBambu = pType === 'bambulab';
@@ -5264,14 +5280,6 @@
                         </div>
                     </div>
                     <div class="pc-chips" data-field="chips">${renderPrinterChips(name, p)}</div>
-                    ${isAdmin ? `<div class="staff-only-toggle">
-                        <label>
-                            <input type="checkbox" ${p.staff_only ? 'checked' : ''} onchange="toggleStaffOnly(${nameArg}, this.checked)"> Staff only
-                        </label>
-                        <label title="Require someone to confirm the build plate is clear before the next job">
-                            <input type="checkbox" ${p.plate_clear_required !== false ? 'checked' : ''} onchange="togglePlateClearRequired(${nameArg}, this.checked)"> Plate check
-                        </label>
-                    </div>` : ''}
                     <div data-field="plate">${renderPlateBanner(name, p)}</div>
                     ${p.orca_port ? `<div class="printer-orca-port">OrcaSlicer: <span>${escapeHtml(location.hostname)}:${clampNumber(p.orca_port, 1, 65535)}</span></div>` : ''}
                     <div class="pc-job">
@@ -5322,7 +5330,8 @@
 
         async function togglePlateClearRequired(name, required) {
             const res = await apiPost(`${BASE}/api/printer/${encodeURIComponent(name)}/plate_clear_required`, { required });
-            if (!res.ok) alert(res.message || 'Could not update the plate check setting');
+            if (res.ok === false) showToast(`${name}: ${res.message || 'Could not update the plate check setting'}`, 'error');
+            else showToast(`${name}: build plate check ${required ? 'on' : 'off'}`, 'success');
             lastPrinterNames = [];
             refreshPrinters();
         }
@@ -5751,7 +5760,7 @@
             // Status label
             const statusEl = card.querySelector('[data-field="status"]');
             const statusLabel = connected ? (p.display_status || p.status) : 'OFFLINE';
-            const statusBadge = connected ? `status-badge-${status}` : 'status-badge-unknown';
+            const statusBadge = printerStatusBadgeClass(p, status);
             if (statusEl) { statusEl.textContent = statusLabel; statusEl.className = `printer-status ${statusBadge}`; }
 
             // Header actions persist between polling updates, so explicitly
@@ -5909,10 +5918,23 @@
             const leds = (p.klipper_leds || []).map(l => `${l.name}: ${l.on ? 'on' : 'off'}`);
             const hms = (p.hms || []).map(h => h.msg || h.description || JSON.stringify(h));
 
+            const settingsSection = isAdmin ? `
+                <div class="printer-details-section wide">
+                    <h3>Printer settings</h3>
+                    <label class="pd-toggle">
+                        <input type="checkbox" ${p.staff_only ? 'checked' : ''} onchange="toggleStaffOnly(${jsArg(name)}, this.checked)">
+                        <span><strong>Staff only</strong><small>Students can't see this printer or send jobs to it.</small></span>
+                    </label>
+                    <label class="pd-toggle">
+                        <input type="checkbox" ${p.plate_clear_required !== false ? 'checked' : ''} onchange="togglePlateClearRequired(${jsArg(name)}, this.checked)">
+                        <span><strong>Build plate check</strong><small>After a print, someone must press “Plate cleared” before the next job is sent. Turn off only for printers with automatic plate removal.</small></span>
+                    </label>
+                </div>` : '';
+
             const sections = [
                 detailSection('Connection', [
                     ['Name', p.name || name],
-                    ['Status', p.connected ? p.status : 'OFFLINE'],
+                    ['Status', p.connected ? (p.display_status || p.status) : 'OFFLINE'],
                     ['Connected', p.connected],
                     ['Type', p.type],
                     ['IP / Host', p.host],
@@ -5971,6 +5993,7 @@
             document.getElementById('printerDetailsName').textContent = name;
             document.getElementById('printerDetailsBody').innerHTML = `
                 <div class="printer-details-grid">
+                    ${settingsSection}
                     ${sections.join('')}
                     <div class="printer-details-section wide">
                         <h3>Raw Status</h3>
@@ -8731,12 +8754,11 @@
         }
 
         async function toggleStaffOnly(name, checked) {
-            try {
-                await apiPost(BASE + `/api/printer/${encodeURIComponent(name)}/staff_only`, {staff_only: checked});
-            } catch (err) {
-                alert('Failed to update: ' + err.message);
-                refreshPrinters();
-            }
+            const res = await apiPost(BASE + `/api/printer/${encodeURIComponent(name)}/staff_only`, {staff_only: checked});
+            if (res.ok === false) showToast(`${name}: ${res.message || 'Could not update staff-only'}`, 'error');
+            else showToast(`${name}: ${checked ? 'staff only' : 'available to approved students'}`, 'success');
+            lastPrinterNames = [];
+            refreshPrinters();
         }
 
         // ── Happy Hare Modal ─────────────────────────────────

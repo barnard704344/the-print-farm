@@ -88,6 +88,17 @@ changes to The Print Farm.
 
 ### Fixed
 
+- **Printers ready for a job now say READY.** Bambu printers stay in FINISH
+  until the next job starts, so cards kept saying "Finished" even after the
+  plate was cleared. A printer that is idle, or finished with its plate
+  confirmed clear (or the plate check off), now shows a green READY with the
+  last job underneath. A finished print still on the plate shows an amber
+  FINISH. The Camera Wall and the API's `display_status` match.
+- **Staff only and Build plate check moved into Details.** They were tick
+  boxes on every staff card. They now sit under "Printer settings" in the
+  printer's Details panel, with an explanation each. A "Plate check off" chip
+  on the card warns staff when the check is disabled, and both settings show
+  a confirmation message when changed.
 - **Readable job names.** Bambu printers used to receive the stored file
   name, e.g. `f627a845…_cade_pip2_PLA_9m8s.3mf`, so cards, the Camera Wall and
   the printer screen showed a long, unreadable name. Printers now get a short

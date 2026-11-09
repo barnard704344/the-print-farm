@@ -252,13 +252,16 @@
                 + (running ? ' running' : '')
                 + (paused ? ' paused' : '')
                 + (failed ? ' failed' : '')
-                + (status === 'FINISH' ? ' finish' : '');
+                + (status === 'FINISH' ? ' plate' : '')
+                + (status === 'READY' ? ' finish' : '');
 
             plateEl.hidden = !plate;
             plateEl.textContent = plate ? '⚠ Clear the build plate before the next job' : '';
 
             const active = running || paused;
-            job.textContent = active || status === 'FINISH' ? prettyJobName(p.subtask_name) : (p.connected ? 'Ready' : 'Printer offline');
+            job.textContent = active || status === 'FINISH' ? prettyJobName(p.subtask_name)
+                : !p.connected ? 'Printer offline'
+                : p.subtask_name ? `Ready · last: ${prettyJobName(p.subtask_name)}` : 'Ready';
             job.title = p.subtask_name || '';
             bar.hidden = stats.hidden = !active;
             const percent = Math.max(0, Math.min(100, Number(p.mc_percent) || 0));
