@@ -5,7 +5,17 @@ changes to The Print Farm.
 
 ## Unreleased
 
-No changes yet.
+### Added
+
+- **Better printer card layout.**
+  - **Own height:** cards now keep their own height and pack together, so a
+    long card (for example a Klipper toolchanger with macros and fans) no
+    longer stretches the cards beside it.
+  - **Card size switch:** a **Compact / Standard / Wide** switch in the
+    Printers toolbar sets the card width and is remembered per browser.
+  - **Two columns inside wide cards:** wide cards place their lower sections
+    side by side. Toolheads sit next to each other, and Macros sit beside Fans
+    & Lights; AMS units keep the full width.
 
 ## v1.0.15 - 2026-11-10 - Printer cards, File Library and Klipper macros
 

@@ -1995,12 +1995,12 @@
 
         /* Tablet breakpoint */
         @media (max-width: 1024px) {
-            .printer-grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+            .printer-grid { --card-min: 340px; }
         }
 
         /* Small tablet / large phone */
         @media (max-width: 768px) {
-            .printer-grid { grid-template-columns: 1fr; }
+            .printer-size-toggle { display: none; }
             .main { padding: 12px; }
             .brand-title { font-size: 16px; }
             .tab { font-size: 13px; }
@@ -2360,8 +2360,13 @@
     <div class="main">
         <!-- Printers Tab -->
         <div class="tab-content active" id="tab-printers">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <div class="printers-toolbar">
                 <div id="printerCount" style="font-size:13px; color:var(--text-muted);"></div>
+                <div class="lib-view-toggle printer-size-toggle" role="group" aria-label="Card size">
+                    <button type="button" data-card-size="compact" title="More, narrower cards per row">Compact</button>
+                    <button type="button" data-card-size="standard">Standard</button>
+                    <button type="button" data-card-size="wide" title="Fewer, wider cards; long cards use two columns inside">Wide</button>
+                </div>
                 <button class="btn btn-success admin-only" onclick="openWizard()"><svg class="ui-icon" aria-hidden="true" style="width:13px;height:13px;vertical-align:-2px;margin-right:4px;"><use href="#icon-plus"></use></svg>Add Printer</button>
             </div>
             <div class="printer-grid" id="printerGrid"></div>
@@ -3761,6 +3766,28 @@
         .pd-toggle input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--accent); flex-shrink: 0; }
         .pd-toggle strong { display: block; font-size: 13px; }
         .pd-toggle small { display: block; font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+        /* ── Printer grid: masonry packing and card sizes ── */
+        .printers-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+        .printers-toolbar #printerCount { margin-right: auto; }
+        .printer-grid {
+            --card-min: 420px;
+            grid-template-columns: repeat(auto-fill, minmax(min(var(--card-min), 100%), 1fr));
+            grid-auto-rows: 4px;
+            row-gap: 0;
+            column-gap: 18px;
+            align-items: start;
+        }
+        .printer-grid[data-size="compact"] { --card-min: 340px; }
+        .printer-grid[data-size="wide"] { --card-min: 640px; }
+        .printer-grid > * { margin-bottom: 18px; }
+        .printer-card { container-type: inline-size; min-width: 0; }
+        .pc-lower > [data-field="macros"]:empty { display: none; }
+        @container (min-width: 600px) {
+            /* Wide cards: lower sections side by side; AMS keeps the full width. */
+            .pc-lower { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px; align-items: start; }
+            .pc-lower > .ams-section, .pc-lower > .mmu-section, .pc-lower > .filament-controls { grid-column: 1 / -1; }
+            .pc-lower .toolhead-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+        }
         .pc-macros { margin-bottom: 12px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
         .pc-macros-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
         .pc-macro-btns { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -5330,11 +5357,13 @@
                         </div>
                         ${showControls ? `<div class="pc-actions" data-field="controls">${renderPrinterControls(name, p)}</div>` : ''}
                     </div>
-                    <div data-field="macros">${renderMacroSection(name, p)}</div>
-                    ${renderAmsSection(name, p)}
-                    ${renderFanLedSection(name, p)}
-                    ${renderMmuSection(name, p)}
-                    ${renderObicoSection(name, p)}
+                    <div class="pc-lower">
+                        ${renderAmsSection(name, p)}
+                        <div data-field="macros">${renderMacroSection(name, p)}</div>
+                        ${renderFanLedSection(name, p)}
+                        ${renderMmuSection(name, p)}
+                        ${renderObicoSection(name, p)}
+                    </div>
                 </div>
             `;
         }
@@ -7389,6 +7418,60 @@
         }
 
         // ── Refresh Loop ─────────────────────────────────────
+
+        // ── Printer grid layout ───────────────────────────────
+        // Cards keep their own height: each one spans as many 4px grid rows as
+        // it needs, so a long card no longer stretches the cards beside it and
+        // the next card fills the space under a short one.
+        const PRINTER_ROW = 4, PRINTER_GAP = 18;
+        let printerGridFrame = 0;
+        const printerCardObserver = typeof ResizeObserver === 'function'
+            ? new ResizeObserver(() => schedulePrinterGridLayout()) : null;
+
+        function schedulePrinterGridLayout() {
+            cancelAnimationFrame(printerGridFrame);
+            printerGridFrame = requestAnimationFrame(layoutPrinterGrid);
+        }
+
+        function layoutPrinterGrid() {
+            const grid = document.getElementById('printerGrid');
+            if (!grid) return;
+            for (const item of grid.children) {
+                const height = item.getBoundingClientRect().height;
+                if (!height) continue;
+                item.style.gridRowEnd = `span ${Math.max(1, Math.ceil((height + PRINTER_GAP) / PRINTER_ROW))}`;
+            }
+        }
+
+        function observePrinterCards() {
+            const grid = document.getElementById('printerGrid');
+            if (!grid) return;
+            if (printerCardObserver) {
+                printerCardObserver.disconnect();
+                for (const item of grid.children) printerCardObserver.observe(item);
+            }
+            schedulePrinterGridLayout();
+        }
+
+        function setPrinterCardSize(size) {
+            const value = ['compact', 'wide'].includes(size) ? size : 'standard';
+            const grid = document.getElementById('printerGrid');
+            if (grid) grid.dataset.size = value;
+            try { localStorage.setItem('printer-card-size', value); } catch (_) {}
+            document.querySelectorAll('[data-card-size]').forEach(btn => {
+                const on = btn.dataset.cardSize === value;
+                btn.classList.toggle('active', on);
+                btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+            });
+            schedulePrinterGridLayout();
+        }
+
+        document.querySelectorAll('[data-card-size]').forEach(btn =>
+            btn.addEventListener('click', () => setPrinterCardSize(btn.dataset.cardSize)));
+        setPrinterCardSize((() => { try { return localStorage.getItem('printer-card-size'); } catch (_) { return null; } })());
+        window.addEventListener('resize', schedulePrinterGridLayout);
+        document.querySelector('.tab[data-tab="printers"]')?.addEventListener('click', schedulePrinterGridLayout);
+
         async function refreshPrinters() {
             try {
                 const res = await fetch(BASE + '/api/farm/status');
@@ -7422,12 +7505,14 @@
                             <button class="btn btn-success admin-only" onclick="openWizard()">${iconMarkup('plus')} Add Printer</button>
                         </div>`;
                     lastPrinterNames = [];
+                    observePrinterCards();
                 } else if (currentNames !== prevNames) {
                     // Printers added/removed — full rebuild
                     grid.innerHTML = entries
                         .map(([name, p]) => renderPrinterCard(name, p))
                         .join('');
                     lastPrinterNames = entries.map(([n]) => n);
+                    observePrinterCards();
                     // Fetch spool assignments and immediately re-render filament sections
                     // so spools appear on first load without waiting for the next poll.
                     if (spoolmanConfigured) refreshAllPrinterSpools();
