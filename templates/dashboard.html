@@ -3437,6 +3437,28 @@
         }
         .color-row .color-hex { flex: 1; }
 
+        .ams-pop-load-btn {
+            margin-top: 2px; padding: 3px 12px; font-size: 11px; border-radius: 5px; cursor: pointer;
+            border: 1px solid var(--accent); background: transparent; color: var(--accent);
+        }
+        .ams-pop-load-btn:hover:not(:disabled) { background: var(--accent-dim); }
+        .ams-pop-load-btn:disabled, .ams-pop-action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .ams-pop-loaded-tag { margin-top: 2px; font-size: 10px; font-weight: 600; color: var(--accent); }
+
+        .toast-host {
+            position: fixed; right: 16px; bottom: 16px; z-index: 5000;
+            display: flex; flex-direction: column; gap: 8px; max-width: min(380px, calc(100vw - 32px));
+        }
+        .toast {
+            padding: 10px 14px; border-radius: 8px; font-size: 13px;
+            background: var(--card); color: var(--text); border: 1px solid var(--border);
+            border-left: 3px solid var(--info); box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+            transition: opacity 0.3s, transform 0.3s;
+        }
+        .toast-success { border-left-color: var(--success); }
+        .toast-error { border-left-color: var(--danger); }
+        .toast.leaving { opacity: 0; transform: translateY(6px); }
+
         /* ── Printer card layout ─────────────────────────── */
         .printer-card .printer-header { align-items: flex-start; margin-bottom: 8px; }
         .pc-title { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -5349,9 +5371,10 @@
                         </div>
                         <div class="ams-units">${units}</div>
                         ${canControl ? `<div class="ams-external ${externalActive ? 'active' : ''}" onclick="event.stopPropagation()">
-                            <span onclick="amsLoadTray(${nameArg}, 254)" style="cursor:pointer">🔗 External Spool${externalActive ? ' (active)' : ''}</span>
-                            <span style="margin-left:auto;">
-                                <button class="btn" onclick="amsLoadTray(${nameArg}, 255)" style="font-size:10px;padding:2px 8px;">Unload</button>
+                            <span>🔗 External Spool${externalActive ? ' (active)' : ''}</span>
+                            <span style="margin-left:auto;display:flex;gap:4px;">
+                                ${externalActive ? '' : `<button class="btn" onclick="amsLoadTray(${nameArg}, 254)" style="font-size:10px;padding:2px 8px;"${filamentBtnAttrs(p)}>Load</button>`}
+                                <button class="btn" onclick="amsLoadTray(${nameArg}, 255)" style="font-size:10px;padding:2px 8px;"${filamentBtnAttrs(p)}>Unload</button>
                             </span>
                         </div>` : `<div class="ams-external ${externalActive ? 'active' : ''}" onclick="event.stopPropagation()">
                             <span>🔗 External Spool${externalActive ? ' (active)' : ''}</span>
@@ -5400,13 +5423,14 @@
                     }
                 }
 
-                if (canControlPrinter(p)) {
+                // Load/unload is a Bambu Lab command; Klipper printers have no equivalent here.
+                if (canControlPrinter(p) && (p.type || 'bambulab') === 'bambulab') {
                     return `
                         <div class="filament-controls" data-field="filament">
                             ${spoolHtml}
                             <div class="filament-btns">
-                                <button class="btn btn-primary" onclick="filamentCmd('${name}','unload_filament')">Unload Filament</button>
-                                <button class="btn btn-success" onclick="filamentCmd('${name}','load_filament')">Load Filament</button>
+                                <button class="btn btn-primary" onclick="filamentCmd(${jsArg(name)},'unload_filament')"${filamentBtnAttrs(p)}>Unload Filament</button>
+                                <button class="btn btn-success" onclick="filamentCmd(${jsArg(name)},'load_filament')"${filamentBtnAttrs(p)}>Load Filament</button>
                             </div>
                         </div>
                     `;
@@ -5877,9 +5901,50 @@
             }
         }
 
+        // Load/unload is refused while a print is running (paused is fine: that is
+        // when you swap filament). The server enforces this too.
+        function filamentChangeBlocked(p) {
+            if (!p || !p.connected) return 'Printer is not connected';
+            if (String(p.status || '').toUpperCase() === 'RUNNING') return "Can't load or unload while a print is running";
+            return '';
+        }
+
+        function filamentBtnAttrs(p) {
+            const reason = filamentChangeBlocked(p);
+            return reason ? ` disabled title="${htmlEscape(reason)}"` : '';
+        }
+
+        function showToast(message, kind = 'info') {
+            let host = document.getElementById('toastHost');
+            if (!host) {
+                host = document.createElement('div');
+                host.id = 'toastHost';
+                host.className = 'toast-host';
+                host.setAttribute('role', 'status');
+                host.setAttribute('aria-live', 'polite');
+                document.body.appendChild(host);
+            }
+            const el = document.createElement('div');
+            el.className = `toast toast-${kind}`;
+            el.textContent = message;
+            host.appendChild(el);
+            setTimeout(() => { el.classList.add('leaving'); setTimeout(() => el.remove(), 300); }, kind === 'error' ? 6000 : 3500);
+        }
+
+        async function sendFilamentCommand(name, url, body) {
+            const res = await apiPost(url, body);
+            if (res.ok === false) {
+                showToast(`${name}: ${res.message || 'Command failed'}`, 'error');
+            } else {
+                showToast(`${name}: ${res.message || 'Command sent'}`, 'success');
+                setTimeout(refreshPrinters, 1500);
+            }
+        }
+
         async function filamentCmd(name, cmd) {
-            if (!confirm(`${cmd.replace('_', ' ')} on ${name}?`)) return;
-            await apiPost(`${BASE}/api/printer/${encodeURIComponent(name)}/${cmd}`);
+            const label = cmd === 'load_filament' ? 'Load filament from the external spool' : 'Unload filament';
+            if (!confirm(`${label} on ${name}?`)) return;
+            await sendFilamentCommand(name, `${BASE}/api/printer/${encodeURIComponent(name)}/${cmd}`);
         }
 
         // ── Klipper Fan & LED Controls ───────────────────────
@@ -5896,9 +5961,12 @@
         }
 
         async function amsLoadTray(name, trayId) {
-            const label = trayId === 255 ? 'Unload filament' : trayId === 254 ? 'Load from external spool' : `Load from AMS tray ${trayId + 1}`;
+            const p = (window._farmPrinters || {})[name];
+            const tray = p && Array.isArray(p.ams_trays) ? p.ams_trays.find(t => t.id === trayId) : null;
+            const slot = tray ? `${amsSlotLabel(tray)}${tray.type ? ` (${tray.type})` : ''}` : `tray ${trayId}`;
+            const label = trayId === 255 ? 'Unload filament' : trayId === 254 ? 'Load from the external spool' : `Load filament from ${slot}`;
             if (!confirm(`${label} on ${name}?`)) return;
-            await apiPost(`${BASE}/api/printer/${encodeURIComponent(name)}/ams_load`, { tray_id: trayId });
+            await sendFilamentCommand(name, `${BASE}/api/printer/${encodeURIComponent(name)}/ams_load`, { tray_id: trayId });
         }
 
         // ── Tray Config ──────────────────────────────────────
@@ -8466,12 +8534,17 @@
                     const spoolName = spool ? (spool.filament?.name || `Spool #${spool.id}`) : null;
                     const spoolRem = spool?.remaining_weight != null ? `${Math.round(spool.remaining_weight)}g` : '';
 
-                    // Admin: click to configure. Non-admin: click to load.
-                    const clickAttr = t.loaded
+                    // Staff: click to configure. Approved students: click to load.
+                    // Everyone who can control the printer also gets a Load button.
+                    const canControl = canControlPrinter(p);
+                    const clickAttr = t.loaded && canControl
                         ? (isAdmin
                             ? `onclick="openTrayConfig(${jsArg(printerName)},${Number(t.id)},${Number(t.slot)},${jsArg(t.type || '')},${jsArg(safeCssColor(t.color, '#333333'))},${jsArg(t.nozzle_temp_min)},${jsArg(t.nozzle_temp_max)})"`
-                            : `onclick="amsLoadTray(${jsArg(printerName)},${Number(t.id)})"`)
+                            : (filamentChangeBlocked(p) ? '' : `onclick="amsLoadTray(${jsArg(printerName)},${Number(t.id)})"`))
                         : '';
+                    const loadBtn = canControl && t.loaded && !t.active
+                        ? `<button class="ams-pop-load-btn" onclick="event.stopPropagation();amsLoadTray(${jsArg(printerName)},${Number(t.id)})"${filamentBtnAttrs(p)}>Load</button>`
+                        : (t.active ? '<div class="ams-pop-loaded-tag">Loaded</div>' : '');
 
                     const spoolRow = spool
                         ? `<div class="ams-pop-tray-spool has-spool">
@@ -8488,11 +8561,12 @@
                         <div class="ams-pop-swatch ${bblClass}" style="background:${sw}"></div>
                         <div class="ams-pop-tray-info">
                             <div class="ams-pop-tray-type">${escapeHtml(t.type || '—')}</div>
-                            <div class="ams-pop-tray-slot">Slot ${t.slot + 1}</div>
+                            <div class="ams-pop-tray-slot">${escapeHtml(amsSlotLabel(t))}</div>
                             ${tempRange ? `<div class="ams-pop-tray-temps">${tempRange}</div>` : ''}
                         </div>
                         ${remainPct >= 0 ? `<div class="ams-pop-tray-remain-bar"><div class="ams-pop-tray-remain-fill" style="width:${remainPct}%;background:${remainCol}"></div></div><div class="ams-pop-tray-remain-text">${remainPct}%</div>` : ''}
                         ${spoolRow}
+                        ${loadBtn}
                     </div>`;
                 });
                 html += `</div></div>`;
@@ -8508,12 +8582,14 @@
                     <div class="ams-pop-ext-label">🔗 External Spool ${isExternal ? '(Active)' : ''}</div>
                     <div class="ams-pop-ext-type">${escapeHtml(extType)}${vt.nozzle_temp_min && vt.nozzle_temp_min !== '0' ? ` · ${escapeHtml(vt.nozzle_temp_min)}-${escapeHtml(vt.nozzle_temp_max)}°C` : ''}</div>
                 </div>
-                ${isAdmin ? `<button class="ams-pop-action-btn" onclick="amsLoadTray(${jsArg(printerName)}, 254)" style="font-size:11px;padding:6px 10px;">Load External</button>` : ''}
+                ${canControlPrinter(p) && !isExternal ? `<button class="ams-pop-action-btn" onclick="amsLoadTray(${jsArg(printerName)}, 254)" style="font-size:11px;padding:6px 10px;"${filamentBtnAttrs(p)}>Load External</button>` : ''}
             </div>`;
 
-            if (isAdmin) {
-                html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
-                    <button class="ams-pop-action-btn" onclick="amsLoadTray(${jsArg(printerName)}, 255)">⏏ Unload Filament</button>
+            if (canControlPrinter(p)) {
+                const blocked = filamentChangeBlocked(p);
+                html += `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px;">
+                    <button class="ams-pop-action-btn" onclick="amsLoadTray(${jsArg(printerName)}, 255)"${filamentBtnAttrs(p)}>⏏ Unload Filament</button>
+                    ${blocked ? `<span style="font-size:12px;color:var(--text-muted);">${escapeHtml(blocked)}</span>` : ''}
                 </div>`;
             }
 

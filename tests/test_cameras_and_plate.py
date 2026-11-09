@@ -370,6 +370,7 @@ class PrinterThumbnailTests(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.data, self.PNG)
         self.assertEqual(res.mimetype, "image/png")
+        res.close()
 
     def test_missing_job_or_printer_is_404(self):
         self.assertEqual(self._client().get("/api/printer/Idle-Printer/thumbnail").status_code, 404)
@@ -378,4 +379,6 @@ class PrinterThumbnailTests(unittest.TestCase):
     def test_requires_login_and_respects_staff_only(self):
         self.assertNotEqual(self.app.test_client().get("/api/printer/Printer-1/thumbnail").status_code, 200)
         self.assertEqual(self._client().get("/api/printer/Staff-Printer/thumbnail").status_code, 403)
-        self.assertEqual(self._client(role="staff").get("/api/printer/Staff-Printer/thumbnail").status_code, 200)
+        staff_res = self._client(role="staff").get("/api/printer/Staff-Printer/thumbnail")
+        self.assertEqual(staff_res.status_code, 200)
+        staff_res.close()

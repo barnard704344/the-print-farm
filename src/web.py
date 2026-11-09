@@ -986,42 +986,69 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             ok = client.set_nozzle_temperature(temp)
         return jsonify({"ok": ok, "temp": temp, "heater": heater})
 
+    def _filament_change_error(name):
+        """(client, error_response) for a load/unload request on this printer."""
+        client = farm_manager.get_printer(name)
+        if not client:
+            return None, (jsonify({"ok": False, "message": "Printer not found"}), 404)
+        if farm_manager.get_printer_type(name) == "klipper" or not hasattr(client, "filament_change_blocked"):
+            return None, (jsonify({"ok": False, "message": "Filament load/unload is only available on Bambu Lab printers"}), 400)
+        reason = client.filament_change_blocked()
+        if reason:
+            return None, (jsonify({"ok": False, "message": reason}), 409)
+        return client, None
+
+    def _filament_result(ok, message):
+        if ok:
+            return jsonify({"ok": True, "message": message})
+        return jsonify({"ok": False, "message": "The printer did not accept the command"}), 502
+
     @app.route(prefix + "/api/printer/<name>/unload_filament", methods=["POST"])
     @app.route("/api/printer/<name>/unload_filament", methods=["POST"])
     @printer_control_required
     def printer_unload_filament(name):
-        client = farm_manager.get_printer(name)
-        if not client:
-            return jsonify({"error": "Printer not found"}), 404
-        ok = client.unload_filament()
-        return jsonify({"ok": ok})
+        client, error = _filament_change_error(name)
+        if error:
+            return error
+        return _filament_result(client.unload_filament(), "Unloading filament")
 
     @app.route(prefix + "/api/printer/<name>/load_filament", methods=["POST"])
     @app.route("/api/printer/<name>/load_filament", methods=["POST"])
     @printer_control_required
     def printer_load_filament(name):
-        client = farm_manager.get_printer(name)
-        if not client:
-            return jsonify({"error": "Printer not found"}), 404
-        ok = client.load_filament()
-        return jsonify({"ok": ok})
+        """Load from the external spool (printers without an AMS)."""
+        client, error = _filament_change_error(name)
+        if error:
+            return error
+        return _filament_result(client.load_filament(), "Loading filament from the external spool")
 
     @app.route(prefix + "/api/printer/<name>/ams_load", methods=["POST"])
     @app.route("/api/printer/<name>/ams_load", methods=["POST"])
     @printer_control_required
     def printer_ams_load(name):
-        """Load filament from a specific AMS tray."""
-        client = farm_manager.get_printer(name)
-        if not client:
-            return jsonify({"error": "Printer not found"}), 404
-        if farm_manager.get_printer_type(name) == "klipper":
-            return jsonify({"ok": False, "message": "AMS not supported on Klipper printers"}), 400
+        """Load filament from an AMS tray (0-15, AMS Lite 64-67, AMS HT 128-135),
+        254 for the external spool, or 255 to unload."""
         data = request.get_json(silent=True) or {}
-        tray_id = data.get("tray_id")
-        if tray_id is None:
+        try:
+            tray_id = int(data.get("tray_id"))
+        except (TypeError, ValueError):
             return jsonify({"ok": False, "message": "tray_id required"}), 400
-        ok = client.ams_load_tray(int(tray_id))
-        return jsonify({"ok": ok})
+        if not (0 <= tray_id <= 15 or 64 <= tray_id <= 67 or 128 <= tray_id <= 135 or tray_id in (254, 255)):
+            return jsonify({"ok": False, "message": "Invalid tray_id"}), 400
+        client, error = _filament_change_error(name)
+        if error:
+            return error
+        if tray_id == 255:
+            return _filament_result(client.unload_filament(), "Unloading filament")
+        if tray_id == 254:
+            target = "the external spool"
+        elif tray_id >= 128:
+            target = f"HT-{chr(ord('A') + tray_id - 128)}"
+        elif tray_id >= 64:
+            target = f"AMS Lite slot {tray_id - 63}"
+        else:
+            target = f"{chr(ord('A') + tray_id // 4)}{tray_id % 4 + 1}"
+        return _filament_result(client.ams_load_tray(tray_id), f"Loading filament from {target}")
 
     @app.route(prefix + "/api/printer/<name>/tray_config", methods=["POST"])
     @app.route("/api/printer/<name>/tray_config", methods=["POST"])

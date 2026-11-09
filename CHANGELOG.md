@@ -64,6 +64,22 @@ changes to The Print Farm.
 
 ### Fixed
 
+- **Filament load/unload now matches Bambu Studio and Bambuddy.**
+  - **Printers without an AMS:** "Load Filament" used to send raw G-code that
+    homed X and extruded 30 mm at 220 °C, with nothing to stop it during a print.
+    It now runs the printer's own external-spool load.
+  - **AMS loads:** the command now names the AMS unit and slot, and lets the
+    printer pick the filament's temperature instead of forcing 220 °C.
+  - **Unloads:** these now use the current nozzle temperature (210 °C when the
+    nozzle is cold).
+  - **AMS HT slots:** these are now addressed correctly.
+  - **During prints:** load and unload are refused while a print is running
+    (dashboard, `/api/printer/...` and API v1), but still allowed while paused.
+  - **Klipper printers:** these no longer show load/unload buttons that always
+    failed.
+  - **AMS details window:** this now has a Load button on each slot, so staff
+    can load a specific slot.
+  - **Feedback:** every load/unload shows a success or error message.
 - The 3D toolpath viewer no longer cuts prints off partway up. Arcs were split
   into 0.08 mm pieces, so moderate Bambu prints hit the 200,000-segment limit
   and later layers were silently dropped (for example, a 14 mm print stopped at

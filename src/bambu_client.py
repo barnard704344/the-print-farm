@@ -180,6 +180,17 @@ def sanitize_3mf_external_spool(path: str) -> str:
     return path
 
 
+def ams_global_tray_id(unit_id: int, slot: int) -> int:
+    """Global tray id as the printer reports it in tray_now.
+
+    Regular AMS trays are unit * 4 + slot (0-15). An AMS HT holds a single tray
+    whose global id is its unit id (128-135).
+    """
+    if 128 <= unit_id <= 135:
+        return unit_id
+    return unit_id * 4 + slot
+
+
 class PrintStatus(Enum):
     IDLE = "IDLE"
     RUNNING = "RUNNING"
@@ -530,37 +541,86 @@ class BambuClient:
             }
         })
 
+    def filament_change_blocked(self) -> Optional[str]:
+        """Why load/unload is refused right now, or None when it is allowed.
+
+        Like Bambuddy, only an actively running print blocks it; a paused print
+        (including a filament-runout pause) is when you would swap filament.
+        """
+        if not self.is_connected():
+            return "Printer is not connected"
+        if self._state.status == PrintStatus.RUNNING:
+            return "Filament can't be loaded or unloaded while a print is running"
+        return None
+
+    def _tray_wire_ids(self, tray_id: int) -> tuple[int, int, int]:
+        """(ams_id, slot_id, target) for ams_change_filament, as Bambu Studio sends them.
+
+        A regular AMS is addressed by unit and local slot with the global tray
+        as target. A unit id of 16 or more (AMS Lite on 16, AMS HT on 128-135)
+        uses the unit id itself as the target.
+        """
+        with self._state_lock:
+            tray = next((t for t in self._state.ams_trays if t.get("id") == tray_id), None)
+        if tray is not None:
+            unit, slot = int(tray["unit"]), int(tray["slot"])
+        elif 128 <= tray_id <= 135:
+            unit, slot = tray_id, 0
+        else:
+            unit, slot = tray_id // 4, tray_id % 4
+        if unit >= 16:
+            return unit, slot, unit
+        return unit, slot, unit * 4 + slot
+
+    def _unload_temp(self) -> int:
+        """Unload at the nozzle's current temperature, or 210 C if it is cold."""
+        temp = int(self._state.nozzle_temper or 0)
+        return temp if temp >= 180 else 210
+
     def unload_filament(self) -> bool:
-        """Unload filament (retract and cool nozzle)."""
+        """Unload whatever is loaded (AMS tray or external spool), as Bambu Studio does."""
+        tray_now = self._state.ams_tray_now
+        ams_id = 255 if tray_now in (254, 255) else self._tray_wire_ids(tray_now)[0]
+        temp = self._unload_temp()
+        logger.info(f"[{self.name}] Unloading filament (tray_now={tray_now}, ams_id={ams_id}, temp={temp})")
         return self._send_command({
             "print": {
                 "command": "ams_change_filament",
                 "sequence_id": str(int(time.time())),
+                "ams_id": ams_id,
+                "slot_id": 255,
                 "target": 255,
-                "curr_temp": 220,
-                "tar_temp": 220,
+                "curr_temp": temp,
+                "tar_temp": temp,
             }
         })
 
     def load_filament(self) -> bool:
-        """Load/feed filament at current nozzle temp."""
-        return self._send_command({
-            "print": {
-                "command": "gcode_line",
-                "sequence_id": str(int(time.time())),
-                "param": "M620 S255\nM104 S220\nG28 X\nM109 S220\nG1 E30 F300\nM621 S255\n",
-            }
-        })
+        """Load from the external spool using the printer's own load routine."""
+        return self.ams_load_tray(254)
 
     def ams_load_tray(self, tray_id: int) -> bool:
-        """Load filament from a specific AMS tray (0-15, or 254 for external, 255 to unload)."""
+        """Load filament from an AMS tray, or 254 for the external spool; 255 unloads.
+
+        Temperatures are sent as -1 so the printer heats to the filament's own
+        temperature, matching Bambu Studio and Bambuddy.
+        """
+        if tray_id == 255:
+            return self.unload_filament()
+        if tray_id == 254:
+            ams_id, slot_id, target = 255, 254, 254
+        else:
+            ams_id, slot_id, target = self._tray_wire_ids(tray_id)
+        logger.info(f"[{self.name}] Loading filament from tray {tray_id} (ams_id={ams_id}, slot_id={slot_id})")
         return self._send_command({
             "print": {
                 "command": "ams_change_filament",
                 "sequence_id": str(int(time.time())),
-                "target": tray_id,
-                "curr_temp": 220,
-                "tar_temp": 220,
+                "ams_id": ams_id,
+                "slot_id": slot_id,
+                "target": target,
+                "curr_temp": -1,
+                "tar_temp": -1,
             }
         })
 
@@ -929,12 +989,18 @@ class BambuClient:
                 })
                 for tray in unit.get("tray", []):
                     tray_id = int(tray.get("id", 0))
-                    global_id = unit_id * 4 + tray_id
+                    global_id = ams_global_tray_id(unit_id, tray_id)
                     color_hex = tray.get("tray_color", "00000000")
-                    # Check tray_exist_bits to see if filament is physically present
-                    tray_exists = bool(tray_exist & (1 << global_id))
-                    is_bbl = bool(tray_is_bbl & (1 << global_id))
                     tray_type = tray.get("tray_type", "")
+                    # Check tray_exist_bits to see if filament is physically present.
+                    # The bitmask only covers regular AMS units (0-3); an AMS HT or
+                    # AMS Lite tray counts as present when it reports a filament.
+                    if unit_id < 16:
+                        tray_exists = bool(tray_exist & (1 << global_id))
+                        is_bbl = bool(tray_is_bbl & (1 << global_id))
+                    else:
+                        tray_exists = bool(tray_type)
+                        is_bbl = bool(tray.get("tray_uuid", "").strip("0"))
                     # Apply local override if set (for manual filament config)
                     override = self._tray_overrides.get(global_id)
                     display_type = (

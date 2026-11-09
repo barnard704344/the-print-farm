@@ -293,6 +293,12 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
             ok = printer.set_nozzle_temperature(temp)
             return _ok({"command": "set_nozzle_temp", "temperature": temp, "printer": name}) if ok else _error("Printer rejected command", 502)
 
+        elif cmd in ("unload_filament", "load_filament") and not hasattr(printer, "filament_change_blocked"):
+            return _error("Filament load/unload is only available on Bambu Lab printers", 400)
+
+        elif cmd in ("unload_filament", "load_filament") and printer.filament_change_blocked():
+            return _error(printer.filament_change_blocked(), 409, "PRINTER_BUSY")
+
         elif cmd == "unload_filament":
             ok = printer.unload_filament()
             return _ok({"command": "unload_filament", "printer": name}) if ok else _error("Printer rejected command", 502)
