@@ -239,6 +239,12 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         status_value = getattr(status, "value", str(status or "")).upper()
         if status_value not in ("IDLE", "FINISH"):
             return f"Printer '{printer_name}' is not idle ({status_value or 'unknown'})", 409
+        if hasattr(farm_manager, "plate_needs_clearing") and farm_manager.plate_needs_clearing(printer_name):
+            return (
+                f"The build plate on '{printer_name}' has not been confirmed clear. "
+                "Remove the last print, then press 'Plate cleared' on the printer card.",
+                409,
+            )
         if any(j.get("printer_name") == printer_name for j in job_queue.get_active_jobs()):
             return f"Printer '{printer_name}' already has an active job", 409
         return None
@@ -578,6 +584,16 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
     @app.route("/")
     def dashboard():
         return render_template("dashboard.html", prefix=prefix)
+
+    @app.route(prefix + "/cameras")
+    @app.route("/cameras")
+    def camera_wall():
+        """Grid of every visible printer camera, e.g. for a classroom screen.
+
+        The page itself is public; it signs in (or uses SSO) through the same
+        APIs as the dashboard, and every data request is access-checked.
+        """
+        return render_template("camera_wall.html", prefix=prefix)
 
     @app.route(prefix + "/api/auth/status")
     @app.route("/api/auth/status")
@@ -2382,6 +2398,39 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             return jsonify({"ok": False, "error": str(e)}), 500
         return jsonify({"ok": True, "staff_only": staff_only})
 
+    # ── Build plate confirmation ─────────────────────────
+
+    @app.route(prefix + "/api/printer/<name>/plate_cleared", methods=["POST"])
+    @app.route("/api/printer/<name>/plate_cleared", methods=["POST"])
+    @printer_control_required
+    def printer_plate_cleared(name):
+        """Confirm the build plate is clear so the printer can take a new job."""
+        who = session.get("username") or ("api" if _check_admin_api_key() else "staff")
+        if not farm_manager.confirm_plate_clear(name, who):
+            return jsonify({"ok": False, "error": "Printer not found"}), 404
+        return jsonify({"ok": True, **farm_manager.get_plate_state(name)})
+
+    @app.route(prefix + "/api/printer/<name>/plate_clear_required", methods=["POST"])
+    @app.route("/api/printer/<name>/plate_clear_required", methods=["POST"])
+    @admin_required
+    def set_plate_clear_required(name):
+        """Turn the 'confirm plate is clear' step on or off for one printer."""
+        data = request.get_json(silent=True) or {}
+        required = bool(data.get("required", True))
+        printer_cfg = next(
+            (p for p in app_config.get("printers", []) if p.get("name") == name), None
+        )
+        if not printer_cfg:
+            return jsonify({"ok": False, "error": "Printer not found"}), 404
+        printer_cfg["require_plate_clear"] = required
+        try:
+            _save_config()
+        except Exception as e:
+            logger.error(f"Failed to save require_plate_clear setting: {e}")
+            return jsonify({"ok": False, "error": str(e)}), 500
+        farm_manager.set_plate_clear_required(name, required)
+        return jsonify({"ok": True, **farm_manager.get_plate_state(name)})
+
     # ── Active Directory Config API ───────────────────────
 
     @app.route(prefix + "/api/ad/config", methods=["GET"])
@@ -2754,17 +2803,25 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
 
     # ── Camera API ────────────────────────────────────────
 
-    @app.route(prefix + "/api/camera/<name>/start", methods=["POST"])
-    @app.route("/api/camera/<name>/start", methods=["POST"])
-    @login_required
-    def camera_start(name):
-        """Start camera stream for a printer."""
-        if not camera_manager:
-            return jsonify({"ok": False, "message": "Camera manager not available"}), 503
+    # Long-lived MJPEG streams each hold a web-server thread, so cap them.
+    # The dashboard and camera wall use snapshot polling instead.
+    mjpeg_stream_slots = threading.BoundedSemaphore(4)
+    mjpeg_max_seconds = 600
+
+    def _camera_access_error(name):
+        """Students may not view cameras on staff-only printers."""
+        if not (is_admin() or _check_admin_api_key()) and _is_staff_only_printer(name):
+            return Response("Camera is restricted to staff", status=403)
+        return None
+
+    def _ensure_camera(name):
+        """Start (or keep alive) the shared upstream camera for a printer.
+
+        Returns (ok, message, status_code).
+        """
         printer = farm_manager.get_printer(name)
         if not printer:
-            return jsonify({"ok": False, "message": f"Printer '{name}' not found"}), 404
-
+            return False, f"Printer '{name}' not found", 404
         printer_type = farm_manager.get_printer_type(name)
         if printer_type == "klipper":
             camera_url = getattr(printer, 'camera_url', '')
@@ -2772,7 +2829,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
                 # Try auto-detecting from Moonraker
                 camera_url = _detect_klipper_webcam(printer)
             if not camera_url:
-                return jsonify({"ok": False, "message": "No camera URL configured or detected for this Klipper printer"}), 400
+                return False, "No camera URL configured or detected for this Klipper printer", 400
             camera_manager.start_http_camera(name, camera_url)
         else:
             camera_manager.start_camera(
@@ -2782,13 +2839,29 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
                 getattr(printer, "camera_port", 6000),
                 getattr(printer, "tls_fingerprints", {}).get("camera", ""),
             )
-        return jsonify({"ok": True, "message": f"Camera started for '{name}'"})
+        return True, f"Camera started for '{name}'", 200
+
+    @app.route(prefix + "/api/camera/<name>/start", methods=["POST"])
+    @app.route("/api/camera/<name>/start", methods=["POST"])
+    @login_required
+    def camera_start(name):
+        """Start (or join) the shared camera stream for a printer."""
+        if not camera_manager:
+            return jsonify({"ok": False, "message": "Camera manager not available"}), 503
+        if _camera_access_error(name):
+            return jsonify({"ok": False, "message": "Camera is restricted to staff"}), 403
+        ok, message, code = _ensure_camera(name)
+        return jsonify({"ok": ok, "message": message}), code
 
     @app.route(prefix + "/api/camera/<name>/stop", methods=["POST"])
     @app.route("/api/camera/<name>/stop", methods=["POST"])
-    @login_required
+    @admin_required
     def camera_stop(name):
-        """Stop camera stream for a printer."""
+        """Force-stop a shared camera stream for every viewer (staff only).
+
+        Viewers who just want to hide a feed stop polling locally; idle
+        cameras are stopped automatically once nobody is watching.
+        """
         if not camera_manager:
             return jsonify({"ok": False, "message": "Camera manager not available"}), 503
         camera_manager.stop_camera(name)
@@ -2798,31 +2871,63 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
     @app.route("/api/camera/<name>/snapshot")
     @login_required
     def camera_snapshot(name):
-        """Return the latest JPEG frame as an image."""
+        """Return the latest JPEG frame; 304 when the viewer already has it."""
         if not camera_manager:
             return Response("Camera manager not available", status=503)
-        frame = camera_manager.get_frame(name)
+        denied = _camera_access_error(name)
+        if denied:
+            return denied
+        camera_manager.touch(name)
+        frame, frame_at = camera_manager.get_frame_with_time(name)
         if frame is None:
             return Response("No frame available", status=404)
-        return Response(frame, mimetype="image/jpeg",
-                        headers={"Cache-Control": "no-cache, no-store"})
+        etag = f'"{int(frame_at * 1000)}"'
+        headers = {"Cache-Control": "no-cache", "ETag": etag}
+        if request.headers.get("If-None-Match") == etag:
+            return Response(status=304, headers=headers)
+        return Response(frame, mimetype="image/jpeg", headers=headers)
 
     @app.route(prefix + "/api/camera/<name>/stream")
     @app.route("/api/camera/<name>/stream")
     @login_required
     def camera_stream(name):
-        """MJPEG stream — multipart/x-mixed-replace boundary push."""
+        """MJPEG stream — multipart/x-mixed-replace boundary push.
+
+        Limited to a few concurrent viewers for at most ten minutes each so
+        streams cannot starve the web server's worker threads.
+        """
         if not camera_manager:
             return Response("Camera manager not available", status=503)
+        denied = _camera_access_error(name)
+        if denied:
+            return denied
+        if not mjpeg_stream_slots.acquire(blocking=False):
+            return Response(
+                "Too many live camera streams; use the snapshot view",
+                status=503,
+                headers={"Retry-After": "30"},
+            )
 
         def generate():
-            while True:
-                frame = camera_manager.get_frame(name)
-                if frame:
-                    yield (b"--frame\r\n"
-                           b"Content-Type: image/jpeg\r\n\r\n" +
-                           frame + b"\r\n")
-                time.sleep(0.5)  # ~2 FPS
+            try:
+                deadline = time.monotonic() + mjpeg_max_seconds
+                last_sent = None
+                last_write = 0.0
+                while time.monotonic() < deadline:
+                    camera_manager.touch(name)
+                    frame, frame_at = camera_manager.get_frame_with_time(name)
+                    # Send new frames, and resend the current one every few
+                    # seconds so a disconnected viewer is noticed (and its
+                    # slot freed) even when the camera has stalled.
+                    if frame and (frame_at != last_sent or time.monotonic() - last_write > 5):
+                        last_sent = frame_at
+                        last_write = time.monotonic()
+                        yield (b"--frame\r\n"
+                               b"Content-Type: image/jpeg\r\n\r\n" +
+                               frame + b"\r\n")
+                    time.sleep(0.5)
+            finally:
+                mjpeg_stream_slots.release()
 
         return Response(generate(),
                         mimetype="multipart/x-mixed-replace; boundary=frame",
@@ -3308,7 +3413,7 @@ def start_web_server(app, host="127.0.0.1", port=5000):
             app,
             host=host,
             port=port,
-            threads=8,
+            threads=16,
             channel_timeout=120,
             clear_untrusted_proxy_headers=True,
         ),

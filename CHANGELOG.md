@@ -21,6 +21,15 @@ changes to The Print Farm.
 
 ### Added
 
+- **Build plate check.** A finished or failed print marks the printer's plate
+  as needing clearing, and the printer will not accept another job (queue,
+  reprint, API, or pool dispatch) until staff or an approved student presses
+  **Plate cleared** on its card. Prints started at the printer count as
+  confirmation, the state persists across restarts, and staff can disable the
+  check per printer (`require_plate_clear`).
+- **Camera Wall** at `/the-print-farm/cameras`: a full-screen grid of every
+  visible printer camera with status, progress, time remaining, and plate
+  warnings for classroom screens.
 - Added a staff-only **Reconnect** workflow for offline printers. It scans for
   a changed IP address, verifies the cached printer identity, updates only the
   host, and preserves credentials, ports, access rules, AMS/MMU assignments,
@@ -39,6 +48,14 @@ changes to The Print Farm.
 
 ### Fixed
 
+- Open cameras no longer exhaust the web server. The full-screen camera view
+  polls snapshots instead of holding an MJPEG stream open, snapshots answer
+  `304 Not Modified` when the frame is unchanged, the MJPEG endpoint is capped
+  at four viewers for ten minutes each, cameras stop automatically when nobody
+  is viewing them, and the web server has 16 worker threads instead of 8.
+- **Stop** on a camera feed now hides it for that viewer only instead of
+  stopping it for everyone; force-stopping a camera is staff-only. Students can
+  no longer view cameras on staff-only printers.
 - The service now loads its configuration from `FARM_CONFIG`, the same file the
   web UI saves to. Previously startup read `config/config.yaml` while the UI
   wrote `FARM_CONFIG`, so dashboard changes (student access, bans, Reconnect,

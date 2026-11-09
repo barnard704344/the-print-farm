@@ -162,6 +162,45 @@ Printer-card and full-screen camera controls rotate the displayed image in
 storage, not in `config.yaml`, so different workstations may use different
 orientations.
 
+## Cameras and the Camera Wall
+
+Each printer has a single camera connection that every viewer shares. Printer
+cards and the full-screen view refresh by polling snapshots (about one frame
+per second in full screen), so open cameras no longer tie up web-server
+threads. A printer's camera stops automatically about two minutes after the
+last viewer leaves and restarts when someone opens the dashboard again.
+
+- **Hide** on a camera feed hides it on your screen only. Staff can still
+  force-stop a camera for everyone through `POST /api/camera/<name>/stop`.
+- Students cannot view cameras on staff-only printers.
+- The legacy MJPEG endpoint `/api/camera/<name>/stream` is limited to four
+  concurrent viewers for up to ten minutes each.
+
+**Camera Wall** (`/the-print-farm/cameras`, linked from the dashboard tabs)
+shows every printer the viewer can access in a grid with status, progress,
+time remaining, and plate-check warnings, which is useful for a classroom
+screen. Use **Full screen**, choose a column count, or open
+`/the-print-farm/cameras?cols=3`. The page keeps the screen awake while open
+and signs in with SSO like the dashboard.
+
+## Build Plate Check
+
+When a print finishes or fails, the printer card shows a warning and the
+printer will not accept another job until someone confirms the plate is clear
+with **Plate cleared**. This applies to jobs sent from the queue, reprints,
+the API, and pool auto-dispatch. Staff and approved students can confirm; a
+print started directly on the printer also counts as confirmation. The state
+is stored in the database, so it survives restarts.
+
+Staff can turn the check off for a printer with the **Plate check** box on its
+card, which saves:
+
+```yaml
+printers:
+  - name: P1S-01
+    require_plate_clear: false   # default: true
+```
+
 ## Retired Build-Plate Detection
 
 Camera-based build-plate detection was removed in `v1.0.11` to keep dispatch

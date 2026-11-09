@@ -1425,6 +1425,21 @@
 
         .camera-modal-overlay.active { display: flex; }
 
+        .plate-banner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin: 6px 8px;
+            padding: 8px 10px;
+            border: 1px solid var(--warning);
+            border-radius: 6px;
+            background: var(--warning-dim);
+            font-size: 12px;
+        }
+        .plate-banner .plate-clear-btn { font-size: 12px; padding: 4px 10px; }
+
         .camera-modal {
             max-width: 90vw;
             max-height: 90vh;
@@ -2234,6 +2249,10 @@
         <symbol id="icon-upload" viewBox="0 0 24 24">
             <path d="M12 16V4M7 9l5-5 5 5M4 20h16"></path>
         </symbol>
+        <symbol id="icon-camera" viewBox="0 0 24 24">
+            <path d="M4 7h3l2-2h6l2 2h3v12H4z"></path>
+            <circle cx="12" cy="13" r="3.5"></circle>
+        </symbol>
         <symbol id="icon-close" viewBox="0 0 24 24">
             <path d="m6 6 12 12M18 6 6 18"></path>
         </symbol>
@@ -2253,6 +2272,7 @@
             <button class="tab" data-tab="queue"><svg class="ui-icon" aria-hidden="true"><use href="#icon-queue"></use></svg>Job Queue <span class="queue-count-badge" id="queueNavCount">0</span></button>
             <button class="tab" data-tab="library"><svg class="ui-icon" aria-hidden="true"><use href="#icon-library"></use></svg>File Library</button>
             <button class="tab" data-tab="orca"><svg class="ui-icon" aria-hidden="true"><use href="#icon-network"></use></svg>OrcaSlicer Setup</button>
+            <a class="tab" href="{{ prefix }}/cameras" target="_blank" rel="noopener" style="text-decoration:none;" title="Open all cameras in a grid, e.g. on a classroom screen"><svg class="ui-icon" aria-hidden="true"><use href="#icon-camera"></use></svg>Camera Wall ↗</a>
             <a class="tab" id="spoolmanTab" href="#" target="_blank" rel="noopener" style="text-decoration:none;display:none;"><svg class="ui-icon" aria-hidden="true"><use href="#icon-spool"></use></svg>Spoolman ↗</a>
             <button class="tab admin-only" data-tab="settings"><svg class="ui-icon" aria-hidden="true"><use href="#icon-settings"></use></svg>Settings</button>
         </nav>
@@ -4514,7 +4534,11 @@
                         <label style="display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--text-muted);">
                             <input type="checkbox" ${p.staff_only ? 'checked' : ''} onchange="toggleStaffOnly(${nameArg}, this.checked)"> Staff only
                         </label>
+                        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--text-muted);" title="Require someone to confirm the build plate is clear before the next job">
+                            <input type="checkbox" ${p.plate_clear_required !== false ? 'checked' : ''} onchange="togglePlateClearRequired(${nameArg}, this.checked)"> Plate check
+                        </label>
                     </div>` : ''}
+                    <div data-field="plate">${renderPlateBanner(name, p)}</div>
                     ${p.orca_port ? `<div class="printer-orca-port" style="padding:2px 8px;font-size:10px;color:var(--text-muted);">OrcaSlicer: <span style="color:var(--accent);user-select:all;cursor:text;">${escapeHtml(location.hostname)}:${clampNumber(p.orca_port, 1, 65535)}</span></div>` : ''}
                     <div class="printer-job" data-field="job">${escapeHtml(p.subtask_name || 'No active job')}</div>
                     <div class="progress-bar-container">
@@ -4546,6 +4570,38 @@
                     ${renderObicoSection(name, p)}
                 </div>
             `;
+        }
+
+        function renderPlateBanner(name, p) {
+            if (!p.plate_needs_clear) return '';
+            const failed = String(p.plate_finished_status || '').toUpperCase() === 'FAILED';
+            const when = p.plate_finished_at ? formatDate(p.plate_finished_at) : '';
+            const what = failed ? 'Print failed' : 'Print finished';
+            const button = canControlPrinter(p)
+                ? `<button class="btn btn-success plate-clear-btn" onclick="confirmPlateCleared(${jsArg(name)})">Plate cleared</button>`
+                : '';
+            return `<div class="plate-banner" role="status">
+                    <span>&#9888; ${escapeHtml(what)}${when ? ' ' + escapeHtml(when) : ''} — remove it from the build plate before the next job.</span>
+                    ${button}
+                </div>`;
+        }
+
+        async function confirmPlateCleared(name) {
+            const res = await apiPost(`${BASE}/api/printer/${encodeURIComponent(name)}/plate_cleared`);
+            if (!res.ok) {
+                alert(res.message || 'Could not confirm the plate is clear');
+                return;
+            }
+            lastPrinterNames = [];  // Force full rebuild so send menus update
+            refreshPrinters();
+            refreshJobs();
+        }
+
+        async function togglePlateClearRequired(name, required) {
+            const res = await apiPost(`${BASE}/api/printer/${encodeURIComponent(name)}/plate_clear_required`, { required });
+            if (!res.ok) alert(res.message || 'Could not update the plate check setting');
+            lastPrinterNames = [];
+            refreshPrinters();
         }
 
         function renderFanLedSection(name, p) {
@@ -5009,6 +5065,16 @@
             const ct = card.querySelector('[data-field="chamber-temp"]');
             if (ct) {
                 ct.textContent = isBambu ? (p.chamber_temper > 5 ? formatTemp(p.chamber_temper) : 'N/A') : 'N/A';
+            }
+
+            // Build plate banner
+            const plateEl = card.querySelector('[data-field="plate"]');
+            if (plateEl) {
+                const plateHtml = renderPlateBanner(name, p);
+                if (plateEl.dataset.html !== plateHtml) {
+                    plateEl.innerHTML = plateHtml;
+                    plateEl.dataset.html = plateHtml;
+                }
             }
 
             // Controls (need rebuild since buttons change with status)
@@ -5861,10 +5927,28 @@
             applyCameraRotation(name);
         }
 
+        // Cameras: every viewer shares one upstream connection per printer.
+        // Feeds are refreshed by polling snapshots (no long-lived streams), and
+        // a viewer can hide a feed locally without affecting anyone else.
+        const cameraStartAttempts = {};  // name -> last auto-start attempt (ms)
+        const cameraFetchInFlight = new Set();
+        let cameraModalTimer = null;
+
+        function cameraHiddenKey(name) { return `printFarmCameraHidden:${name}`; }
+        function isCameraHidden(name) {
+            try { return localStorage.getItem(cameraHiddenKey(name)) === '1'; } catch (e) { return false; }
+        }
+        function setCameraHidden(name, hidden) {
+            try {
+                if (hidden) localStorage.setItem(cameraHiddenKey(name), '1');
+                else localStorage.removeItem(cameraHiddenKey(name));
+            } catch (e) {}
+        }
+
         function cameraSectionMarkup(name, streaming) {
             const safeName = escapeHtml(name);
-            if (!streaming) {
-                return `<div class="camera-placeholder" data-camera-action="start" data-camera-name="${safeName}">&#x1F4F7; Start Camera</div>`;
+            if (!streaming || isCameraHidden(name)) {
+                return `<div class="camera-placeholder" data-camera-action="start" data-camera-name="${safeName}">&#x1F4F7; Show Camera</div>`;
             }
             return `<img class="camera-feed"
                         src="${BASE}/api/camera/${encodeURIComponent(name)}/snapshot?t=${Date.now()}"
@@ -5878,7 +5962,8 @@
                         title="Rotate camera feed">&#8635; ${getCameraRotation(name)}&deg;</button>
                     <button class="camera-btn camera-stop-btn"
                         data-camera-action="stop"
-                        data-camera-name="${safeName}">&#x25A0; Stop</button>`;
+                        data-camera-name="${safeName}"
+                        title="Hide this feed on your screen">&#x25A0; Hide</button>`;
         }
 
         function updateCameraSectionDOM(name, streaming) {
@@ -5887,21 +5972,55 @@
             section.innerHTML = cameraSectionMarkup(name, streaming);
         }
 
-        async function toggleCamera(name, start) {
-            const url = `${BASE}/api/camera/${encodeURIComponent(name)}/${start ? 'start' : 'stop'}`;
-            const res = await apiPost(url);
-            if (res.ok) {
-                cameraStreaming[name] = start;
-                if (start) {
-                    // Wait for first frame then show the feed
-                    setTimeout(() => {
-                        updateCameraSectionDOM(name, true);
-                        startCameraRefresh(name);
-                    }, 1500);
-                } else {
-                    stopCameraRefresh(name);
-                    updateCameraSectionDOM(name, false);
-                }
+        // Fetch the latest frame into an <img>, skipping the swap when the frame
+        // hasn't changed (the server answers 304 and the browser reuses its copy).
+        async function loadCameraFrame(name, img) {
+            if (!img || cameraFetchInFlight.has(img)) return;
+            cameraFetchInFlight.add(img);
+            try {
+                const res = await fetch(`${BASE}/api/camera/${encodeURIComponent(name)}/snapshot`, {
+                    cache: 'no-cache',
+                    credentials: 'same-origin',
+                });
+                if (!res.ok) return;
+                const etag = res.headers.get('ETag') || '';
+                if (etag && etag === img.dataset.etag) return;
+                const url = URL.createObjectURL(await res.blob());
+                const previous = img.dataset.blobUrl;
+                img.src = url;
+                img.dataset.etag = etag;
+                img.dataset.blobUrl = url;
+                if (previous) URL.revokeObjectURL(previous);
+            } catch (e) {
+                // Transient network error; the next tick retries.
+            } finally {
+                cameraFetchInFlight.delete(img);
+            }
+        }
+
+        async function startCameraUpstream(name) {
+            cameraStartAttempts[name] = Date.now();
+            const res = await apiPost(`${BASE}/api/camera/${encodeURIComponent(name)}/start`);
+            return !!(res && res.ok);
+        }
+
+        async function toggleCamera(name, show) {
+            if (!show) {
+                // Hide locally only — other viewers keep watching. The server
+                // stops the upstream camera once nobody is viewing it.
+                setCameraHidden(name, true);
+                stopCameraRefresh(name);
+                updateCameraSectionDOM(name, false);
+                return;
+            }
+            setCameraHidden(name, false);
+            if (await startCameraUpstream(name)) {
+                cameraStreaming[name] = true;
+                // Wait for first frame then show the feed
+                setTimeout(() => {
+                    updateCameraSectionDOM(name, true);
+                    startCameraRefresh(name);
+                }, 1500);
             }
         }
 
@@ -5909,9 +6028,7 @@
             stopCameraRefresh(name);
             cameraRefreshTimers[name] = setInterval(() => {
                 const img = document.querySelector(`#cam-${CSS.escape(name)} .camera-feed`);
-                if (img) {
-                    img.src = `${BASE}/api/camera/${encodeURIComponent(name)}/snapshot?t=${Date.now()}`;
-                }
+                if (img) loadCameraFrame(name, img);
             }, 2000);  // Refresh snapshot every 2s
         }
 
@@ -5931,16 +6048,25 @@
             img.style.transform = cameraRotationStyle(name);
             const modalRotate = document.getElementById('cameraModalRotate');
             if (modalRotate) modalRotate.innerHTML = `&#8635; ${getCameraRotation(name)}&deg;`;
-            // Use MJPEG stream for full-screen view
-            img.src = `${BASE}/api/camera/${encodeURIComponent(name)}/stream`;
+            // Poll snapshots at ~1 fps (the P1S camera itself delivers about one
+            // frame per second) instead of holding a server thread open.
+            delete img.dataset.etag;
+            loadCameraFrame(name, img);
+            clearInterval(cameraModalTimer);
+            cameraModalTimer = setInterval(() => loadCameraFrame(name, img), 1000);
             overlay.classList.add('active');
         }
 
         function closeCameraModal() {
             const overlay = document.getElementById('cameraModalOverlay');
             const img = document.getElementById('cameraModalImg');
+            clearInterval(cameraModalTimer);
+            cameraModalTimer = null;
             overlay.classList.remove('active');
-            img.src = '';  // Stop the stream
+            if (img.dataset.blobUrl) URL.revokeObjectURL(img.dataset.blobUrl);
+            delete img.dataset.blobUrl;
+            delete img.dataset.etag;
+            img.removeAttribute('src');
             img.style.transform = 'rotate(0deg)';
             currentCameraModalName = null;
         }
@@ -5992,14 +6118,25 @@
                     cameraStreaming[name] = streaming;
                     const section = document.getElementById(`cam-${name}`);
                     const hasImg = section && section.querySelector('.camera-feed');
-                    if (streaming && !hasImg) {
+                    const show = streaming && !isCameraHidden(name);
+                    if (show && !hasImg) {
                         updateCameraSectionDOM(name, true);
                     }
-                    if (streaming && !cameraRefreshTimers[name]) {
+                    if (show && !cameraRefreshTimers[name]) {
                         startCameraRefresh(name);
-                    } else if (!streaming && cameraRefreshTimers[name]) {
+                    } else if (!show && cameraRefreshTimers[name]) {
                         stopCameraRefresh(name);
                     }
+                }
+                // Start cameras for visible, connected printers this viewer
+                // hasn't hidden. Idle cameras are stopped server-side, so this
+                // brings them back when someone opens the dashboard.
+                const now = Date.now();
+                for (const [name, p] of Object.entries(window._farmPrinters || {})) {
+                    if (cameraStreaming[name] || isCameraHidden(name) || !p.connected) continue;
+                    if (!document.getElementById(`cam-${name}`)) continue;
+                    if (now - (cameraStartAttempts[name] || 0) < 60000) continue;
+                    startCameraUpstream(name);
                 }
             } catch (err) {
                 // Camera status endpoint may not be available
@@ -6489,6 +6626,7 @@
                     .filter(([_, p]) =>
                         p.connected
                         && ['IDLE', 'FINISH'].includes(String(p.status || '').toUpperCase())
+                        && !p.plate_needs_clear
                     )
                     .filter(([_, p]) => isAdmin || !p.staff_only)
                     .map(([name, p]) => ({

@@ -84,6 +84,15 @@ class JobQueue:
                 updated_at TEXT NOT NULL,
                 UNIQUE(printer_name, tray_id)
             );
+
+            CREATE TABLE IF NOT EXISTS printer_plate_state (
+                printer_name TEXT PRIMARY KEY,
+                needs_clear INTEGER NOT NULL DEFAULT 0,
+                finished_status TEXT NOT NULL DEFAULT '',
+                finished_at TEXT,
+                cleared_by TEXT NOT NULL DEFAULT '',
+                cleared_at TEXT
+            );
         """)
         conn.commit()
         conn.close()
@@ -447,3 +456,48 @@ class JobQueue:
         ).fetchall()
         conn.close()
         return {r["tray_id"]: r["spool_id"] for r in rows}
+
+    # ── Build plate state ─────────────────────────────────
+
+    def save_plate_state(self, printer_name: str, state: dict) -> None:
+        """Persist whether a printer's build plate still needs clearing."""
+        with self._lock:
+            conn = self._get_conn()
+            conn.execute(
+                """INSERT INTO printer_plate_state
+                       (printer_name, needs_clear, finished_status, finished_at,
+                        cleared_by, cleared_at)
+                   VALUES (?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(printer_name)
+                   DO UPDATE SET needs_clear=excluded.needs_clear,
+                                 finished_status=excluded.finished_status,
+                                 finished_at=excluded.finished_at,
+                                 cleared_by=excluded.cleared_by,
+                                 cleared_at=excluded.cleared_at""",
+                (
+                    printer_name,
+                    1 if state.get("needs_clear") else 0,
+                    state.get("finished_status") or "",
+                    state.get("finished_at"),
+                    state.get("cleared_by") or "",
+                    state.get("cleared_at"),
+                ),
+            )
+            conn.commit()
+            conn.close()
+
+    def get_plate_states(self) -> dict:
+        """Return {printer_name: plate state dict} for every recorded printer."""
+        conn = self._get_conn()
+        rows = conn.execute("SELECT * FROM printer_plate_state").fetchall()
+        conn.close()
+        return {
+            r["printer_name"]: {
+                "needs_clear": bool(r["needs_clear"]),
+                "finished_status": r["finished_status"],
+                "finished_at": r["finished_at"],
+                "cleared_by": r["cleared_by"],
+                "cleared_at": r["cleared_at"],
+            }
+            for r in rows
+        }

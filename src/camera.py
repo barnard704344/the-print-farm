@@ -31,6 +31,9 @@ JPEG_START = b'\xff\xd8'
 JPEG_END = b'\xff\xd9'
 STALE_FRAME_SECONDS = 15
 MAX_CAMERA_FRAME_BYTES = 10 * 1024 * 1024
+# Stop a printer's upstream camera connection when nobody has viewed it for
+# this long. Every viewer shares the one upstream connection per printer.
+CAMERA_IDLE_SECONDS = 120
 
 
 class BambuCamera:
@@ -77,6 +80,15 @@ class BambuCamera:
     def is_stale(self) -> bool:
         age = self.last_frame_age
         return self._connected and (age is None or age > STALE_FRAME_SECONDS)
+
+    @property
+    def is_starting(self) -> bool:
+        """Thread running but no frame yet — don't restart it from scratch."""
+        return (
+            self._thread is not None
+            and self._thread.is_alive()
+            and self.last_frame_age is None
+        )
 
     def start(self):
         """Start the camera receiver thread."""
@@ -224,6 +236,15 @@ class HttpCamera:
         age = self.last_frame_age
         return self._connected and (age is None or age > STALE_FRAME_SECONDS)
 
+    @property
+    def is_starting(self) -> bool:
+        """Thread running but no frame yet — don't restart it from scratch."""
+        return (
+            self._thread is not None
+            and self._thread.is_alive()
+            and self.last_frame_age is None
+        )
+
     def start(self):
         if self._thread and self._thread.is_alive():
             return
@@ -314,18 +335,58 @@ class HttpCamera:
 
 
 class CameraManager:
-    """Manages camera streams for all printers in the farm."""
+    """Manages camera streams for all printers in the farm.
 
-    def __init__(self):
+    One upstream connection per printer is shared by every viewer. Viewers
+    "touch" a camera each time they fetch a frame; cameras that nobody has
+    touched for ``idle_seconds`` are stopped by a background reaper.
+    """
+
+    def __init__(self, idle_seconds: float = CAMERA_IDLE_SECONDS):
         self._cameras = {}
+        self._last_viewed = {}
         self._lock = threading.Lock()
+        self._idle_seconds = idle_seconds
+        self._reaper_stop = threading.Event()
+        if idle_seconds and idle_seconds > 0:
+            threading.Thread(
+                target=self._reap_idle_loop, daemon=True, name="camera-reaper"
+            ).start()
+
+    def touch(self, name: str) -> None:
+        """Record that someone is viewing this camera."""
+        self._last_viewed[name] = time.monotonic()
+
+    def reap_idle(self, now: Optional[float] = None) -> list:
+        """Stop cameras nobody has viewed recently. Returns the stopped names."""
+        now = time.monotonic() if now is None else now
+        stopped = []
+        with self._lock:
+            for name in list(self._cameras):
+                last = self._last_viewed.get(name, 0.0)
+                if now - last > self._idle_seconds:
+                    cam = self._cameras.pop(name)
+                    self._last_viewed.pop(name, None)
+                    stopped.append((name, cam))
+        for name, cam in stopped:
+            cam.stop()
+            logger.info("Camera %s stopped after %ss without viewers", name, int(self._idle_seconds))
+        return [name for name, _ in stopped]
+
+    def _reap_idle_loop(self):
+        while not self._reaper_stop.wait(timeout=15):
+            try:
+                self.reap_idle()
+            except Exception:
+                logger.exception("Camera idle reaper failed")
 
     def start_camera(self, name: str, host: str, access_code: str, port: int = 6000,
                      tls_fingerprint: str = ""):
         """Start a BambuLab camera stream for a printer."""
         with self._lock:
+            self._last_viewed[name] = time.monotonic()
             existing = self._cameras.get(name)
-            if existing and existing.is_streaming:
+            if existing and (existing.is_streaming or existing.is_starting):
                 return
             if existing:
                 existing.stop()
@@ -337,28 +398,33 @@ class CameraManager:
             )
             cam.start()
             self._cameras[name] = cam
+            self._last_viewed[name] = time.monotonic()
 
     def start_http_camera(self, name: str, url: str):
         """Start an HTTP/MJPEG camera stream (e.g. Klipper webcam)."""
         with self._lock:
+            self._last_viewed[name] = time.monotonic()
             existing = self._cameras.get(name)
-            if existing and existing.is_streaming:
+            if existing and (existing.is_streaming or existing.is_starting):
                 return
             if existing:
                 existing.stop()
             cam = HttpCamera(url=url)
             cam.start()
             self._cameras[name] = cam
+            self._last_viewed[name] = time.monotonic()
 
     def stop_camera(self, name: str):
         """Stop a camera stream."""
         with self._lock:
             cam = self._cameras.pop(name, None)
-            if cam:
-                cam.stop()
+            self._last_viewed.pop(name, None)
+        if cam:
+            cam.stop()
 
     def stop_all(self):
         """Stop all camera streams."""
+        self._reaper_stop.set()
         with self._lock:
             for cam in self._cameras.values():
                 cam.stop()
@@ -370,6 +436,13 @@ class CameraManager:
         if cam:
             return cam.latest_frame
         return None
+
+    def get_frame_with_time(self, name: str) -> tuple:
+        """Return (latest JPEG frame, monotonic capture time) or (None, 0.0)."""
+        cam = self._cameras.get(name)
+        if cam:
+            return cam.latest_frame_with_time
+        return None, 0.0
 
     def get_frame_after(self, name: str, after: float, timeout: float = 6.0) -> Optional[bytes]:
         """Wait for a JPEG frame captured after the given monotonic timestamp."""

@@ -350,6 +350,7 @@ def cmd_run(args, config: dict):
     # Happy Hare clearing its state after a print completes.
     farm.load_gate_configs(queue)
     farm.load_ams_tray_configs(queue)
+    farm.load_plate_states(queue)
 
     # Connect to all printers (if any defined)
     if printers:
@@ -506,6 +507,12 @@ def cmd_run(args, config: dict):
     # Main loop — handles pool auto-dispatch and print completion tracking
     try:
         while True:
+            # Flag build plates that need clearing after a print ends.
+            try:
+                farm.update_plate_states()
+            except Exception:
+                logger.exception("Build plate state update failed")
+
             # Pool auto-dispatch: send unassigned jobs to idle pool printers
             pool_cfg = config.get("pool", {})
             if pool_cfg.get("enabled"):

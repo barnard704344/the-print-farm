@@ -9,6 +9,7 @@ import copy
 import logging
 import threading
 import time
+from datetime import datetime, timezone
 from typing import Dict, Optional, Union
 
 from .bambu_client import BambuClient, PrintStatus
@@ -18,6 +19,11 @@ logger = logging.getLogger(__name__)
 
 # Union type for all supported printer clients
 PrinterClient = Union[BambuClient, KlipperClient]
+
+# A print moving from one of these states into FINISH/FAILED leaves something
+# on the build plate that a person must remove before the next job.
+_PRINTING_STATES = (PrintStatus.RUNNING, PrintStatus.PAUSED, PrintStatus.PAUSE_FILAMENT)
+_ENDED_STATES = (PrintStatus.FINISH, PrintStatus.FAILED)
 def create_printer_client(cfg: dict) -> PrinterClient:
     """Factory: create the right client based on printer type in config."""
     printer_type = cfg.get("type", "bambulab").lower()
@@ -63,12 +69,19 @@ class FarmManager:
         self._ams_tray_configs: Dict[str, Dict[int, int]] = {}
         self._ams_tray_saver = None   # callable(printer, tray_id, spool_id)
         self._ams_tray_deleter = None  # callable(printer, tray_id)
+        # Build plate confirmation: {printer_name: state dict}
+        self._plate_states: Dict[str, dict] = {}
+        self._plate_required: Dict[str, bool] = {}
+        self._plate_last_status: Dict[str, PrintStatus] = {}
+        self._plate_saver = None  # callable(printer, state)
+        self._plate_lock = threading.Lock()
         for cfg in (printer_configs or []):
             name = cfg["name"]
             printer_type = cfg.get("type", "bambulab").lower()
             client = create_printer_client(cfg)
             self._printers[name] = client
             self._printer_types[name] = printer_type
+            self._plate_required[name] = bool(cfg.get("require_plate_clear", True))
 
     def connect_all(self, timeout: float = 10.0) -> Dict[str, bool]:
         """Connect to all printers. Returns {name: success}."""
@@ -253,6 +266,7 @@ class FarmManager:
                 "klipper_leds": s.klipper_leds,
                 "obico": s.obico,
             }
+            state.update(self.get_plate_state(name))
 
             # Overlay persisted gate configs onto MMU gates when HH has cleared them.
             # HH resets gate_spool_id (and sometimes material/color) after a print
@@ -292,14 +306,116 @@ class FarmManager:
         return states
 
     def get_idle_printers(self) -> list:
-        """Return names of printers that are idle and connected."""
+        """Return names of printers that are idle, connected, and ready for a job.
+
+        Printers whose build plate has not been confirmed clear are excluded.
+        """
         idle = []
         for name, client in self._printers.items():
-            if client.is_connected() and self._effective_status(name, client) in (
-                PrintStatus.IDLE, PrintStatus.FINISH
+            if (
+                client.is_connected()
+                and self._effective_status(name, client) in (PrintStatus.IDLE, PrintStatus.FINISH)
+                and not self.plate_needs_clearing(name)
             ):
                 idle.append(name)
         return idle
+
+    # ── Build plate confirmation ──────────────────────────
+
+    def load_plate_states(self, job_queue) -> None:
+        """Load persisted plate states and persist future changes via job_queue."""
+        self._plate_saver = job_queue.save_plate_state
+        stored = job_queue.get_plate_states()
+        with self._plate_lock:
+            for name in self._printers:
+                if name in stored:
+                    self._plate_states[name] = stored[name]
+
+    def _persist_plate(self, name: str, state: dict) -> None:
+        if self._plate_saver:
+            try:
+                self._plate_saver(name, state)
+            except Exception:
+                logger.exception("Could not persist build plate state for %s", name)
+
+    def set_plate_clear_required(self, name: str, required: bool) -> None:
+        self._plate_required[name] = bool(required)
+
+    def plate_needs_clearing(self, name: str) -> bool:
+        if not self._plate_required.get(name, True):
+            return False
+        with self._plate_lock:
+            return bool(self._plate_states.get(name, {}).get("needs_clear"))
+
+    def get_plate_state(self, name: str) -> dict:
+        with self._plate_lock:
+            state = dict(self._plate_states.get(name, {}))
+        required = self._plate_required.get(name, True)
+        return {
+            "plate_clear_required": required,
+            "plate_needs_clear": bool(required and state.get("needs_clear")),
+            "plate_finished_status": state.get("finished_status", ""),
+            "plate_finished_at": state.get("finished_at"),
+            "plate_cleared_by": state.get("cleared_by", ""),
+            "plate_cleared_at": state.get("cleared_at"),
+        }
+
+    def mark_plate_needs_clearing(self, name: str, finished_status: str) -> None:
+        state = {
+            "needs_clear": True,
+            "finished_status": finished_status,
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+            "cleared_by": "",
+            "cleared_at": None,
+        }
+        with self._plate_lock:
+            self._plate_states[name] = state
+        self._persist_plate(name, state)
+        logger.info("[%s] Build plate needs clearing (print %s)", name, finished_status)
+
+    def confirm_plate_clear(self, name: str, cleared_by: str) -> bool:
+        """Record that someone has cleared the plate. Returns False if unknown printer."""
+        if name not in self._printers:
+            return False
+        with self._plate_lock:
+            state = dict(self._plate_states.get(name, {}))
+            state.update({
+                "needs_clear": False,
+                "cleared_by": cleared_by or "",
+                "cleared_at": datetime.now(timezone.utc).isoformat(),
+            })
+            self._plate_states[name] = state
+        self._persist_plate(name, state)
+        logger.info("[%s] Build plate confirmed clear by %s", name, cleared_by or "unknown")
+        return True
+
+    def update_plate_states(self) -> None:
+        """Watch printer status changes and flag plates that need clearing.
+
+        Called periodically by the main loop. Covers jobs sent by the farm and
+        prints started directly on the printer.
+        """
+        for name, client in self._printers.items():
+            if not client.is_connected():
+                continue
+            status = client.state.status
+            previous = self._plate_last_status.get(name)
+            self._plate_last_status[name] = status
+            with self._plate_lock:
+                known = name in self._plate_states
+                needs_clear = bool(self._plate_states.get(name, {}).get("needs_clear"))
+
+            if previous in _PRINTING_STATES and status in _ENDED_STATES:
+                self.mark_plate_needs_clearing(name, status.value)
+            elif not known and status in _ENDED_STATES:
+                # No plate record yet (e.g. right after this feature was
+                # installed, possibly after an initial UNKNOWN report) and the
+                # printer is sitting on a finished print: ask for confirmation.
+                self.mark_plate_needs_clearing(name, status.value)
+            elif status == PrintStatus.RUNNING and needs_clear and previous != PrintStatus.RUNNING:
+                # Someone started a print at the printer itself, so they have
+                # dealt with the plate.
+                self.confirm_plate_clear(name, "printer (print started)")
 
     def get_farm_summary(self) -> dict:
         """High-level farm stats."""

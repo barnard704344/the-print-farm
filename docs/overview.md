@@ -76,6 +76,13 @@ No Klipper plugin or extra component is required beyond a standard Moonraker ins
   Settings and Printer Details
 - **Spoolman integration** — Optionally connect a local [Spoolman](https://github.com/Donkie/Spoolman) instance for assignment and usage tracking
 
+## Build Plate Check and Camera Wall
+
+After a print finishes or fails, the printer waits until someone presses
+**Plate cleared** on its card, so a new job never starts on top of an old one.
+The **Camera Wall** shows every printer camera in one grid for a classroom
+screen. See [Configuration](configuration.md#build-plate-check).
+
 ## Student Print Access
 
 The Print Farm includes a student access control system designed for school environments.

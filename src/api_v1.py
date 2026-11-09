@@ -185,6 +185,8 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         status_value = getattr(status, "value", str(status or "")).upper()
         if status_value not in ("IDLE", "FINISH"):
             return f"Printer is not idle ({status_value or 'unknown'})", 409, "PRINTER_BUSY"
+        if hasattr(farm_manager, "plate_needs_clearing") and farm_manager.plate_needs_clearing(name):
+            return "Build plate has not been confirmed clear", 409, "PLATE_NOT_CLEARED"
         if any(j.get("printer_name") == name for j in job_queue.get_active_jobs()):
             return "Printer already has an active job", 409, "PRINTER_BUSY"
         return None
@@ -914,6 +916,10 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         """Get the latest camera snapshot (JPEG)."""
         if not camera_manager:
             return _error("Camera manager not available", 500)
+        if _staff_only_printer(name) and not (_check_api_key() or _is_admin()):
+            return _error("Camera is restricted to staff", 403, "STAFF_ONLY_PRINTER")
+        if hasattr(camera_manager, "touch"):
+            camera_manager.touch(name)
         frame = camera_manager.get_frame(name)
         if frame is None:
             return _error("No snapshot available", 404, "NO_SNAPSHOT")

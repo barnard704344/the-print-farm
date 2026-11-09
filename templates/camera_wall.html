@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Wall · The Print Farm</title>
+    <style>
+        :root {
+            --bg: #0b0d12;
+            --tile: #151821;
+            --border: #262a36;
+            --text: #e4e4e7;
+            --muted: #8b8b94;
+            --accent: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #3b82f6;
+            color-scheme: dark;
+        }
+        * { box-sizing: border-box; }
+        html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+        header {
+            display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+            padding: 10px 16px; border-bottom: 1px solid var(--border);
+        }
+        header h1 { font-size: 18px; margin: 0; font-weight: 600; }
+        header .spacer { flex: 1; }
+        header .meta { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+        header button, header a, header select {
+            background: var(--tile); color: var(--text); border: 1px solid var(--border);
+            border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; text-decoration: none;
+        }
+        header button:hover, header a:hover { border-color: var(--accent); }
+        body.fullscreen header { display: none; }
+
+        #message {
+            margin: 48px auto; max-width: 520px; text-align: center; color: var(--muted); line-height: 1.6;
+        }
+        #message a { color: var(--accent); }
+
+        #wall {
+            display: grid; gap: 10px; padding: 10px;
+            grid-template-columns: repeat(var(--cols, auto-fill), minmax(320px, 1fr));
+        }
+        body.fullscreen #wall { min-height: 100vh; align-content: center; }
+
+        .tile {
+            position: relative; background: var(--tile); border: 2px solid var(--border);
+            border-radius: 10px; overflow: hidden; aspect-ratio: 16 / 9;
+        }
+        .tile.running { border-color: var(--info); }
+        .tile.paused, .tile.plate { border-color: var(--warning); }
+        .tile.failed { border-color: var(--danger); }
+        .tile.offline { opacity: 0.55; }
+        .tile img {
+            position: absolute; inset: 0; width: 100%; height: 100%;
+            object-fit: contain; background: #000; transform-origin: center;
+        }
+        .tile .nofeed {
+            position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+            color: var(--muted); font-size: 14px;
+        }
+        .overlay-top, .overlay-bottom {
+            position: absolute; left: 0; right: 0; padding: 8px 10px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .overlay-top { top: 0; background: linear-gradient(rgba(0,0,0,0.75), rgba(0,0,0,0)); }
+        .overlay-bottom {
+            bottom: 0; flex-direction: column; align-items: stretch; gap: 4px;
+            background: linear-gradient(rgba(0,0,0,0), rgba(0,0,0,0.8));
+        }
+        .name { font-weight: 700; font-size: 16px; text-shadow: 0 1px 2px #000; }
+        .badge {
+            margin-left: auto; font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+            padding: 3px 8px; border-radius: 999px; background: rgba(107,114,128,0.85);
+        }
+        .badge.running { background: var(--info); }
+        .badge.paused, .badge.plate { background: var(--warning); color: #111; }
+        .badge.failed { background: var(--danger); }
+        .badge.finish { background: var(--accent); color: #07120c; }
+        .job { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 2px #000; }
+        .progress { height: 6px; background: rgba(255,255,255,0.18); border-radius: 3px; overflow: hidden; }
+        .progress > div { height: 100%; background: var(--accent); width: 0; transition: width 1s linear; }
+        .stats { display: flex; justify-content: space-between; font-size: 12px; color: #d4d4d8;
+            font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px #000; }
+        .plate-note { font-size: 12px; color: var(--warning); font-weight: 600; text-shadow: 0 1px 2px #000; }
+
+        @media (max-width: 420px) {
+            #wall { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Camera Wall</h1>
+        <span class="meta" id="summary"></span>
+        <span class="spacer"></span>
+        <span class="meta" id="clock"></span>
+        <select id="cols" aria-label="Columns">
+            <option value="">Auto columns</option>
+            <option value="1">1 column</option>
+            <option value="2">2 columns</option>
+            <option value="3">3 columns</option>
+            <option value="4">4 columns</option>
+        </select>
+        <button type="button" id="fullscreenBtn">Full screen</button>
+        <a href="{{ prefix }}/">Dashboard</a>
+    </header>
+    <div id="message" hidden></div>
+    <main id="wall" aria-live="off"></main>
+
+    <script>
+    (function () {
+        'use strict';
+        const BASE = '{{ prefix }}';
+        const SNAPSHOT_MS = 2000;
+        const STATUS_MS = 5000;
+        const START_RETRY_MS = 60000;
+
+        const wall = document.getElementById('wall');
+        const message = document.getElementById('message');
+        const tiles = new Map();  // name -> {el, img, parts, lastStart, inFlight}
+        let isAdmin = false;
+
+        // ── Helpers ──────────────────────────────────────
+        function el(tag, className, text) {
+            const node = document.createElement(tag);
+            if (className) node.className = className;
+            if (text !== undefined) node.textContent = text;
+            return node;
+        }
+
+        function rotationFor(name) {
+            try {
+                const raw = parseInt(localStorage.getItem(`printFarmCameraRotation:${name}`) || '0', 10);
+                return [0, 90, 180, 270].includes(raw) ? raw : 0;
+            } catch (e) { return 0; }
+        }
+
+        function formatMinutes(minutes) {
+            minutes = Math.max(0, Math.round(Number(minutes) || 0));
+            const h = Math.floor(minutes / 60);
+            const m = minutes % 60;
+            return h > 0 ? `${h}h ${m}m` : `${m}m`;
+        }
+
+        function showMessage(nodes) {
+            message.replaceChildren(...nodes);
+            message.hidden = false;
+        }
+
+        async function post(url) {
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: '{}',
+                });
+                return res.ok;
+            } catch (e) { return false; }
+        }
+
+        // ── Auth (same flow as the dashboard) ────────────
+        async function authStatus() {
+            const res = await fetch(BASE + '/api/auth/status', { credentials: 'same-origin' });
+            return res.json();
+        }
+
+        async function trySSO() {
+            try {
+                const check = await fetch('/bambulab-sso-check.php', { credentials: 'include' });
+                if (!check.ok) return false;
+                const data = await check.json();
+                if (!data.ok || !data.username) return false;
+                return await post(BASE + '/api/auth/sso');
+            } catch (e) { return false; }
+        }
+
+        // ── Tiles ────────────────────────────────────────
+        function createTile(name) {
+            const tile = el('section', 'tile');
+            tile.setAttribute('aria-label', name);
+            const img = el('img');
+            img.alt = `${name} camera`;
+            img.hidden = true;
+            const nofeed = el('div', 'nofeed', 'Connecting to camera…');
+
+            const top = el('div', 'overlay-top');
+            const nameEl = el('span', 'name', name);
+            const badge = el('span', 'badge', '');
+            top.append(nameEl, badge);
+
+            const bottom = el('div', 'overlay-bottom');
+            const plate = el('div', 'plate-note', '');
+            plate.hidden = true;
+            const job = el('div', 'job', '');
+            const bar = el('div', 'progress');
+            const fill = el('div');
+            bar.append(fill);
+            const stats = el('div', 'stats');
+            const pct = el('span', '', '');
+            const eta = el('span', '', '');
+            stats.append(pct, eta);
+            bottom.append(plate, job, bar, stats);
+
+            tile.append(img, nofeed, top, bottom);
+            const entry = {
+                el: tile, img, nofeed,
+                parts: { badge, plate, job, bar, fill, pct, eta, stats },
+                lastStart: 0, inFlight: false, etag: '', blobUrl: '',
+            };
+            tiles.set(name, entry);
+            return entry;
+        }
+
+        function updateTile(entry, name, p) {
+            const status = String(p.display_status || p.status || 'UNKNOWN').toUpperCase();
+            const running = status === 'RUNNING';
+            const paused = status === 'PAUSED' || status === 'PAUSE_FILAMENT';
+            const failed = status === 'FAILED';
+            const plate = !!p.plate_needs_clear;
+            const { badge, plate: plateEl, job, bar, fill, pct, eta, stats } = entry.parts;
+
+            entry.el.className = 'tile'
+                + (!p.connected ? ' offline' : '')
+                + (running ? ' running' : '')
+                + (paused ? ' paused' : '')
+                + (failed ? ' failed' : '')
+                + (plate && !running ? ' plate' : '');
+
+            const label = !p.connected ? 'OFFLINE'
+                : paused ? 'PAUSED'
+                : status === 'PAUSE_FILAMENT' ? 'FILAMENT'
+                : status;
+            badge.textContent = label;
+            badge.className = 'badge'
+                + (running ? ' running' : '')
+                + (paused ? ' paused' : '')
+                + (failed ? ' failed' : '')
+                + (status === 'FINISH' ? ' finish' : '');
+
+            plateEl.hidden = !plate;
+            plateEl.textContent = plate ? '⚠ Clear the build plate before the next job' : '';
+
+            const active = running || paused;
+            job.textContent = active || status === 'FINISH' ? (p.subtask_name || '') : (p.connected ? 'Ready' : 'Printer offline');
+            bar.hidden = stats.hidden = !active;
+            const percent = Math.max(0, Math.min(100, Number(p.mc_percent) || 0));
+            fill.style.width = `${percent}%`;
+            pct.textContent = `${percent}%  ·  Layer ${p.layer_num || 0}/${p.total_layers || 0}`;
+            eta.textContent = active ? `${formatMinutes(p.mc_remaining_time)} left` : '';
+
+            entry.img.style.transform = `rotate(${rotationFor(name)}deg)`;
+
+            // Make sure the shared upstream camera is running for this printer.
+            if (p.connected && Date.now() - entry.lastStart > START_RETRY_MS && !entry.etag) {
+                entry.lastStart = Date.now();
+                post(`${BASE}/api/camera/${encodeURIComponent(name)}/start`);
+            }
+            entry.connected = !!p.connected;
+        }
+
+        async function loadFrame(name, entry) {
+            if (entry.inFlight || !entry.connected) return;
+            entry.inFlight = true;
+            try {
+                const res = await fetch(`${BASE}/api/camera/${encodeURIComponent(name)}/snapshot`, {
+                    cache: 'no-cache',
+                    credentials: 'same-origin',
+                });
+                if (!res.ok) {
+                    if (res.status === 404 && !entry.etag) entry.nofeed.textContent = 'Waiting for camera…';
+                    return;
+                }
+                const etag = res.headers.get('ETag') || '';
+                if (etag && etag === entry.etag) return;
+                const url = URL.createObjectURL(await res.blob());
+                const previous = entry.blobUrl;
+                entry.img.src = url;
+                entry.img.hidden = false;
+                entry.nofeed.hidden = true;
+                entry.etag = etag;
+                entry.blobUrl = url;
+                if (previous) URL.revokeObjectURL(previous);
+            } catch (e) {
+                // Transient error; retried on the next tick.
+            } finally {
+                entry.inFlight = false;
+            }
+        }
+
+        // ── Polling ──────────────────────────────────────
+        async function refreshStatus() {
+            let data;
+            try {
+                const res = await fetch(BASE + '/api/farm/status', { credentials: 'same-origin' });
+                if (res.status === 401) { await start(); return; }
+                data = await res.json();
+            } catch (e) {
+                return;
+            }
+            const printers = Object.entries(data.printers || {})
+                .filter(([, p]) => isAdmin || !p.staff_only)
+                .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
+
+            const seen = new Set();
+            for (const [name, p] of printers) {
+                seen.add(name);
+                let entry = tiles.get(name);
+                if (!entry) {
+                    entry = createTile(name);
+                }
+                updateTile(entry, name, p);
+            }
+            for (const [name, entry] of tiles) {
+                if (!seen.has(name)) {
+                    if (entry.blobUrl) URL.revokeObjectURL(entry.blobUrl);
+                    entry.el.remove();
+                    tiles.delete(name);
+                }
+            }
+            // Keep DOM order matching the sorted list.
+            wall.replaceChildren(...printers.map(([name]) => tiles.get(name).el));
+
+            const printing = printers.filter(([, p]) => String(p.status).toUpperCase() === 'RUNNING').length;
+            const plates = printers.filter(([, p]) => p.plate_needs_clear).length;
+            document.getElementById('summary').textContent =
+                `${printers.length} printers · ${printing} printing` + (plates ? ` · ${plates} need plate clearing` : '');
+        }
+
+        function tickFrames() {
+            for (const [name, entry] of tiles) loadFrame(name, entry);
+        }
+
+        function tickClock() {
+            document.getElementById('clock').textContent =
+                new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // ── Controls ─────────────────────────────────────
+        const colsSelect = document.getElementById('cols');
+        const params = new URLSearchParams(location.search);
+        function applyCols(value) {
+            if (value && /^[1-6]$/.test(value)) wall.style.setProperty('--cols', value);
+            else wall.style.removeProperty('--cols');
+        }
+        let savedCols = params.get('cols') || '';
+        try { savedCols = savedCols || localStorage.getItem('printFarmCameraWallCols') || ''; } catch (e) {}
+        colsSelect.value = savedCols;
+        applyCols(savedCols);
+        colsSelect.addEventListener('change', () => {
+            applyCols(colsSelect.value);
+            try { localStorage.setItem('printFarmCameraWallCols', colsSelect.value); } catch (e) {}
+        });
+
+        document.getElementById('fullscreenBtn').addEventListener('click', () => {
+            const root = document.documentElement;
+            if (root.requestFullscreen) root.requestFullscreen().catch(() => {});
+        });
+        document.addEventListener('fullscreenchange', () => {
+            document.body.classList.toggle('fullscreen', !!document.fullscreenElement);
+        });
+
+        // Keep a classroom screen from sleeping while the wall is open.
+        let wakeLock = null;
+        async function keepAwake() {
+            try {
+                if ('wakeLock' in navigator && document.visibilityState === 'visible') {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                }
+            } catch (e) { wakeLock = null; }
+        }
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') keepAwake();
+        });
+
+        // ── Start ────────────────────────────────────────
+        let timersStarted = false;
+        async function start() {
+            let auth;
+            try { auth = await authStatus(); } catch (e) { auth = {}; }
+            if (!auth.authenticated && auth.ad_enabled && await trySSO()) {
+                try { auth = await authStatus(); } catch (e) { auth = {}; }
+            }
+            if (!auth.authenticated) {
+                const link = el('a', '', 'open the dashboard and log in');
+                link.href = `${BASE}/`;
+                showMessage([
+                    document.createTextNode('Sign in to view the printer cameras: '),
+                    link,
+                    document.createTextNode(', then reload this page.'),
+                ]);
+                wall.replaceChildren();
+                return;
+            }
+            message.hidden = true;
+            isAdmin = auth.admin === true;
+            await refreshStatus();
+            tickFrames();
+            if (!timersStarted) {
+                timersStarted = true;
+                setInterval(refreshStatus, STATUS_MS);
+                setInterval(tickFrames, SNAPSHOT_MS);
+                setInterval(tickClock, 15000);
+                keepAwake();
+            }
+        }
+
+        tickClock();
+        start();
+    })();
+    </script>
+</body>
+</html>
