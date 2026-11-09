@@ -21,6 +21,17 @@ changes to The Print Farm.
 
 ### Added
 
+- **Redesigned printer cards.** Each card now shows nozzle size and type under
+  the name, plus status chips for Wi-Fi signal, HMS alerts and print errors
+  (codes in the tooltip), the chamber light (a toggle for anyone who can control
+  the printer), and staff-only. A now-printing panel combines the job thumbnail
+  (from the File Library), progress, time remaining, finish clock time, layers,
+  and speed. Temperatures are compact tiles: click one to set a preset or a
+  custom value. Pause/Resume and Stop sit beside the tiles, and Stop now asks
+  for confirmation. The AMS is split into one block per unit, each with its own
+  humidity (as a percentage on newer firmware) and temperature, and a
+  remaining-filament bar under each slot. New endpoint:
+  `GET /api/printer/<name>/thumbnail`.
 - **Solid 3D toolpath preview.** The File Library viewer now draws extrusions
   as solid, lit beads sized from the slicer's line width and layer height, with
   OrcaSlicer-style feature colours, a feature legend with show/hide toggles, a

@@ -2896,6 +2896,31 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             return Response(status=304, headers=headers)
         return Response(frame, mimetype="image/jpeg", headers=headers)
 
+    @app.route(prefix + "/api/printer/<name>/thumbnail")
+    @app.route("/api/printer/<name>/thumbnail")
+    @login_required
+    def printer_job_thumbnail(name):
+        """Thumbnail of the job this printer is currently running, from the file library."""
+        denied = _camera_access_error(name)
+        if denied:
+            return denied
+        if not file_library or not farm_manager.get_printer(name):
+            return Response(status=404)
+        for job in job_queue.get_active_jobs():
+            if job.get("printer_name") != name:
+                continue
+            lib_file = file_library.find_by_path(job.get("file_path") or "")
+            thumb_path = (lib_file or {}).get("thumbnail_path")
+            if thumb_path and os.path.exists(thumb_path):
+                abs_path = os.path.abspath(thumb_path)
+                return send_from_directory(
+                    os.path.dirname(abs_path),
+                    os.path.basename(abs_path),
+                    mimetype="image/png",
+                    max_age=60,
+                )
+        return Response(status=404)
+
     @app.route(prefix + "/api/camera/<name>/stream")
     @app.route("/api/camera/<name>/stream")
     @login_required

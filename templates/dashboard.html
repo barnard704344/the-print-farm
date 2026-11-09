@@ -2279,6 +2279,45 @@
         <symbol id="icon-close" viewBox="0 0 24 24">
             <path d="m6 6 12 12M18 6 6 18"></path>
         </symbol>
+        <symbol id="icon-thermo" viewBox="0 0 24 24">
+            <path d="M10 13.5V5a2 2 0 1 1 4 0v8.5a4 4 0 1 1-4 0z"></path>
+            <path d="M12 9v6"></path>
+        </symbol>
+        <symbol id="icon-wifi" viewBox="0 0 24 24">
+            <path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.5 16a5 5 0 0 1 7 0"></path>
+            <circle cx="12" cy="19.5" r="1"></circle>
+        </symbol>
+        <symbol id="icon-alert" viewBox="0 0 24 24">
+            <path d="M12 3 2 20h20z"></path>
+            <path d="M12 10v4M12 17h.01"></path>
+        </symbol>
+        <symbol id="icon-clock" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="9"></circle>
+            <path d="M12 7v5l3 2"></path>
+        </symbol>
+        <symbol id="icon-layers" viewBox="0 0 24 24">
+            <path d="m12 3 9 5-9 5-9-5z"></path>
+            <path d="m3 13 9 5 9-5"></path>
+        </symbol>
+        <symbol id="icon-bulb" viewBox="0 0 24 24">
+            <path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"></path>
+        </symbol>
+        <symbol id="icon-lock" viewBox="0 0 24 24">
+            <rect x="5" y="11" width="14" height="10" rx="2"></rect>
+            <path d="M8 11V7a4 4 0 0 1 8 0v4"></path>
+        </symbol>
+        <symbol id="icon-droplet" viewBox="0 0 24 24">
+            <path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"></path>
+        </symbol>
+        <symbol id="icon-pause" viewBox="0 0 24 24">
+            <path d="M9 5v14M15 5v14"></path>
+        </symbol>
+        <symbol id="icon-play" viewBox="0 0 24 24">
+            <path d="M7 4.5v15l12-7.5z"></path>
+        </symbol>
+        <symbol id="icon-stop" viewBox="0 0 24 24">
+            <rect x="6" y="6" width="12" height="12" rx="1.5"></rect>
+        </symbol>
     </svg>
     <div class="header">
         <div class="brand" aria-label="The Print Farm">
@@ -3397,6 +3436,147 @@
             border-radius: 6px; background: none; cursor: pointer; padding: 2px;
         }
         .color-row .color-hex { flex: 1; }
+
+        /* ── Printer card layout ─────────────────────────── */
+        .printer-card .printer-header { align-items: flex-start; margin-bottom: 8px; }
+        .pc-title { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .pc-title .printer-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+        .pc-title .printer-display-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .pc-subline { font-size: 12px; color: var(--text-muted); padding-left: 14px; }
+        .pc-subline:empty { display: none; }
+        .pc-host { font-variant-numeric: tabular-nums; user-select: all; }
+
+        .pc-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+        .pc-chips:empty { display: none; }
+        .pc-chip {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 2px 8px; border-radius: 999px; border: 1px solid transparent;
+            font: inherit; font-size: 11px; line-height: 18px;
+            background: var(--surface-soft); color: var(--text-muted);
+        }
+        .pc-chip .ui-icon { width: 12px; height: 12px; }
+        .pc-chip-ok { background: var(--success-dim); color: var(--success); }
+        .pc-chip-warn { background: var(--warning-dim); color: var(--warning); }
+        .pc-chip-bad { background: var(--danger-dim); color: var(--danger); }
+        .pc-chip-staff { background: var(--info-dim); color: var(--info); }
+        .pc-chip-klipper { background: rgba(255,102,0,0.15); color: #ff6600; }
+        .pc-chip-on { background: var(--warning-dim); color: var(--warning); }
+        .pc-chip-btn { cursor: pointer; border-color: var(--line-soft); }
+        .pc-chip-btn:hover { border-color: currentColor; }
+
+        .staff-only-toggle { display: flex; align-items: center; gap: 12px; margin: -4px 0 10px; font-size: 11px; }
+        .staff-only-toggle label { display: flex; align-items: center; gap: 4px; cursor: pointer; color: var(--text-muted); }
+        .printer-orca-port { margin: -4px 0 10px; font-size: 11px; color: var(--text-muted); }
+        .printer-orca-port span { color: var(--accent); user-select: all; cursor: text; }
+
+        /* Now-printing panel */
+        .pc-job {
+            display: flex; gap: 12px; align-items: center;
+            padding: 10px; margin-bottom: 12px;
+            background: var(--surface-soft); border-radius: 8px;
+        }
+        .pc-thumb {
+            position: relative; flex: 0 0 64px; width: 64px; height: 64px;
+            border-radius: 6px; background: var(--bg); overflow: hidden;
+            display: flex; align-items: center; justify-content: center; color: var(--text-muted);
+        }
+        .pc-thumb .pc-thumb-icon { width: 26px; height: 26px; opacity: 0.45; }
+        .pc-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: var(--bg); }
+        .pc-job-info { flex: 1; min-width: 0; }
+        .pc-job-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .pc-job-name { font-size: 13px; font-weight: 500; margin: 1px 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .pc-job-progress { display: flex; align-items: center; gap: 10px; }
+        .pc-job-progress .progress-bar-container { flex: 1; margin: 0; height: 6px; }
+        .progress-bar.paused { background: var(--warning); }
+        .progress-bar.done { background: var(--success); }
+        .progress-bar.failed { background: var(--danger); }
+        .pc-job-pct { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 34px; text-align: right; }
+        .pc-job-stats { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+        .pc-job-stats span { display: inline-flex; align-items: center; gap: 4px; }
+        .pc-job-stats .ui-icon { width: 12px; height: 12px; }
+        .pc-eta { color: var(--success); font-weight: 500; }
+
+        /* Temperatures + print controls */
+        .pc-vitals { display: flex; gap: 8px; align-items: stretch; margin-bottom: 12px; }
+        .pc-vitals .printer-temps {
+            flex: 1; min-width: 0; margin: 0;
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 6px;
+        }
+        .pc-temp {
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+            padding: 8px 4px; min-height: 64px; border-radius: 8px;
+            background: var(--surface-soft); border: 1px solid transparent;
+            color: var(--text); font: inherit; text-align: center;
+        }
+        .pc-temp-btn { cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+        .pc-temp-btn:hover:not(:disabled) { border-color: var(--info); }
+        .pc-temp-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .pc-temp-icon .ui-icon { width: 15px; height: 15px; }
+        .pc-temp-nozzle { color: #f97316; }
+        .pc-temp-bed { color: var(--info); }
+        .pc-temp-chamber { color: var(--success); }
+        .pc-temp-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; }
+        .pc-temp-value { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .pc-temp-target { font-size: 11px; font-weight: 400; color: var(--text-muted); }
+        .pc-temp-note { font-size: 9px; color: var(--warning); }
+        .pc-temp-na .pc-temp-value { color: var(--text-muted); font-weight: 500; }
+        .pc-temp.heating { border-color: color-mix(in srgb, #f97316 45%, transparent); }
+        .pc-temp.heating .pc-temp-icon { animation: pc-heat 1.6s ease-in-out infinite; }
+        @keyframes pc-heat { 50% { opacity: 0.35; } }
+        @media (prefers-reduced-motion: reduce) { .pc-temp.heating .pc-temp-icon { animation: none; } }
+
+        .pc-actions { display: flex; flex-direction: column; gap: 6px; flex: 0 0 92px; }
+        .pc-actions .pc-act {
+            flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+            padding: 4px 8px; min-height: 29px; font-size: 12px;
+        }
+        .pc-actions .pc-act .ui-icon { width: 13px; height: 13px; }
+
+        .temp-popover {
+            position: fixed; z-index: 3000; width: 232px; padding: 12px;
+            background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+            box-shadow: 0 16px 40px rgba(0,0,0,0.3);
+        }
+        .temp-popover[hidden] { display: none; }
+        .temp-popover-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+        .temp-popover-title span { font-weight: 400; color: var(--text-muted); font-size: 11px; margin-left: 4px; }
+        .temp-popover-presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
+        .temp-popover-presets .btn { padding: 6px 4px; }
+        .temp-popover-custom { display: flex; gap: 6px; }
+        .temp-popover-custom .temp-input { flex: 1; width: auto; padding: 6px; font-size: 13px; }
+        .temp-popover-custom .btn { padding: 6px 10px; }
+
+        /* Per-unit AMS blocks */
+        .pc-section-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; }
+        .ams-using { font-size: 11px; font-weight: 500; color: var(--accent); }
+        .ams-units { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 8px; }
+        .ams-unit { padding: 8px; border-radius: 8px; background: var(--surface-soft); border: 1px solid transparent; }
+        .ams-unit.active { border-color: var(--accent-dim); }
+        .ams-unit-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 6px; }
+        .ams-unit-name { font-size: 11px; font-weight: 600; }
+        .ams-unit-stats { display: flex; gap: 8px; }
+        .ams-unit-stat { display: inline-flex; align-items: center; gap: 2px; font-size: 10px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+        .ams-unit-stat .ui-icon { width: 11px; height: 11px; }
+        .ams-unit-stat.ok { color: var(--success); }
+        .ams-unit-stat.warn { color: var(--warning); }
+        .ams-unit-stat.bad { color: var(--danger); }
+        .ams-unit .ams-trays { gap: 4px; }
+        .ams-unit .ams-tray { padding: 6px 3px 5px; border-width: 1px; background: var(--bg); }
+        .ams-unit .ams-tray.active { border-width: 2px; padding: 5px 2px 4px; }
+        .ams-unit .ams-tray.empty .ams-tray-swatch { border-style: dashed; border-color: var(--text-muted); }
+        .ams-unit .ams-tray-swatch { width: 18px; height: 18px; margin-bottom: 3px; }
+        .ams-tray-meter { height: 3px; margin: 4px 3px 0; border-radius: 2px; background: var(--line-soft); overflow: hidden; }
+        .ams-tray-meter span { display: block; height: 100%; border-radius: 2px; }
+        .ams-tray-meter.ok span { background: var(--success); }
+        .ams-tray-meter.warn span { background: var(--warning); }
+        .ams-tray-meter.bad span { background: var(--danger); }
+
+        @media (max-width: 480px) {
+            .pc-actions { flex-basis: 84px; }
+            .pc-actions .pc-act { min-height: 40px; }
+            .pc-temp { min-height: 72px; }
+            .ams-units { grid-template-columns: 1fr; }
+        }
     </style>
 
     <script>
@@ -4451,66 +4631,275 @@
             return klipperToolchangerTools(p).length > 1;
         }
 
-        function renderTemperatureTiles(name, p, isAdmin, isBambu, isKlipper) {
-            const nameArg = jsArg(name);
-            const safeId = escapeHtml(String(name).replace(/[^A-Za-z0-9_.-]/g, '_'));
-            if (isKlipper) {
-                const hasToolchanger = isKlipperToolchanger(p);
-                const toolTiles = hasToolchanger ? '' : klipperToolsForDisplay(p).map((tool, idx) => `
-                    <div class="temp-item klipper-tool-temp" data-tool-index="${idx}">
-                        <div class="temp-label">${escapeHtml(tool.name || `T${idx}`)}</div>
-                        <div class="temp-value" data-field="tool-temp">${formatTemp(tool.temperature)}</div>
-                        <div class="temp-target" data-field="tool-target">/ ${formatTemp(tool.target)}</div>
-                        <div class="temp-warning" data-field="tool-warning">${tool.docked ? 'Docked' : '&nbsp;'}</div>
-                        ${isAdmin ? `<div class="temp-control">
-                            <input type="number" class="temp-input" id="tool-${idx}-${safeId}" placeholder="°C" min="0" max="300" ${tool.docked ? 'disabled' : ''}>
-                            <button class="temp-set-btn" onclick="setKlipperToolTemp(${nameArg}, ${idx}, ${jsArg(tool.object || 'extruder')})" ${tool.docked ? 'disabled title="Tool is docked"' : ''}>Set</button>
-                            <button class="temp-off-btn" onclick="setTemp(${nameArg},'nozzle_temp',0,{heater:${jsArg(tool.object || 'extruder')}})">Off</button>
-                        </div>` : ''}
-                    </div>
-                `).join('');
-                return `
-                    ${toolTiles}
-                    <div class="temp-item">
-                        <div class="temp-label">Bed</div>
-                        <div class="temp-value" data-field="bed-temp">${formatTemp(p.bed_temper)}</div>
-                        <div class="temp-target" data-field="bed-target">/ ${formatTemp(p.bed_target_temper)}</div>
-                        ${isAdmin ? `<div class="temp-control">
-                            <input type="number" class="temp-input" id="bed-${safeId}" placeholder="°C" min="0" max="120">
-                            <button class="temp-set-btn" onclick="setBedTemp(${nameArg})">Set</button>
-                            <button class="temp-off-btn" onclick="setTemp(${nameArg},'bed_temp',0)">Off</button>
-                        </div>` : ''}
-                    </div>
-                `;
+        // ── Printer card: temperature tiles ──────────────────
+        // Each heater is a compact tile. When the viewer can control the printer the
+        // tile is a button that opens a small popover (presets + custom value), so
+        // the card no longer carries a row of always-visible inputs.
+        const TEMP_PRESETS = {
+            nozzle_temp: [200, 220, 250],
+            bed_temp: [55, 65, 100],
+        };
+
+        function tempTile({ name, label, icon, current, target, endpoint = '', heater = '', max = 0, canSet = false, note = '', disabled = false, field = '' }) {
+            const cur = Number(current) || 0;
+            const tgt = Number(target) || 0;
+            const heating = tgt > 0 && cur < tgt - 3;
+            const value = tgt > 0 ? `${formatTemp(cur)} <span class="pc-temp-target">/ ${formatTemp(tgt)}</span>` : formatTemp(cur);
+            const body = `
+                <span class="pc-temp-icon pc-temp-${icon}">${iconMarkup('thermo')}</span>
+                <span class="pc-temp-label">${htmlEscape(label)}</span>
+                <span class="pc-temp-value"${field ? ` data-field="${field}"` : ''}>${value}</span>
+                ${note ? `<span class="pc-temp-note">${htmlEscape(note)}</span>` : ''}`;
+            const cls = `pc-temp${heating ? ' heating' : ''}${tgt > 0 ? ' on' : ''}`;
+            if (!canSet || !endpoint) {
+                return `<div class="${cls}">${body}</div>`;
             }
+            const args = [jsArg(name), jsArg(endpoint), jsArg(label), jsArg(heater), Number(max) || 300, tgt].join(',');
+            return `<button type="button" class="${cls} pc-temp-btn" ${disabled ? 'disabled title="Tool is docked"' : `title="Set ${htmlEscape(label.toLowerCase())} temperature"`}
+                        onclick="openTempPopover(this,${args})">${body}</button>`;
+        }
+
+        function renderTemperatureTiles(name, p, canControl, isBambu, isKlipper) {
+            if (isKlipper) {
+                const toolTiles = isKlipperToolchanger(p) ? '' : klipperToolsForDisplay(p).map((tool, idx) => tempTile({
+                    name,
+                    label: tool.name || `T${idx}`,
+                    icon: 'nozzle',
+                    current: tool.temperature,
+                    target: tool.target,
+                    endpoint: 'nozzle_temp',
+                    heater: tool.object || 'extruder',
+                    max: 300,
+                    canSet: canControl,
+                    note: tool.docked ? 'Docked' : '',
+                    disabled: !!tool.docked,
+                })).join('');
+                return toolTiles + tempTile({
+                    name, label: 'Bed', icon: 'bed', current: p.bed_temper, target: p.bed_target_temper,
+                    endpoint: 'bed_temp', max: 120, canSet: canControl,
+                });
+            }
+            const chamber = isBambu && p.chamber_temper > 5;
+            return tempTile({
+                    name, label: 'Nozzle', icon: 'nozzle', current: p.nozzle_temper, target: p.nozzle_target_temper,
+                    endpoint: 'nozzle_temp', max: 300, canSet: canControl,
+                })
+                + tempTile({
+                    name, label: 'Bed', icon: 'bed', current: p.bed_temper, target: p.bed_target_temper,
+                    endpoint: 'bed_temp', max: 120, canSet: canControl,
+                })
+                + (chamber
+                    ? tempTile({ name, label: 'Chamber', icon: 'chamber', current: p.chamber_temper, target: 0 })
+                    : `<div class="pc-temp pc-temp-na"><span class="pc-temp-icon pc-temp-chamber">${iconMarkup('thermo')}</span><span class="pc-temp-label">Chamber</span><span class="pc-temp-value">N/A</span></div>`);
+        }
+
+        // One shared popover, positioned next to whichever tile opened it.
+        let tempPopoverState = null;
+
+        function closeTempPopover() {
+            const pop = document.getElementById('tempPopover');
+            if (pop) pop.hidden = true;
+            tempPopoverState = null;
+        }
+
+        function openTempPopover(anchor, name, endpoint, label, heater, max, currentTarget) {
+            let pop = document.getElementById('tempPopover');
+            if (!pop) {
+                pop = document.createElement('div');
+                pop.id = 'tempPopover';
+                pop.className = 'temp-popover';
+                pop.setAttribute('role', 'dialog');
+                pop.hidden = true;
+                document.body.appendChild(pop);
+                document.addEventListener('mousedown', e => {
+                    if (!pop.hidden && !pop.contains(e.target) && !e.target.closest('.pc-temp-btn')) closeTempPopover();
+                });
+                document.addEventListener('keydown', e => { if (e.key === 'Escape') closeTempPopover(); });
+                window.addEventListener('scroll', closeTempPopover, { passive: true });
+                window.addEventListener('resize', closeTempPopover);
+            }
+            if (!pop.hidden && tempPopoverState && tempPopoverState.anchorKey === `${name}|${endpoint}|${heater}|${label}`) {
+                closeTempPopover();
+                return;
+            }
+            tempPopoverState = { name, endpoint, heater, max, anchorKey: `${name}|${endpoint}|${heater}|${label}` };
+            const presets = (TEMP_PRESETS[endpoint] || []).filter(t => t <= max);
+            pop.innerHTML = `
+                <div class="temp-popover-title">${htmlEscape(label)} <span>${htmlEscape(name)}</span></div>
+                <div class="temp-popover-presets">
+                    ${presets.map(t => `<button type="button" class="btn" onclick="applyTempPopover(${t})">${t}°</button>`).join('')}
+                </div>
+                <form class="temp-popover-custom" onsubmit="event.preventDefault();applyTempPopover(this.elements.temp.value)">
+                    <input type="number" name="temp" class="temp-input" min="0" max="${max}" placeholder="°C" value="${currentTarget > 0 ? Math.round(currentTarget) : ''}" aria-label="${htmlEscape(label)} target temperature">
+                    <button type="submit" class="btn btn-primary">Set</button>
+                    <button type="button" class="btn btn-danger" onclick="applyTempPopover(0)">Off</button>
+                </form>`;
+            pop.hidden = false;
+            const r = anchor.getBoundingClientRect();
+            const w = pop.offsetWidth, h = pop.offsetHeight;
+            let left = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), window.innerWidth - w - 8);
+            let top = r.bottom + 6;
+            if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
+            pop.style.left = `${left}px`;
+            pop.style.top = `${top}px`;
+            const input = pop.querySelector('input');
+            if (input && window.matchMedia('(hover: hover)').matches) input.focus();
+        }
+
+        async function applyTempPopover(value) {
+            const s = tempPopoverState;
+            if (!s) return;
+            const temp = parseInt(value, 10) || 0;
+            if (temp < 0 || temp > s.max) { alert(`Temperature must be between 0 and ${s.max}°C`); return; }
+            closeTempPopover();
+            await setTemp(s.name, s.endpoint, temp, s.heater ? { heater: s.heater } : {});
+            setTimeout(refreshPrinters, 600);
+        }
+
+        // ── Printer card: header chips, job panel, controls ──
+        function setHtmlIfChanged(el, html) {
+            if (el && el.dataset.html !== html) {
+                el.innerHTML = html;
+                el.dataset.html = html;
+            }
+        }
+
+        function hmsCodeLabel(entry) {
+            const hex = n => ((Number(n) || 0) >>> 0).toString(16).toUpperCase().padStart(8, '0');
+            const a = hex(entry && entry.attr), c = hex(entry && entry.code);
+            return `HMS_${a.slice(0, 4)}_${a.slice(4)}_${c.slice(0, 4)}_${c.slice(4)}`;
+        }
+
+        function prettyNozzleType(type) {
+            const t = String(type || '').replace(/_/g, ' ').trim();
+            return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
+        }
+
+        function renderPrinterSubline(name, p) {
+            const parts = [];
+            if (p.nozzle_diameter) parts.push(`<span title="Nozzle diameter">${htmlEscape(p.nozzle_diameter)}mm</span>`);
+            if (p.nozzle_type) parts.push(htmlEscape(prettyNozzleType(p.nozzle_type)));
+            if (isKlipperToolchanger(p)) parts.push(`${klipperToolchangerTools(p).length} tools`);
+            if (isAdmin && p.host) parts.push(`<span class="pc-host">${htmlEscape(p.host)}</span>`);
+            return parts.join(' · ');
+        }
+
+        function renderPrinterChips(name, p) {
+            const chips = [];
+            const isBambu = (p.type || 'bambulab') === 'bambulab';
+            if (p.type === 'klipper') chips.push(`<span class="pc-chip pc-chip-klipper">Klipper</span>`);
+            if (p.connected && isBambu) {
+                const m = String(p.wifi_signal || '').match(/-?\d+/);
+                if (m) {
+                    const dbm = Number(m[0]);
+                    const tone = dbm >= -60 ? 'ok' : dbm >= -75 ? 'warn' : 'bad';
+                    chips.push(`<span class="pc-chip pc-chip-${tone}" title="Wi-Fi signal strength">${iconMarkup('wifi')}${dbm} dBm</span>`);
+                }
+                const hms = Array.isArray(p.hms) ? p.hms : [];
+                const err = Number(p.print_error) || 0;
+                const lines = hms.map(hmsCodeLabel);
+                if (err) lines.unshift(`Print error 0x${(err >>> 0).toString(16).toUpperCase().padStart(8, '0')}`);
+                chips.push(lines.length
+                    ? `<span class="pc-chip pc-chip-bad" title="${htmlEscape(lines.join('\n'))}">${iconMarkup('alert')}${lines.length} alert${lines.length > 1 ? 's' : ''}</span>`
+                    : `<span class="pc-chip pc-chip-ok" title="No HMS alerts or print errors">${iconMarkup('alert')}OK</span>`);
+                const lightLabel = p.chamber_light ? 'Light on' : 'Light off';
+                chips.push(canControlPrinter(p)
+                    ? `<button type="button" class="pc-chip pc-chip-btn${p.chamber_light ? ' pc-chip-on' : ''}" onclick="printerCmd(${jsArg(name)},'light')" title="Toggle chamber light">${iconMarkup('bulb')}${lightLabel}</button>`
+                    : `<span class="pc-chip${p.chamber_light ? ' pc-chip-on' : ''}">${iconMarkup('bulb')}${lightLabel}</span>`);
+            }
+            if (p.staff_only) chips.push(`<span class="pc-chip pc-chip-staff" title="Only staff can use this printer">${iconMarkup('lock')}Staff only</span>`);
+            return chips.join('');
+        }
+
+        function formatFinishClock(minutes) {
+            if (!minutes) return '';
+            const at = new Date(Date.now() + minutes * 60000);
+            const time = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const sameDay = at.toDateString() === new Date().toDateString();
+            return sameDay ? time : `${at.toLocaleDateString([], { weekday: 'short' })} ${time}`;
+        }
+
+        function jobThumbKey(p) {
+            const status = String(p.status || '').toLowerCase();
+            const active = status === 'running' || status === 'paused' || status === 'pause_filament';
+            return (isAuthenticated && p.connected && active && p.subtask_name) ? String(p.subtask_name) : '';
+        }
+
+        function renderJobThumb(name, key) {
+            const img = key
+                ? `<img src="${BASE}/api/printer/${encodeURIComponent(name)}/thumbnail?k=${encodeURIComponent(key)}" alt="" loading="lazy" onerror="this.remove()">`
+                : '';
+            return `${iconMarkup('printers', 'pc-thumb-icon')}${img}`;
+        }
+
+        const SPEED_LEVELS = { 1: 'Silent', 2: 'Standard', 3: 'Sport', 4: 'Ludicrous' };
+
+        function renderJobInfo(name, p) {
+            const status = String(p.status || 'unknown').toLowerCase();
+            const connected = p.connected;
+            const isRunning = status === 'running';
+            const isPaused = status === 'paused' || status === 'pause_filament';
+            const active = connected && (isRunning || isPaused);
+            const percent = clampNumber(p.mc_percent, 0, 100);
+
+            let label = 'Idle';
+            let title = p.plate_needs_clear ? 'Waiting for the plate to be cleared' : 'Ready to print';
+            if (!connected) { label = 'Offline'; title = 'Not connected'; }
+            else if (isRunning) label = 'Printing';
+            else if (status === 'pause_filament') label = 'Paused — filament';
+            else if (isPaused) label = 'Paused';
+            else if (status === 'finish') { label = 'Finished'; if (p.subtask_name) title = p.subtask_name; }
+            else if (status === 'failed') { label = 'Failed'; if (p.subtask_name) title = p.subtask_name; }
+            if (active) title = p.subtask_name || 'Untitled job';
+
+            const barWidth = active ? percent : (connected && status === 'finish' ? 100 : 0);
+            const barClass = isPaused ? 'paused' : status === 'finish' ? 'done' : status === 'failed' ? 'failed' : '';
+            const remaining = Number(p.mc_remaining_time) || 0;
+            const speedName = SPEED_LEVELS[p.spd_lvl] || '';
+            const stats = active ? `
+                <div class="pc-job-stats">
+                    <span title="Time remaining">${iconMarkup('clock')}${formatTime(remaining)}</span>
+                    ${remaining ? `<span class="pc-eta" title="Estimated finish time">ETA ${htmlEscape(formatFinishClock(remaining))}</span>` : ''}
+                    ${p.total_layers ? `<span title="Layer">${iconMarkup('layers')}${Number(p.layer_num) || 0}/${Number(p.total_layers) || 0}</span>` : ''}
+                    <span title="Print speed${speedName ? ': ' + speedName : ''}">${Number(p.spd_mag) || 100}%${speedName ? ' ' + speedName : ''}</span>
+                </div>` : '';
 
             return `
-                <div class="temp-item">
-                    <div class="temp-label">Nozzle</div>
-                    <div class="temp-value" data-field="nozzle-temp">${formatTemp(p.nozzle_temper)}</div>
-                    <div class="temp-target" data-field="nozzle-target">/ ${formatTemp(p.nozzle_target_temper)}</div>
-                    ${isAdmin ? `<div class="temp-control">
-                        <input type="number" class="temp-input" id="nozzle-${safeId}" placeholder="°C" min="0" max="300">
-                        <button class="temp-set-btn" onclick="setNozzleTemp(${nameArg})">Set</button>
-                        <button class="temp-off-btn" onclick="setTemp(${nameArg},'nozzle_temp',0)">Off</button>
-                    </div>` : ''}
+                <div class="pc-job-label">${htmlEscape(label)}</div>
+                <div class="pc-job-name" title="${htmlEscape(title)}">${htmlEscape(title)}</div>
+                <div class="pc-job-progress">
+                    <div class="progress-bar-container"><div class="progress-bar ${barClass}" style="width:${barWidth}%"></div></div>
+                    <span class="pc-job-pct">${active ? percent + '%' : '—'}</span>
                 </div>
-                <div class="temp-item">
-                    <div class="temp-label">Bed</div>
-                    <div class="temp-value" data-field="bed-temp">${formatTemp(p.bed_temper)}</div>
-                    <div class="temp-target" data-field="bed-target">/ ${formatTemp(p.bed_target_temper)}</div>
-                    ${isAdmin ? `<div class="temp-control">
-                        <input type="number" class="temp-input" id="bed-${safeId}" placeholder="°C" min="0" max="120">
-                        <button class="temp-set-btn" onclick="setBedTemp(${nameArg})">Set</button>
-                        <button class="temp-off-btn" onclick="setTemp(${nameArg},'bed_temp',0)">Off</button>
-                    </div>` : ''}
-                </div>
-                <div class="temp-item">
-                    <div class="temp-label">Chamber</div>
-                    <div class="temp-value" data-field="chamber-temp">${isBambu ? (p.chamber_temper > 5 ? formatTemp(p.chamber_temper) : 'N/A') : 'N/A'}</div>
-                    <div class="temp-target">&nbsp;</div>
-                </div>
-            `;
+                ${stats}`;
+        }
+
+        function renderPrinterControls(name, p) {
+            const status = String(p.status || '').toLowerCase();
+            const isRunning = status === 'running';
+            const isPaused = status === 'paused' || status === 'pause_filament';
+            const nameArg = jsArg(name);
+            const pauseOrResume = isPaused
+                ? `<button class="btn btn-success pc-act" onclick="printerCmd(${nameArg},'resume')">${iconMarkup('play')}Resume</button>`
+                : `<button class="btn btn-warning pc-act" onclick="printerCmd(${nameArg},'pause')"${isRunning ? '' : ' disabled'}>${iconMarkup('pause')}Pause</button>`;
+            return `${pauseOrResume}
+                <button class="btn btn-danger pc-act" onclick="confirmStopPrint(${nameArg})"${isRunning || isPaused ? '' : ' disabled'}>${iconMarkup('stop')}Stop</button>`;
+        }
+
+        function confirmStopPrint(name) {
+            if (confirm(`Stop the print on ${name}? This cannot be undone.`)) printerCmd(name, 'stop');
+        }
+
+        // AMS units are lettered A, B, C…; AMS HT units report ids from 128.
+        function amsUnitLabel(id) {
+            const n = Number(id) || 0;
+            return n >= 128 ? `HT-${String.fromCharCode(65 + n - 128)}` : `AMS-${String.fromCharCode(65 + n)}`;
+        }
+
+        function amsSlotLabel(t) {
+            const n = Number(t.unit) || 0;
+            const letter = String.fromCharCode(65 + (n >= 128 ? n - 128 : n));
+            return `${n >= 128 ? 'HT-' : ''}${letter}${(Number(t.slot) || 0) + 1}`;
         }
 
         let lastPrinterNames = [];  // Track which printers are in the grid
@@ -4530,22 +4919,24 @@
             const pType = p.type || 'bambulab';
             const isBambu = pType === 'bambulab';
             const isKlipper = pType === 'klipper';
-            const typeBadge = isKlipper ? '<span class="printer-type-badge" style="font-size:9px;background:#ff6600;color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;vertical-align:middle;">Klipper</span>' : '';
 
-            const isRunning = status === 'running';
-            const isPaused = status === 'paused' || status === 'pause_filament';
             const safeName = escapeHtml(name);
             const nameArg = jsArg(name);
             const safeType = escapeHtml(pType);
-            const percent = clampNumber(p.mc_percent, 0, 100);
+            const thumbKey = jobThumbKey(p);
+            const subline = renderPrinterSubline(name, p);
+            const showControls = canControlPrinter(p) || myActivePrinters.has(name);
 
             return `
                 <div class="printer-card ${cardClass}" data-printer="${safeName}" data-type="${safeType}">
                     <div class="printer-header">
-                        <span class="printer-name">
-                            <span class="conn-badge ${connClass}"></span><span class="printer-display-name">${safeName}</span>${typeBadge}
-                            ${isAdmin ? `<button class="printer-rename-btn" onclick="renamePrinter(${nameArg})" title="Rename printer">&#9998;</button>` : ''}
-                        </span>
+                        <div class="pc-title">
+                            <span class="printer-name">
+                                <span class="conn-badge ${connClass}"></span><span class="printer-display-name">${safeName}</span>
+                                ${isAdmin ? `<button class="printer-rename-btn" onclick="renamePrinter(${nameArg})" title="Rename printer">&#9998;</button>` : ''}
+                            </span>
+                            <div class="pc-subline" data-field="subline">${subline}</div>
+                        </div>
                         <div class="printer-header-actions">
                             <span class="printer-status ${statusBadge}" data-field="status">${escapeHtml(statusLabel)}</span>
                             ${isAuthenticated ? `<button class="btn printer-card-action" onclick="openPrinterDetails(${nameArg})" title="View printer details">${iconMarkup('details')} Details</button>` : ''}
@@ -4553,40 +4944,30 @@
                             ${isAdmin ? `<button class="printer-remove-btn" onclick="removePrinter(${nameArg})" title="Remove printer">&times;</button>` : ''}
                         </div>
                     </div>
-                    ${isAdmin ? `<div class="staff-only-toggle" style="display:flex;align-items:center;gap:6px;padding:2px 8px;font-size:11px;">
-                        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--text-muted);">
+                    <div class="pc-chips" data-field="chips">${renderPrinterChips(name, p)}</div>
+                    ${isAdmin ? `<div class="staff-only-toggle">
+                        <label>
                             <input type="checkbox" ${p.staff_only ? 'checked' : ''} onchange="toggleStaffOnly(${nameArg}, this.checked)"> Staff only
                         </label>
-                        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--text-muted);" title="Require someone to confirm the build plate is clear before the next job">
+                        <label title="Require someone to confirm the build plate is clear before the next job">
                             <input type="checkbox" ${p.plate_clear_required !== false ? 'checked' : ''} onchange="togglePlateClearRequired(${nameArg}, this.checked)"> Plate check
                         </label>
                     </div>` : ''}
                     <div data-field="plate">${renderPlateBanner(name, p)}</div>
-                    ${p.orca_port ? `<div class="printer-orca-port" style="padding:2px 8px;font-size:10px;color:var(--text-muted);">OrcaSlicer: <span style="color:var(--accent);user-select:all;cursor:text;">${escapeHtml(location.hostname)}:${clampNumber(p.orca_port, 1, 65535)}</span></div>` : ''}
-                    <div class="printer-job" data-field="job">${escapeHtml(p.subtask_name || 'No active job')}</div>
-                    <div class="progress-bar-container">
-                        <div class="progress-bar" data-field="progress" style="width:${isRunning || isPaused ? percent : 0}%"></div>
+                    ${p.orca_port ? `<div class="printer-orca-port">OrcaSlicer: <span>${escapeHtml(location.hostname)}:${clampNumber(p.orca_port, 1, 65535)}</span></div>` : ''}
+                    <div class="pc-job">
+                        <div class="pc-thumb" data-field="thumb" data-key="${htmlEscape(thumbKey)}">${renderJobThumb(name, thumbKey)}</div>
+                        <div class="pc-job-info" data-field="job-info">${renderJobInfo(name, p)}</div>
                     </div>
                     <div class="camera-section" id="cam-${safeName}">
                         ${cameraSectionMarkup(name, cameraStreaming[name])}
                     </div>
-                    <div class="printer-meta">
-                        <span data-field="percent">${isRunning ? p.mc_percent + '%' : '--'}</span>
-                        <span data-field="layers">Layer ${p.layer_num || 0}/${p.total_layers || 0}</span>
-                        <span data-field="eta">ETA: ${isRunning ? formatTime(p.mc_remaining_time) : '--'}</span>
-                        <span data-field="speed">Speed: ${p.spd_mag}%</span>
+                    <div class="pc-vitals">
+                        <div class="printer-temps" data-field="temps">
+                            ${renderTemperatureTiles(name, p, canControlPrinter(p), isBambu, isKlipper)}
+                        </div>
+                        ${showControls ? `<div class="pc-actions" data-field="controls">${renderPrinterControls(name, p)}</div>` : ''}
                     </div>
-                    <div class="printer-temps" data-field="temps">
-                        ${renderTemperatureTiles(name, p, canControlPrinter(p), isBambu, isKlipper)}
-                    </div>
-                    ${(canControlPrinter(p) || myActivePrinters.has(name)) ? `<div class="printer-controls" data-field="controls">
-                        ${isPaused ? `<button class="btn btn-success" onclick="printerCmd('${name}','resume')">Resume</button>` : ''}
-                        ${isRunning ? `<button class="btn btn-warning" onclick="printerCmd('${name}','pause')">Pause</button>` : ''}
-                        ${isRunning || isPaused ? `<button class="btn btn-danger" onclick="printerCmd('${name}','stop')">Stop</button>` : ''}
-                        ${canControlPrinter(p) && isBambu ? `<button class="btn" onclick="printerCmd('${name}','light')" title="Toggle light">
-                            ${p.chamber_light ? '💡' : '🔅'}
-                        </button>` : ''}
-                    </div>` : ''}
                     ${renderAmsSection(name, p)}
                     ${renderFanLedSection(name, p)}
                     ${renderMmuSection(name, p)}
@@ -4890,50 +5271,84 @@
         function renderAmsSection(name, p) {
             if (p.has_ams && p.ams_trays && p.ams_trays.length > 0) {
                 const nameArg = jsArg(name);
-                const trays = p.ams_trays.map(t => {
+                const canControl = canControlPrinter(p);
+                const renderTray = t => {
                     const swatchColor = safeCssColor(t.color || '#333', '#333333');
                     const activeClass = t.active ? 'active' : '';
                     const emptyClass = !t.loaded ? 'empty' : '';
-                    if (canControlPrinter(p)) {
+                    const remain = Number(t.remain);
+                    const knownRemain = t.loaded && Number.isFinite(remain) && remain >= 0;
+                    const remainTone = !knownRemain ? '' : remain >= 50 ? 'ok' : remain >= 20 ? 'warn' : 'bad';
+                    const slot = amsSlotLabel(t);
+                    const desc = t.loaded
+                        ? `${slot}: ${t.type || 'Unknown'}${t.color ? ' · ' + t.color : ''}${knownRemain ? ` · ${remain}% left` : ''}`
+                        : `${slot}: empty`;
+                    const inner = `
+                        <div class="ams-tray-swatch" style="background:${t.loaded ? swatchColor : 'transparent'}"></div>
+                        <div class="ams-tray-type">${escapeHtml(t.loaded ? (t.type || '?') : '—')}</div>
+                        <div class="ams-tray-slot">${escapeHtml(slot)}</div>
+                        <div class="ams-tray-meter ${remainTone}"><span style="width:${knownRemain ? clampNumber(remain, 0, 100) : 0}%"></span></div>`;
+                    if (canControl) {
                         const configureAction = `openTrayConfig(${nameArg}, ${Number(t.id)}, ${Number(t.slot)}, ${jsArg(t.type || '')}, ${jsArg(safeCssColor(t.color, '#333333'))}, ${jsArg(t.nozzle_temp_min)}, ${jsArg(t.nozzle_temp_max)})`;
-                        const trayTitle = t.is_bbl
-                            ? 'Bambu RFID filament — click to override the tag colour or type'
-                            : (t.loaded ? 'Click to configure filament' : 'Empty slot');
+                        const hint = t.is_bbl
+                            ? ' — Bambu RFID filament, click to override the tag colour or type'
+                            : (t.loaded ? ' — click to configure filament' : '');
                         return `
                             <div class="ams-tray ${activeClass} ${emptyClass}"
                                  onclick="event.stopPropagation();${t.loaded ? configureAction : ''}"
-                                 title="${trayTitle}"
-                                 oncontextmenu="event.stopPropagation();${configureAction ? `event.preventDefault();${configureAction}` : ''}">
-                                <div class="ams-tray-swatch" style="background:${t.loaded ? swatchColor : '#333'}"></div>
-                                <div class="ams-tray-type">${escapeHtml(t.type || '—')}</div>
-                                <div class="ams-tray-slot">#${t.slot + 1}</div>
-                                ${t.loaded && t.remain >= 0 ? `<div class="ams-tray-remain">${t.remain}%</div>` : ''}
+                                 title="${htmlEscape(desc + hint)}"
+                                 oncontextmenu="event.stopPropagation();event.preventDefault();${configureAction}">
+                                ${inner}
                                 ${t.loaded ? `<div class="ams-tray-edit" onclick="event.stopPropagation();${configureAction}" title="Configure filament">&#9998;</div>` : ''}
-                            </div>
-                        `;
-                    } else {
-                        return `
-                            <div class="ams-tray ${activeClass} ${emptyClass}" title="${escapeHtml(t.loaded ? t.type + ' · ' + (t.color || '') : 'Empty slot')}">
-                                <div class="ams-tray-swatch" style="background:${t.loaded ? swatchColor : '#333'}"></div>
-                                <div class="ams-tray-type">${escapeHtml(t.type || '—')}</div>
-                                <div class="ams-tray-slot">#${t.slot + 1}</div>
-                                ${t.loaded && t.remain >= 0 ? `<div class="ams-tray-remain">${t.remain}%</div>` : ''}
-                            </div>
-                        `;
+                            </div>`;
                     }
+                    return `<div class="ams-tray ${activeClass} ${emptyClass}" title="${htmlEscape(desc)}">${inner}</div>`;
+                };
+
+                // One block per AMS unit, each with its own humidity and temperature.
+                const unitInfo = new Map((Array.isArray(p.ams_units) ? p.ams_units : []).map(u => [Number(u.id), u]));
+                const unitIds = [...new Set(p.ams_trays.map(t => Number(t.unit) || 0))].sort((a, b) => a - b);
+                const units = unitIds.map(id => {
+                    const info = unitInfo.get(id) || {};
+                    const trays = p.ams_trays.filter(t => (Number(t.unit) || 0) === id).sort((a, b) => a.slot - b.slot);
+                    const raw = parseFloat(info.humidity_raw);
+                    const level = info.humidity !== undefined && info.humidity !== '' ? info.humidity : (unitIds.length === 1 ? p.ams_humidity : '');
+                    let humidity = '';
+                    if (Number.isFinite(raw) && raw > 0) {
+                        const tone = raw < 30 ? 'ok' : raw < 50 ? 'warn' : 'bad';
+                        humidity = `<span class="ams-unit-stat ${tone}" title="Humidity${level ? ` (level ${htmlEscape(level)}: ${htmlEscape(_amsHumidityLabel(level))})` : ''}">${iconMarkup('droplet')}${Math.round(raw)}%</span>`;
+                    } else if (level !== '' && level !== undefined && level !== null) {
+                        const n = parseInt(level, 10);
+                        const tone = isNaN(n) ? '' : n <= 2 ? 'ok' : n <= 3 ? 'warn' : 'bad';
+                        humidity = `<span class="ams-unit-stat ${tone}" title="Humidity level ${htmlEscape(level)}">${iconMarkup('droplet')}${htmlEscape(_amsHumidityLabel(level))}</span>`;
+                    }
+                    const temp = parseFloat(info.temp);
+                    const tempStat = Number.isFinite(temp) && temp > 0
+                        ? `<span class="ams-unit-stat" title="Temperature inside the AMS">${iconMarkup('thermo')}${temp.toFixed(1)}°C</span>`
+                        : '';
+                    const active = trays.some(t => t.active);
+                    return `
+                        <div class="ams-unit${active ? ' active' : ''}">
+                            <div class="ams-unit-head">
+                                <span class="ams-unit-name">${escapeHtml(amsUnitLabel(id))}</span>
+                                <span class="ams-unit-stats">${humidity}${tempStat}</span>
+                            </div>
+                            <div class="ams-trays">${trays.map(renderTray).join('')}</div>
+                        </div>`;
                 }).join('');
 
-                const humLabel = p.ams_humidity ? ` · ${_amsHumidityIcon(p.ams_humidity)} ${_amsHumidityLabel(p.ams_humidity)}` : '';
                 const externalActive = p.ams_tray_now === 254;
+                const activeTray = p.ams_trays.find(t => t.id === p.ams_tray_now);
+                const using = activeTray ? `Using ${amsSlotLabel(activeTray)}` : externalActive ? 'Using external spool' : '';
 
                 return `
                     <div class="ams-section" data-field="ams" onclick="openAmsModal(${nameArg})" title="Click to open AMS details" style="cursor:pointer">
                         <div class="ams-header">
-                            <span>AMS${p.ams_serial ? ` <span style="font-size:10px;color:var(--text-muted)">(${p.ams_serial})</span>` : ''}${humLabel}</span>
-                            <span>${p.ams_tray_now < 254 ? `Tray ${p.ams_tray_now + 1}` : p.ams_tray_now === 254 ? 'External' : 'None'}</span>
+                            <span class="pc-section-label"${p.ams_serial ? ` title="AMS ${htmlEscape(p.ams_serial)}"` : ''}>Filaments</span>
+                            <span class="ams-using">${escapeHtml(using)}</span>
                         </div>
-                        <div class="ams-trays">${trays}</div>
-                        ${canControlPrinter(p) ? `<div class="ams-external ${externalActive ? 'active' : ''}" onclick="event.stopPropagation()">
+                        <div class="ams-units">${units}</div>
+                        ${canControl ? `<div class="ams-external ${externalActive ? 'active' : ''}" onclick="event.stopPropagation()">
                             <span onclick="amsLoadTray(${nameArg}, 254)" style="cursor:pointer">🔗 External Spool${externalActive ? ' (active)' : ''}</span>
                             <span style="margin-left:auto;">
                                 <button class="btn" onclick="amsLoadTray(${nameArg}, 255)" style="font-size:10px;padding:2px 8px;">Unload</button>
@@ -5001,10 +5416,8 @@
         }
 
         function updatePrinterCard(card, name, p) {
-            const status = p.status.toLowerCase();
+            const status = String(p.status || 'unknown').toLowerCase().replace(/[^a-z_]/g, '');
             const connected = p.connected;
-            const isRunning = status === 'running';
-            const isPaused = status === 'paused' || status === 'pause_filament';
 
             // Update card class (border color)
             const newClass = connected ? `status-${status}` : 'status-unknown';
@@ -5025,70 +5438,26 @@
             const reconnectEl = card.querySelector('[data-field="reconnect"]');
             if (reconnectEl) reconnectEl.style.display = connected ? 'none' : '';
 
-            // Job name
-            const jobEl = card.querySelector('[data-field="job"]');
-            if (jobEl) jobEl.textContent = p.subtask_name || 'No active job';
+            setHtmlIfChanged(card.querySelector('[data-field="subline"]'), renderPrinterSubline(name, p));
+            setHtmlIfChanged(card.querySelector('[data-field="chips"]'), renderPrinterChips(name, p));
 
-            // Progress bar
-            const progEl = card.querySelector('[data-field="progress"]');
-            if (progEl) progEl.style.width = (isRunning || isPaused ? p.mc_percent : 0) + '%';
-
-            // Meta row
-            const pctEl = card.querySelector('[data-field="percent"]');
-            if (pctEl) pctEl.textContent = isRunning ? p.mc_percent + '%' : '--';
-            const layEl = card.querySelector('[data-field="layers"]');
-            if (layEl) layEl.textContent = `Layer ${p.layer_num || 0}/${p.total_layers || 0}`;
-            const etaEl = card.querySelector('[data-field="eta"]');
-            if (etaEl) etaEl.textContent = `ETA: ${isRunning ? formatTime(p.mc_remaining_time) : '--'}`;
-            const spdEl = card.querySelector('[data-field="speed"]');
-            if (spdEl) spdEl.textContent = `Speed: ${p.spd_mag}%`;
+            // Job panel: only reload the thumbnail when the job changes
+            const thumbEl = card.querySelector('[data-field="thumb"]');
+            const thumbKey = jobThumbKey(p);
+            if (thumbEl && thumbEl.dataset.key !== thumbKey) {
+                thumbEl.dataset.key = thumbKey;
+                thumbEl.innerHTML = renderJobThumb(name, thumbKey);
+            }
+            setHtmlIfChanged(card.querySelector('[data-field="job-info"]'), renderJobInfo(name, p));
 
             const pType = p.type || 'bambulab';
             const isBambu = pType === 'bambulab';
             const isKlipper = pType === 'klipper';
 
-            // Temperatures (only update display, not input fields)
-            const tempsEl = card.querySelector('[data-field="temps"]');
-            if (tempsEl && isKlipper) {
-                const tools = klipperToolsForDisplay(p);
-                const existingTools = tempsEl.querySelectorAll('.klipper-tool-temp');
-                if (isKlipperToolchanger(p)) {
-                    if (existingTools.length) {
-                        tempsEl.innerHTML = renderTemperatureTiles(name, p, canControlPrinter(p), isBambu, isKlipper);
-                    }
-                } else if (existingTools.length !== tools.length) {
-                    tempsEl.innerHTML = renderTemperatureTiles(name, p, canControlPrinter(p), isBambu, isKlipper);
-                } else {
-                    tools.forEach((tool, idx) => {
-                        const item = tempsEl.querySelector(`.klipper-tool-temp[data-tool-index="${idx}"]`);
-                        const tempEl = item?.querySelector('[data-field="tool-temp"]');
-                        const targetEl = item?.querySelector('[data-field="tool-target"]');
-                        const warningEl = item?.querySelector('[data-field="tool-warning"]');
-                        const inputEl = item?.querySelector('.temp-input');
-                        const setBtn = item?.querySelector('.temp-set-btn');
-                        if (tempEl) tempEl.textContent = formatTemp(tool.temperature);
-                        if (targetEl) targetEl.textContent = '/ ' + formatTemp(tool.target);
-                        if (warningEl) warningEl.innerHTML = tool.docked ? 'Docked' : '&nbsp;';
-                        if (inputEl) inputEl.disabled = !!tool.docked;
-                        if (setBtn) {
-                            setBtn.disabled = !!tool.docked;
-                            setBtn.title = tool.docked ? 'Tool is docked' : '';
-                        }
-                    });
-                }
-            }
-            const nt = card.querySelector('[data-field="nozzle-temp"]');
-            if (nt) nt.textContent = formatTemp(p.nozzle_temper);
-            const ntt = card.querySelector('[data-field="nozzle-target"]');
-            if (ntt) ntt.textContent = '/ ' + formatTemp(p.nozzle_target_temper);
-            const bt = card.querySelector('[data-field="bed-temp"]');
-            if (bt) bt.textContent = formatTemp(p.bed_temper);
-            const btt = card.querySelector('[data-field="bed-target"]');
-            if (btt) btt.textContent = '/ ' + formatTemp(p.bed_target_temper);
-            const ct = card.querySelector('[data-field="chamber-temp"]');
-            if (ct) {
-                ct.textContent = isBambu ? (p.chamber_temper > 5 ? formatTemp(p.chamber_temper) : 'N/A') : 'N/A';
-            }
+            // Temperature tiles hold no inputs (those live in the popover), so a
+            // re-render never discards anything the viewer is typing.
+            setHtmlIfChanged(card.querySelector('[data-field="temps"]'),
+                renderTemperatureTiles(name, p, canControlPrinter(p), isBambu, isKlipper));
 
             // Build plate banner
             const plateEl = card.querySelector('[data-field="plate"]');
@@ -5100,17 +5469,10 @@
                 }
             }
 
-            // Controls (need rebuild since buttons change with status)
+            // Controls (rebuilt when status changes the available actions)
             const ctrlEl = card.querySelector('[data-field="controls"]');
             if (ctrlEl && (canControlPrinter(p) || myActivePrinters.has(name))) {
-                ctrlEl.innerHTML = `
-                    ${isPaused ? `<button class="btn btn-success" onclick="printerCmd('${name}','resume')">Resume</button>` : ''}
-                    ${isRunning ? `<button class="btn btn-warning" onclick="printerCmd('${name}','pause')">Pause</button>` : ''}
-                    ${isRunning || isPaused ? `<button class="btn btn-danger" onclick="printerCmd('${name}','stop')">Stop</button>` : ''}
-                    ${canControlPrinter(p) && isBambu ? `<button class="btn" onclick="printerCmd('${name}','light')" title="Toggle light">
-                        ${p.chamber_light ? '💡' : '🔅'}
-                    </button>` : ''}
-                `;
+                setHtmlIfChanged(ctrlEl, renderPrinterControls(name, p));
             }
 
             // AMS / Filament section — replace in place

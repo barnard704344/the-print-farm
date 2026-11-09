@@ -311,3 +311,71 @@ class PlateEndpointTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ── Printer card job thumbnail ─────────────────────────
+
+class ThumbFarm(FakeFarm):
+    def get_printer(self, name):
+        return self.printer if name in ("Printer-1", "Staff-Printer") else None
+
+
+class ThumbQueue(FakeQueue):
+    def get_active_jobs(self):
+        return [
+            {"id": 7, "status": "printing", "printer_name": "Printer-1", "file_path": "/uploads/job.3mf"},
+            {"id": 8, "status": "printing", "printer_name": "Staff-Printer", "file_path": "/uploads/job.3mf"},
+        ]
+
+
+class FakeLibrary:
+    def __init__(self, thumb_path):
+        self.thumb_path = thumb_path
+
+    def find_by_path(self, file_path):
+        return {"thumbnail_path": self.thumb_path} if file_path == "/uploads/job.3mf" else None
+
+
+class PrinterThumbnailTests(unittest.TestCase):
+    PNG = b"\x89PNG\r\n\x1a\nthumb"
+
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        thumb = os.path.join(self.temp_dir.name, "job.thumb.png")
+        with open(thumb, "wb") as fh:
+            fh.write(self.PNG)
+        config = {
+            "web": {"secret_key": "test-secret"},
+            "printers": [
+                {"name": "Printer-1", "type": "klipper"},
+                {"name": "Staff-Printer", "type": "klipper", "staff_only": True},
+                {"name": "Idle-Printer", "type": "klipper"},
+            ],
+            "student_access": {"allowlist": [], "banlist": []},
+        }
+        self.app = create_app(ThumbFarm(), ThumbQueue(self.temp_dir.name),
+                              config=config, file_library=FakeLibrary(thumb))
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def _client(self, role="student"):
+        client = self.app.test_client()
+        with client.session_transaction() as session:
+            session.update(role=role, username="carol", display_name="carol")
+        return client
+
+    def test_returns_thumbnail_of_running_job(self):
+        res = self._client().get("/api/printer/Printer-1/thumbnail")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data, self.PNG)
+        self.assertEqual(res.mimetype, "image/png")
+
+    def test_missing_job_or_printer_is_404(self):
+        self.assertEqual(self._client().get("/api/printer/Idle-Printer/thumbnail").status_code, 404)
+        self.assertEqual(self._client().get("/api/printer/Nope/thumbnail").status_code, 404)
+
+    def test_requires_login_and_respects_staff_only(self):
+        self.assertNotEqual(self.app.test_client().get("/api/printer/Printer-1/thumbnail").status_code, 200)
+        self.assertEqual(self._client().get("/api/printer/Staff-Printer/thumbnail").status_code, 403)
+        self.assertEqual(self._client(role="staff").get("/api/printer/Staff-Printer/thumbnail").status_code, 200)

@@ -923,6 +923,8 @@ class BambuClient:
                 units_info.append({
                     "id": unit_id,
                     "humidity": humidity,
+                    # Newer firmware also reports relative humidity as a percentage
+                    "humidity_raw": unit.get("humidity_raw", ""),
                     "temp": temp,
                 })
                 for tray in unit.get("tray", []):
