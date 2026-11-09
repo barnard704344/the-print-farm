@@ -1,6 +1,6 @@
 # Getting Started
 
-These instructions apply to `v1.0.14`. The default branch also contains any
+These instructions apply to `v1.0.15`. The default branch also contains any
 documentation-only updates made after that tag. For a reproducible code
 deployment, check out the release tag after cloning.
 
@@ -22,6 +22,9 @@ The setup script will:
 6. Install a narrow root-owned helper for updates and Apache reconciliation
 7. Configure the systemd service, Apache reverse proxy, and OrcaSlicer vhosts
 8. Validate Apache and the application health before reporting success
+
+A farm run by one person can turn login off afterwards in **Settings → Login**
+(single-user mode). See [Configuration](configuration.md#login-and-single-user-mode).
 
 The repository's `config/config.yaml` is a symlink to the private runtime
 configuration after setup. Installations below a non-traversable directory such
@@ -60,7 +63,7 @@ Dashboard URL:
 Release-pinned checkout:
 
 ```bash
-git checkout v1.0.14
+git checkout v1.0.15
 sudo bash setup.sh --restart
 ```
 

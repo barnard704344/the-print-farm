@@ -1,6 +1,6 @@
 # The Print Farm — API Documentation
 
-Complete reference for all REST API endpoints, reviewed for `v1.0.14`.
+Complete reference for all REST API endpoints, reviewed for `v1.0.15`.
 
 ---
 
@@ -15,7 +15,9 @@ Complete reference for all REST API endpoints, reviewed for `v1.0.14`.
 - [Printer Discovery](#printer-discovery)
 - [Spoolman Integration](#spoolman-integration)
 - [Happy Hare / MMU](#happy-hare--mmu)
+- [Klipper Macros](#klipper-macros)
 - [Active Directory Config](#active-directory-config)
+- [Student Print Access](#student-print-access)
 - [Obico Config](#obico-config)
 - [UI Preferences](#ui-preferences)
 - [Software Update](#software-update)
@@ -63,10 +65,21 @@ Session-based authentication via login. Roles:
 | `staff` | Full admin access to all endpoints |
 | `student` | Can view status. Uploading, sending, and reprinting require the student to be on the Student Print Access allowlist and not on the ban list. |
 
+Allowlisted students who are not banned are **queue operators**. They can use
+the routes marked *printer control* below on printers that are not staff-only.
+
 Login sources (checked in order):
 1. **Local users** — defined in `config.yaml` under `local_users`
 2. **Active Directory** — LDAP lookup against configured AD server
 3. **Legacy password** — single `admin_password` in config (deprecated)
+
+#### Single-user mode
+
+When `web.auth_enabled` is `false`, every request is treated as a staff
+session named `admin`, so all browser routes work without signing in. Login
+and logout return success without changing anything. Turning login back on
+drops these automatic sessions. API-key authentication is unaffected. See
+[Configuration](docs/configuration.md#login-and-single-user-mode).
 
 ### Auth Endpoints
 
@@ -77,17 +90,22 @@ Returns current session status. No auth required.
 **Response:**
 ```json
 {
+  "auth_enabled": true,
   "admin": true,
   "authenticated": true,
   "role": "staff",
   "display_name": "Admin User",
   "username": "admin",
+  "queue_operator": false,
   "ad_enabled": false,
   "has_local_users": true,
   "print_allowed": true,
   "print_denied_reason": ""
 }
 ```
+
+`auth_enabled` is `false` in single-user mode. `queue_operator` is `true` for
+allowlisted students.
 
 #### `POST /api/auth/login`
 
@@ -129,14 +147,39 @@ not accepted. The response uses `Cache-Control: no-store`.
 
 #### `POST /api/auth/sso`
 
-SSO login for Apache GSSAPI integration. Requires AD enabled.
+SSO login for Apache GSSAPI integration. Requires AD and SSO enabled, and the
+request must come from a trusted proxy. The identity is read from the
+configured header (default `X-Remote-User`), which the managed Apache config
+sets after Kerberos authentication; any client-supplied copy is stripped. The
+request body is ignored.
 
-**Body:**
+#### `GET /api/auth/config`
+
+Staff browser session only. Returns whether login is enabled and whether a
+staff sign-in method exists:
+
 ```json
-{
-  "username": "user@DOMAIN"
-}
+{ "auth_enabled": true, "staff_login_available": true }
 ```
+
+#### `POST /api/auth/config`
+
+Staff browser session only. Turns login on or off and saves
+`web.auth_enabled`.
+
+```json
+{ "auth_enabled": false }
+```
+
+To turn login back on when no staff sign-in method exists (no staff local
+user, legacy password or Active Directory), include a new staff account; the
+request otherwise fails with `400` and `"needs_account": true`:
+
+```json
+{ "auth_enabled": true, "username": "admin", "password": "at-least-12-characters" }
+```
+
+Turning login on clears the current session.
 
 ---
 
@@ -154,7 +197,8 @@ connection fields are omitted from non-staff responses.
     "total": 2,
     "connected": 2,
     "printing": 1,
-    "idle": 1
+    "idle": 1,
+    "errored": 0
   },
   "printers": {
     "voron": {
@@ -163,6 +207,11 @@ connection fields are omitted from non-staff responses.
       "host": "192.168.1.66",
       "connected": true,
       "status": "RUNNING",
+      "display_status": "RUNNING",
+      "staff_only": false,
+      "plate_clear_required": true,
+      "plate_needs_clear": false,
+      "pinned_macros": ["NOZZLE_WIPE"],
       "mc_percent": 45,
       "mc_remaining_time": 23,
       "bed_temper": 60.0,
@@ -177,6 +226,22 @@ connection fields are omitted from non-staff responses.
 }
 ```
 
+`status` is the printer's own state (`IDLE`, `RUNNING`, `PAUSED`,
+`PAUSE_FILAMENT`, `FINISH`, `FAILED`, `UNKNOWN`). `display_status` is what the
+dashboard shows:
+
+- `READY` when the printer is idle, or finished with its build plate confirmed
+  clear (or the plate check turned off). Bambu printers stay in `FINISH` until
+  the next job starts.
+- `READY` also when a failed printer has passed the failed-printer cooldown.
+- Otherwise the same as `status`. A `FINISH` printer whose plate still needs
+  clearing keeps `FINISH`.
+
+Other printer fields include `plate_needs_clear`, `plate_finished_status`,
+`plate_finished_at`, `ams_units` (per-unit `id`, `humidity`, `humidity_raw`
+percentage on newer firmware, and `temp`), `wifi_signal`, `hms`,
+`print_error`, `nozzle_diameter` and `nozzle_type`.
+
 #### `GET /api/farm/summary`
 
 Farm summary counts only. Login required.
@@ -187,15 +252,21 @@ Farm summary counts only. Login required.
   "total": 2,
   "connected": 2,
   "printing": 1,
-  "idle": 1
+  "idle": 1,
+  "errored": 0
 }
 ```
+
+`idle` counts connected printers that can take a job now (idle or finished,
+with the build plate clear).
 
 ---
 
 ## Printer Control
 
-All control endpoints are `POST` and require admin role unless noted.
+All control endpoints are `POST`. **Printer control** below means staff, the
+administrator API key, or an approved student on a printer that is not
+staff-only.
 
 ### Status
 
@@ -205,7 +276,8 @@ Returns full state for a single printer. Login required.
 
 ### Print Control
 
-These require admin or job owner.
+These require printer control, or a student whose own job is active on that
+printer.
 
 | Endpoint | Description |
 |----------|-------------|
@@ -215,7 +287,7 @@ These require admin or job owner.
 
 ### Temperature
 
-Admin only.
+Printer control. A non-numeric `temp` returns `400`.
 
 #### `POST /api/printer/<name>/bed_temp`
 
@@ -227,22 +299,24 @@ Range: 0–120°C.
 #### `POST /api/printer/<name>/nozzle_temp`
 
 ```json
-{ "temp": 215 }
+{ "temp": 215, "heater": "extruder1" }
 ```
-Range: 0–300°C.
+Range: 0–300°C. `heater` is optional and used only by Klipper printers to pick
+a toolhead (`extruder`, `extruder1`, …). Heating a docked toolchanger tool is
+refused.
 
 ### Light Control
 
 #### `POST /api/printer/<name>/light`
 
-Toggle chamber light (all printer types). Returns:
+Printer control. Toggle chamber light (all printer types). Returns:
 ```json
 { "ok": true, "light": true }
 ```
 
 #### `POST /api/printer/<name>/led`
 
-Toggle a specific LED or output pin. **Klipper only.**
+Printer control. Toggle a specific LED or output pin. **Klipper only.**
 
 **Body:**
 ```json
@@ -257,7 +331,7 @@ If `on` is omitted, toggles current state. The `object` must match a discovered 
 
 #### `POST /api/printer/<name>/fan_speed`
 
-Set speed of a `fan_generic` object. **Klipper only.**
+Printer control. Set speed of a `fan_generic` object. **Klipper only.**
 
 **Body:**
 ```json
@@ -274,16 +348,35 @@ Only `fan_generic` objects are controllable. `heater_fan` and `controller_fan` a
 
 #### `POST /api/printer/<name>/emergency_stop`
 
-Immediately halt printer. **Klipper only.** Admin required.
+Immediately halt printer. **Klipper only.** Admin required. Klipper needs a
+`FIRMWARE_RESTART` afterwards; the dashboard asks for confirmation first.
 
 ### Filament
 
 | Endpoint | Auth | Description |
 |----------|------|-------------|
-| `POST /api/printer/<name>/unload_filament` | admin | Unload filament |
-| `POST /api/printer/<name>/load_filament` | admin | Load filament |
-| `POST /api/printer/<name>/ams_load` | admin | Load from AMS tray (Bambu). Body: `{"tray_id": 0}` |
-| `POST /api/printer/<name>/tray_config` | admin | Set AMS tray type/color (Bambu). Body: `{"tray_id": 0, "type": "PLA", "color": "FF0000"}` |
+| `POST /api/printer/<name>/unload_filament` | printer control | Unload whatever is loaded (AMS tray or external spool) |
+| `POST /api/printer/<name>/load_filament` | printer control | Load from the external spool (printers without an AMS) |
+| `POST /api/printer/<name>/ams_load` | printer control | Load from an AMS tray. Body: `{"tray_id": 0}` |
+| `POST /api/printer/<name>/tray_config` | printer control | Set AMS tray type/color (Bambu). Body: `{"tray_id": 0, "type": "PLA", "color": "FF0000"}` |
+
+Load and unload are **Bambu Lab only** and send the same `ams_change_filament`
+commands as Bambu Studio:
+
+- **Loading:** an AMS load names the AMS unit and slot and lets the printer
+  heat to the filament's own temperature.
+- **Unloading:** runs at the current nozzle temperature, or 210 °C if the
+  nozzle is cold.
+- **`tray_id` values:** `0`–`15` regular AMS slots (unit × 4 + slot),
+  `64`–`67` AMS Lite, `128`–`135` AMS HT, `254` external spool, `255` unload.
+
+Responses are `{"ok": true, "message": "Loading filament from A1"}`. Errors:
+
+| Status | Reason |
+|--------|--------|
+| `400` | Klipper printer, or invalid `tray_id` |
+| `409` | Printer not connected, or a print is **running** (paused prints are allowed, e.g. after a filament runout) |
+| `502` | The printer did not accept the command |
 
 `tray_config` works for loaded generic/untagged trays and can override
 tag-provided type or colour. Optional `nozzle_temp_min` and
@@ -292,13 +385,46 @@ busy or while the target tray is active; this returns HTTP 409.
 
 ### Printer Settings
 
+The dashboard shows these in the printer's **Details** panel under **Printer
+settings**.
+
 #### `POST /api/printer/<name>/staff_only`
 
-Restrict printer to staff only.
+Admin. Restrict printer to staff only.
 
 ```json
 { "staff_only": true }
 ```
+
+#### `POST /api/printer/<name>/plate_clear_required`
+
+Admin. Turn the build plate check on or off for a printer (saved as
+`require_plate_clear`).
+
+```json
+{ "required": false }
+```
+
+#### `POST /api/printer/<name>/plate_cleared`
+
+Printer control. Confirm the build plate is clear after a finished or failed
+print, so the printer can accept the next job.
+
+### Job Thumbnail
+
+#### `GET /api/printer/<name>/thumbnail`
+
+Login required. PNG thumbnail of the job the printer is currently running,
+taken from the File Library. Returns `404` when the printer has no active job
+or the job's file has no thumbnail, and `403` to students for staff-only
+printers.
+
+### Printer File Names
+
+When a job is sent, the printer receives a short readable file name, e.g.
+`cade_pip2.3mf`, built from the job's original name without the stored-file
+prefix or OrcaSlicer's `_PLA_9m8s` filament/time suffix. Printers report that
+name as `subtask_name`.
 
 ---
 
@@ -346,16 +472,30 @@ Multipart form upload.
 | `POST /api/jobs/<id>/reprint` | owner/admin | Create queued reprint. Optional body: `{"printer": "voron"}` or `{"printers": ["voron", "P1S-1"]}` to immediately dispatch copies |
 | `POST /api/jobs/<id>/delete` | admin | Delete job. Query: `?delete_library=true` to also remove library file |
 | `DELETE /api/jobs/<id>` | admin | Same as above |
+| `POST /api/jobs/bulk_delete` | admin | Delete several jobs. Body: `{"ids": [1, 2], "delete_library": false}` |
+
+Deleting a job stops it first if it is printing. The job's file stays on disk
+while the File Library or any queued, uploading or printing job still uses it;
+reprints, per-printer copies and repeat OrcaSlicer uploads share one file.
+
+With `delete_library`, both delete routes return `library_kept`, listing
+library files that were not deleted because another active job uses them:
+
+```json
+{ "ok": true, "library_kept": [{ "name": "bracket.gcode", "error": "File is referenced by an active or queued job" }] }
+```
 
 ### Filament Check
 
 #### `GET /api/jobs/<id>/filaments`
 
-Parse filament requirements from gcode.
+Staff, queue operators, or the job's owner. Parse filament requirements from
+G-code.
 
 #### `POST /api/jobs/<id>/check_filament`
 
-Check if a printer's AMS has the needed filaments.
+Staff, queue operators, or the job's owner. Check if a printer's AMS has the
+needed filaments.
 
 ```json
 { "printer": "P1S-1" }
@@ -382,22 +522,45 @@ Requires login for all endpoints.
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/library/files` | login | List files. Query: `?folder_id=1` |
-| GET | `/api/library/files/search?q=benchy` | login | Search files |
+| GET | `/api/library/files` | login | List files and sub-folders. Query: `?folder_id=1` (omit for the top level) |
+| GET | `/api/library/files/search?q=benchy` | login | Search files in all folders |
 | GET | `/api/library/files/<id>` | login | File metadata |
 | GET | `/api/library/files/<id>/thumbnail` | login | Thumbnail image (PNG) |
-| GET | `/api/library/files/<id>/toolpath` | login | Parsed toolpath payload for 3D viewer (positions, feature indices, feature names, bounds, count) |
-| POST | `/api/library/files/<id>/move` | login | Move to folder. Body: `{"folder_id": 1}` (null = root) |
-| POST | `/api/library/files/<id>/print` | login | Create job from file |
-| DELETE | `/api/library/files/<id>` | admin | Delete file |
+| GET | `/api/library/files/<id>/toolpath` | login | Toolpath for the 3D viewer. `?format=bin` returns the compact binary form the viewer uses; without it, JSON |
+| POST | `/api/library/files/<id>/move` | admin | Move to folder. Body: `{"folder_id": 1}` (null = top level) |
+| POST | `/api/library/files/<id>/print` | print access | Create a job from the file (see below) |
+| POST | `/api/library/files/bulk-move` | admin | Move several files. Body: `{"file_ids": [1, 2], "folder_id": 3}` |
+| POST | `/api/library/files/bulk-delete` | admin | Delete several files. Body: `{"file_ids": [1, 2]}` |
+| DELETE | `/api/library/files/<id>` | admin | Delete file (also `POST /api/library/files/<id>/delete`) |
+
+`print` accepts an optional body:
+
+```json
+{ "printer_name": "P1S-01", "copies": 2 }
+```
+
+Without `printer_name` the job is added to the queue. With it, the printer is
+checked like a normal upload (connected, idle, plate cleared, no active job,
+not staff-only for students) and the job is sent straight away. `copies` is
+1–100. Response: `{"ok": true, "job_id": 42, "printer_name": "P1S-01"}`.
+
+Bulk routes accept 1–500 ids. `bulk-move` returns `{"ok": true, "moved": 2}`.
+`bulk-delete` returns `{"ok": true, "deleted": 1, "skipped": [{"id": 2,
+"error": "File is referenced by an active or queued job"}]}`; files used by a
+queued, uploading or printing job are always kept.
 
 ### Folders
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| POST | `/api/library/folders` | login | Create folder. Body: `{"name": "Parts", "parent_id": null}` |
-| POST | `/api/library/folders/<id>/rename` | login | Rename. Body: `{"name": "New Name"}` |
-| DELETE | `/api/library/folders/<id>` | admin | Delete folder |
+| GET | `/api/library/folders/tree` | login | Every folder as a flat list with `parent_id` |
+| POST | `/api/library/folders` | admin | Create folder. Body: `{"name": "Parts", "parent_id": null}` |
+| POST | `/api/library/folders/<id>/rename` | admin | Rename. Body: `{"name": "New Name"}` |
+| POST | `/api/library/folders/<id>/move` | admin | Move. Body: `{"parent_id": 2}` (null = top level). A folder can't move into itself or a sub-folder |
+| DELETE | `/api/library/folders/<id>` | admin | Delete folder and its sub-folders; their files move to the top level |
+
+Folder names are trimmed, repeated spaces collapsed, and limited to 100
+characters. Names must be unique within a parent folder.
 
 ---
 
@@ -407,11 +570,15 @@ All camera endpoints require an authenticated session.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/camera/<name>/start` | Start camera stream |
-| POST | `/api/camera/<name>/stop` | Stop camera stream |
+| POST | `/api/camera/<name>/start` | Start (or keep alive) the shared camera |
+| POST | `/api/camera/<name>/stop` | Stop the camera for everyone (staff only) |
 | GET | `/api/camera/<name>/snapshot` | Latest JPEG frame |
 | GET | `/api/camera/<name>/stream` | **MJPEG stream** (`multipart/x-mixed-replace`, ~2 FPS) |
 | GET | `/api/camera/status` | Status of all cameras |
+| GET | `/api/camera/status/details` | Per-camera connection details |
+
+Students cannot use camera routes for staff-only printers. The Camera Wall
+page is served at `/cameras`.
 
 Camera rotation is a browser display preference, not a camera API operation.
 The dashboard stores `0`, `90`, `180`, or `270` degrees per printer in browser
@@ -532,6 +699,62 @@ See [API v1 — Spoolman](#api-v1--spoolman) section below.
 ## Happy Hare / MMU
 
 For Klipper printers with Happy Hare MMU. See [API v1 — Happy Hare](#api-v1--happy-hare) below.
+
+---
+
+## Klipper Macros
+
+Klipper printers only. Macros starting with `_`, print-control and slicer
+macros (`PAUSE`, `RESUME`, `CANCEL_PRINT`, `START_PRINT`, `PRINT_START`,
+`END_PRINT`, `PRINT_END`) and Happy Hare `MMU_*` macros are not listed or run
+here.
+
+#### `GET /api/printer/<name>/macros`
+
+Printer control. Lists user macros, cached for a minute; `?refresh=1` reloads
+from Moonraker.
+
+```json
+{
+  "ok": true,
+  "macros": [
+    { "name": "PREHEAT", "description": "Heat nozzle and bed",
+      "params": [{ "name": "TEMP", "default": "220" }, { "name": "BED", "default": "" }] }
+  ],
+  "pinned": ["NOZZLE_WIPE"]
+}
+```
+
+`description` comes from the macro's `description:` option. `params` are read
+from the macro's G-code (`params.TEMP|default(220)` or `params["TEMP"]`).
+
+#### `POST /api/printer/<name>/macros/run`
+
+Printer control.
+
+```json
+{ "macro": "PREHEAT", "params": { "TEMP": "240" } }
+```
+
+- Only macros the printer defines can be run. Parameter names must be
+  upper-case letters, digits and `_`. Values may contain letters, digits and
+  `. _ - + # : /` only (up to 128 characters). Empty values are skipped.
+- The macro runs in the background. The response is `{"ok": true, "message":
+  "PREHEAT started"}` if it is still running after about three seconds, or
+  `"PREHEAT finished"` if it completed.
+- Errors Klipper reports straight away (e.g. `Must home axis first`) return
+  `400` with that message.
+- The route does not block macros during a print; the dashboard asks for
+  confirmation first.
+
+#### `POST /api/printer/<name>/macros/pinned`
+
+Admin. Sets the macros shown as buttons on the printer card (up to 12), saved
+as `pinned_macros` in the printer's config.
+
+```json
+{ "pinned": ["NOZZLE_WIPE", "PREHEAT"] }
+```
 
 ---
 
@@ -842,8 +1065,11 @@ Available commands:
 | `light` | `state` (bool, optional) | Toggle or set chamber light |
 | `set_bed_temp` | `temperature` (int) | Set bed temperature |
 | `set_nozzle_temp` | `temperature` (int) | Set nozzle temperature |
-| `unload_filament` | — | Unload filament |
-| `load_filament` | — | Load filament |
+| `unload_filament` | — | Unload filament (Bambu Lab) |
+| `load_filament` | — | Load from the external spool (Bambu Lab) |
+
+`load_filament` and `unload_filament` return `400` on Klipper printers and
+`409` (`PRINTER_BUSY`) while a print is running.
 
 ### API v1 — Happy Hare
 
@@ -912,7 +1138,7 @@ Status filter values: `queued`, `printing`, `active`
 | GET | `/api/v1/library/files/search?q=benchy` | Search files |
 | GET | `/api/v1/library/files/<id>` | File metadata |
 | PATCH | `/api/v1/library/files/<id>` | Move file. Body: `{"folder_id": 1}` |
-| DELETE | `/api/v1/library/files/<id>` | Delete file (admin) |
+| DELETE | `/api/v1/library/files/<id>` | Delete file (admin). `409` (`FILE_IN_USE`) if a queued or active job uses it, `404` if not found |
 | POST | `/api/v1/library/files/<id>/print` | Create job from file |
 | GET | `/api/v1/library/folders` | List folders. Query: `?parent_id=1` |
 | POST | `/api/v1/library/folders` | Create folder. Body: `{"name": "Parts"}` |

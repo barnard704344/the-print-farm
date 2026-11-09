@@ -6,7 +6,9 @@ Built primarily for primary and secondary schools—but equally usable at home,
 in makerspaces, and in other small print farms—The Print Farm keeps things
 simple: no unnecessary plugins, extensions, or heavy dependencies.
 
-Current release: **[v1.0.14](https://github.com/barnard704344/the-print-farm/releases/tag/v1.0.14)**.
+Current release: **[v1.0.15](https://github.com/barnard704344/the-print-farm/releases/tag/v1.0.15)**,
+with redesigned printer cards, a reworked File Library, Klipper macros and an
+optional single-user mode. See the [changelog](CHANGELOG.md).
 
 This README acts as a documentation index. Detailed information is split across the docs pages below.
 

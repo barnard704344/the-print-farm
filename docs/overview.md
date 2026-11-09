@@ -49,18 +49,40 @@ Peripheral discovery:
 - `fan_generic` objects are enumerated for auxiliary fan control
 - `led` and `neopixel` objects are discovered for lighting control
 
+Macros:
+
+- User macros are listed from Moonraker with their descriptions and
+  parameters. Staff pin favourites as buttons on the printer card. See
+  [Printers and OrcaSlicer](printers-and-orcaslicer.md#klipper-macros).
+
 No Klipper plugin or extra component is required beyond a standard Moonraker installation.
 
 ## Core Features
 
 - **Multi-printer support** — BambuLab (P1S, X1C, A1) via MQTT/FTPS (LAN mode) and Klipper via Moonraker HTTP API
-- **Real-time dashboard** — Live status, temperatures, progress, and camera feeds
+- **Real-time dashboard** — Printer cards with status chips (Wi-Fi, HMS
+  alerts, chamber light, staff-only), a now-printing panel (job thumbnail,
+  progress, time remaining, finish time, layers), click-to-set temperature
+  tiles, per-unit AMS blocks with remaining-filament bars, and camera feeds.
+  Printers that can take a job show **READY**
+- **Readable job names** — Printers and the dashboard show short names such as
+  "cade pip2" instead of stored file names with random prefixes and
+  OrcaSlicer's `_PLA_9m8s` suffix
 - **Job queue** — Upload G-code, queue jobs, auto-assign to idle printers
-- **File library** — Persistent storage with folder organisation, search, and interactive 3D toolpath viewer (supports OrcaSlicer, PrusaSlicer, and Cura G-code), with staged loading feedback and feature-based colours including support and interface paths
+- **File library** — Persistent storage with a folder tree, search across all
+  folders, multi-select with bulk print/move/delete, drag-and-drop moves, grid
+  and list views with sorting, a print dialog that sends straight to an idle
+  printer, and an interactive 3D toolpath viewer (supports OrcaSlicer,
+  PrusaSlicer, and Cura G-code)
 - **Printer discovery** — Auto-detect BambuLab (UDP broadcast) and Klipper (Moonraker port scan)
-- **Authentication** — Local users, Active Directory/LDAP, student/staff roles
+- **Authentication** — Local users, Active Directory/LDAP, student/staff
+  roles, and an optional single-user mode with no login for one-person farms
 - **OrcaSlicer integration** — Slice and print directly from OrcaSlicer via virtual printers (OctoPrint-compatible) — no batch files needed
 - **AMS support** — Live RFID/tag data when available plus manual type, colour, temperature, and Spoolman assignment for generic or overridden filament
+- **Filament load/unload** — Bambu Lab load and unload use the same commands
+  as Bambu Studio and are refused while a print is running
+- **Klipper macros** — Run any user macro from the dashboard, with a parameter
+  form and pinned favourites on each card
 - **Printer pool** — Auto-dispatch generic OrcaSlicer jobs to the next idle printer in a configurable pool
 - **Multi-printer dispatch** — Send a queued job to multiple printers at once; the job is cloned automatically
 - **Reprint to selected printers** — Reprint actions can create a queued copy and optionally dispatch to one or more selected printers
@@ -78,8 +100,9 @@ No Klipper plugin or extra component is required beyond a standard Moonraker ins
 
 ## Build Plate Check and Camera Wall
 
-After a print finishes or fails, the printer waits until someone presses
-**Plate cleared** on its card, so a new job never starts on top of an old one.
+After a print finishes or fails, the printer card shows an amber **FINISH**
+and waits until someone presses **Plate cleared**, so a new job never starts
+on top of an old one. Once cleared, the card shows a green **READY**.
 The **Camera Wall** shows every printer camera in one grid for a classroom
 screen. See [Configuration](configuration.md#build-plate-check).
 
@@ -94,11 +117,13 @@ What each account can do:
 | | Students not on the allowlist | Allowlisted students | Staff |
 |---|---|---|---|
 | View printer cards and live cameras | Yes | Yes | Yes |
-| Printer card controls (temperatures, light, fans, AMS trays, filament load/unload) | Read-only | Yes | Yes |
+| Printer card controls (temperatures, light, fans, AMS trays, filament load/unload, Plate cleared) | Read-only | Yes | Yes |
+| Run Klipper macros | No | Yes | Yes |
 | Pause, resume, or stop a print | Own active job only | Any printer that is not staff-only | Yes |
+| Print from the File Library, including straight to an idle printer | No | Yes | Yes |
 | Upload, send, and reprint their own jobs | No | Yes | Yes |
 | View the shared **Queued Jobs** list, and send or cancel any queued job | No | Yes | Yes |
-| Staff-only printers, delete/bulk actions, requeue, e-stop, printer management, Settings | No | No | Yes |
+| Staff-only printers, delete/bulk actions, requeue, e-stop, printer settings (Staff only, Build plate check, pinned macros), library folders and moves, Settings | No | No | Yes |
 
 Job History continues to show students only their own jobs. Allowlisted
 students cannot cancel another user's print once it has started.

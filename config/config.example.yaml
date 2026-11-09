@@ -22,6 +22,7 @@ printers: []
 #      ftp: ''
 #      camera: ''
 #    staff_only: false          # optional — restrict to staff users
+#    require_plate_clear: true  # optional — confirm the plate is clear before the next job
 #    virtual_printer: true      # native only; set false for Docker/direct-IP use
 #
 # ── Klipper Printer (via Moonraker) ──
@@ -32,6 +33,9 @@ printers: []
 #    api_key: ''                # optional — Moonraker API key
 #    camera_url: ''             # optional — webcam stream URL
 #    staff_only: false
+#    require_plate_clear: true
+#    pinned_macros:             # optional — macro buttons on the card (set from All macros…)
+#      - NOZZLE_WIPE
 #    obico:                     # optional — self-hosted Obico integration
 #      server: http://192.168.1.105:3334
 #      printer_id: 3

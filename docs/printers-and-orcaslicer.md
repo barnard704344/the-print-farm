@@ -75,7 +75,9 @@ After that delay, a connected printer is displayed as **Ready** and can receive
 a new staff-approved job even if its firmware still reports `FAILED`.
 
 - Nothing is resent automatically.
-- There is no build-plate camera detection or bed-clear button.
+- There is no camera-based build-plate detection. The [build plate
+  check](configuration.md#build-plate-check) still applies: someone must press
+  **Plate cleared** before the next job.
 - Staff should clear and inspect the printer before approving the next job.
 - A real non-failed state resets the cooldown timer.
 - Set `ui.failed_printer_timeout_minutes` to `0` to keep failures blocked until
@@ -90,6 +92,41 @@ Current BambuLab firmware uses stricter local command authorisation. On P1/P1S f
 On the printer screen, open **Settings → WLAN/Network**, enable **LAN-only mode**, then enable **Developer Mode**. Power-cycle the printer after changing these settings. Check the displayed LAN access code afterwards; if it changed, update the printer entry in `config/config.yaml` or re-enter it through the Add Printer flow.
 
 If uploads succeed but the printer stays idle, this is the first thing to check. In that case the file may arrive over FTPS, but the `project_file` start command will not be acknowledged by the printer.
+
+## Printer Cards
+
+Each printer card shows, from top to bottom:
+
+- **Header** — name, status pill, **Details**, and a line with nozzle size and
+  type (plus the IP address for staff). The status pill is green **READY**
+  when the printer can take a job, and amber **FINISH** while a finished print
+  is still on the plate.
+- **Chips** — Wi-Fi signal (green/amber/red), HMS alerts or print errors (the
+  codes are in the tooltip), chamber light (a toggle for anyone who can
+  control the printer), **Staff only**, and **Plate check off** when the
+  build plate check is disabled.
+- **Now-printing panel** — the job's thumbnail from the File Library, its
+  name, progress, time remaining, finish clock time, layers and speed. A ready
+  printer shows the last job underneath.
+- **Camera** — see [Camera Feeds](#camera-feeds).
+- **Temperature tiles** — nozzle, bed and chamber. Click a tile to pick a
+  preset (200/220/250 °C nozzle, 55/65/100 °C bed) or type a value, or turn
+  the heater off. **Pause/Resume** and **Stop** sit beside the tiles; Stop
+  asks for confirmation.
+- **Filaments** — AMS units, or load/unload controls for printers without an
+  AMS, then Klipper macros, fans and lights, MMU and Obico sections where
+  present.
+
+Staff change **Staff only** and **Build plate check** in the printer's
+**Details** panel under **Printer settings**.
+
+### Job Names
+
+Printers receive a short readable file name, e.g. `cade_pip2.3mf`, so the
+printer's own screen and the cards show "cade pip2" rather than a stored name
+such as `f627a845…_cade_pip2_PLA_9m8s.3mf`. The dashboard also drops
+OrcaSlicer's `_PLA_9m8s` filament/time suffix, since filament and print time
+are shown separately. Hover a name to see the full file name.
 
 ## Obico Integration
 
@@ -124,6 +161,33 @@ Full control of [Happy Hare](https://github.com/moggieuk/Happy-Hare) (multi-mate
 
 No Happy Hare plugin or extra configuration is required — detection is fully automatic.
 
+## Klipper Macros
+
+Klipper printer cards have a **Macros** row for anyone who can control the
+printer:
+
+- **Pinned buttons** run a macro straight away. Staff choose them with ☆ in
+  **All macros…** (up to 12 per printer).
+- **All macros…** lists the printer's user macros with their descriptions and
+  the parameters they read, with a search box. Add a `description:` line to a
+  `[gcode_macro]` section in `printer.cfg` to describe it.
+- **Parameters** — a macro that reads `params.TEMP|default(220)` opens a form
+  pre-filled with `220`. Values may contain letters, numbers and
+  `. _ - + # : /` only.
+- **During a print** the dashboard asks for confirmation, because a macro that
+  homes, moves or purges would ruin the print.
+- **Long macros** such as purges or heat soaks run in the background, so they
+  don't time out. Errors Klipper reports straight away (for example "Must home
+  axis first") are shown.
+
+Hidden from the list: macros starting with `_`, `PAUSE`, `RESUME`,
+`CANCEL_PRINT`, `START_PRINT`/`PRINT_START`, `END_PRINT`/`PRINT_END`, and Happy
+Hare's `MMU_*` macros, which have their own panel.
+
+Toolchanger toolhead panels use the same click-to-set temperature popover as
+the other tiles; a docked tool can't be heated. **E-Stop** asks for
+confirmation because Klipper needs a `FIRMWARE_RESTART` afterwards.
+
 ## BambuLab AMS Integration
 
 The dashboard reads and manages BambuLab AMS (Automatic Material System) units:
@@ -131,6 +195,10 @@ The dashboard reads and manages BambuLab AMS (Automatic Material System) units:
 - **Automatic AMS data** — Units, loaded trays, active tray, tag-provided
   material, colour, remaining percentage, humidity level, and temperature are
   read from the printer when supplied by its MQTT status.
+- **Per-unit blocks** — The card shows each unit (AMS-A, AMS-B, … or HT-A for
+  an AMS HT) with its own humidity (a percentage on newer firmware) and
+  temperature. Each slot is labelled A1, A2, … with a coloured
+  remaining-filament bar, and the header shows which slot is in use.
 - **RFID and generic filament** — Bambu RFID values appear automatically, but
   staff can still override a loaded tray. Untagged/generic filament can be given
   a material, colour, and nozzle-temperature range manually.
@@ -146,6 +214,24 @@ The dashboard reads and manages BambuLab AMS (Automatic Material System) units:
 Clearing the Spoolman URL disables the optional spool controls after the
 configuration is saved and the service is restarted; it does not remove AMS
 status or manual tray editing.
+
+### Filament Load and Unload
+
+Load and unload work on Bambu Lab printers and use the same commands as Bambu
+Studio:
+
+- **Load a slot** — **Load** on a slot in the AMS window (click the AMS
+  section on the card), or **Load** on the external spool row.
+- **Printers without an AMS** — **Load Filament** runs the printer's own
+  external-spool load routine. **Unload Filament** unloads whatever is loaded.
+- **Temperatures** — loads let the printer heat to the filament's own
+  temperature. Unloads use the current nozzle temperature, or 210 °C if the
+  nozzle is cold.
+- **During prints** — refused while a print is running; buttons are greyed out
+  with the reason. Allowed while paused, for example after a filament runout.
+- **Feedback** — each command shows a success or error message.
+
+Klipper printers have no load/unload buttons; use macros or Happy Hare.
 
 ## Camera Feeds
 
@@ -209,6 +295,7 @@ cannot access printer controls or administrative APIs.
 - The `setup.sh` script auto-configures ports for all printers in `config.yaml`
 - Adding, removing, or renaming printers from the dashboard automatically manages Apache vhosts
 - Jobs uploaded via a per-printer port are assigned to that printer but **not auto-sent** — send them manually from the Job Queue tab when the printer is ready
+- Every upload is also added to the File Library, so it can be printed again later
 
 ---
 
@@ -225,6 +312,9 @@ At startup, the farm manager automatically:
 3. Starts a BambuLab-compatible MQTT broker (TLS, port 8883) and implicit FTPS server (port 990) bound to that IP
 4. Broadcasts SSDP discovery packets every 30 seconds **and** responds immediately to active SSDP M-SEARCH queries — OrcaSlicer's auto-connect flow works without waiting for the next broadcast
 5. Relays live state (AMS contents, print progress, temperatures) from the real printer to OrcaSlicer
+
+Prints sent this way are added to the job queue and to the File Library
+straight away. Sending the same model twice adds it to the library once.
 
 No manual IP configuration is needed. DHCP handles everything automatically on each service start.
 

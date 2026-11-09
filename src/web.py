@@ -1452,6 +1452,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
 
     @app.route(prefix + "/api/jobs/<int:job_id>/filaments")
     @app.route("/api/jobs/<int:job_id>/filaments")
+    @queue_operator_or_owner_required
     def job_filaments(job_id):
         """Get filament requirements for a job (parsed from gcode)."""
         job = job_queue.get_job(job_id)

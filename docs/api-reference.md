@@ -1,6 +1,6 @@
 # API Reference
 
-Documentation status: `v1.0.14`.
+Documentation status: `v1.0.15`.
 
 ## REST API v1
 
@@ -21,6 +21,14 @@ Browser administration also uses authenticated non-v1 routes documented in
 [API.md](../API.md), including camera streams, settings, and native software
 updates. An integration key cannot invoke deployment updates; those require a
 staff browser session.
+
+Notable dashboard routes:
+
+- Printer control: temperatures, Bambu filament load/unload (refused while a
+  print is running), plate check, and job thumbnails
+- Klipper macros: list, run and pin (`/api/printer/<name>/macros…`)
+- File library: folder tree, bulk move/delete, and printing to a chosen printer
+- Login mode: `/api/auth/config` for single-user mode
 
 OrcaSlicer uses a different upload-only key stored as `web.orca_api_key`.
 Logged-in students and staff can copy it from **OrcaSlicer Setup → Connection

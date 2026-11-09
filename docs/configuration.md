@@ -1,5 +1,28 @@
 # Configuration
 
+## Login and Single-User Mode
+
+Login is on by default. A small farm with a single operator can turn it off
+in **Settings → Login** by ticking **Disable login (single-user mode)**, or in
+the config:
+
+```yaml
+web:
+  auth_enabled: false   # default: true
+```
+
+With login off, everyone who can open the dashboard has full staff control,
+including Settings, so use it only on a trusted network. The header shows
+"Single-user mode" and the service log prints a warning at every start.
+Integrations using `admin_api_key` and OrcaSlicer's `orca_api_key` work the
+same either way.
+
+Unticking the box turns login back on and signs out the automatic session.
+If no staff sign-in method exists (a staff local user, the legacy admin
+password, or Active Directory), the Settings card asks for a username and a
+password of at least 12 characters and creates a local staff account first,
+so you can't lock yourself out.
+
 ## Display Preferences
 
 Control how dates and times are shown across the dashboard. Configure from **Settings → Display Preferences**.
@@ -192,8 +215,14 @@ the API, and pool auto-dispatch. Staff and approved students can confirm; a
 print started directly on the printer also counts as confirmation. The state
 is stored in the database, so it survives restarts.
 
-Staff can turn the check off for a printer with the **Plate check** box on its
-card, which saves:
+While a print is on the plate the card shows an amber **FINISH**; after
+**Plate cleared** it shows a green **READY**. Bambu printers keep reporting
+`FINISH` until their next job starts, so READY is the dashboard's label, not
+the printer's.
+
+Staff can turn the check off for a printer in its **Details** panel under
+**Printer settings → Build plate check**. The card then shows an amber **Plate
+check off** chip. This saves:
 
 ```yaml
 printers:
@@ -242,6 +271,31 @@ notifications:
     enabled: true
     webhook_url: https://discord.com/api/webhooks/...
 ```
+
+## Printer Settings in Details
+
+Each printer's **Details** panel has a **Printer settings** section for staff:
+
+- **Staff only** — students can't see the printer or send jobs to it
+  (`staff_only: true`).
+- **Build plate check** — see [Build Plate Check](#build-plate-check)
+  (`require_plate_clear`).
+
+## Klipper Pinned Macros
+
+Staff pin macros to a Klipper printer's card with ☆ in **All macros…**. Up to
+12 are saved per printer:
+
+```yaml
+printers:
+  - name: Voron-01
+    type: klipper
+    pinned_macros:
+      - NOZZLE_WIPE
+      - PREHEAT
+```
+
+See [Printers and OrcaSlicer](printers-and-orcaslicer.md#klipper-macros).
 
 ## Happy Hare
 

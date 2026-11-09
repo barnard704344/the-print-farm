@@ -20,15 +20,27 @@ The Print Farm deliberately uses a small, local-first architecture.
 
 ## Request And Job Flow
 
-1. A browser or OrcaSlicer upload creates a queue record and stores the file.
+1. A browser, OrcaSlicer or virtual-printer upload creates a queue record,
+   stores the file, and adds it to the File Library.
 2. Staff approve or assign the queued job, unless printer-pool auto-dispatch is
-   enabled for a generic-port submission.
+   enabled for a generic-port submission. Printing from the library creates a
+   new job for the same stored file.
 3. Readiness is determined from connection state, active jobs, printer status,
-   staff-only restrictions, and the configured failed-printer cooldown.
-4. The selected client uploads and starts the file using the printer's local
-   protocol.
+   staff-only restrictions, the build plate check, and the configured
+   failed-printer cooldown.
+4. The selected client uploads the file under a short readable name and
+   starts it using the printer's local protocol.
 5. Completion updates the queue and can trigger notifications and optional
-   Spoolman usage deduction.
+   Spoolman usage deduction. A finished or failed print marks the build plate
+   as needing clearing.
+
+## Stored Files
+
+Jobs and library entries refer to stored files by path. Reprints, per-printer
+copies, library prints and repeat OrcaSlicer uploads of the same model share
+one file. A file is deleted only when neither the library nor any queued,
+uploading or printing job uses it, and the library refuses to delete a file
+that such a job still needs.
 
 
 

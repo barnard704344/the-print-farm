@@ -5,8 +5,15 @@ changes to The Print Farm.
 
 ## Unreleased
 
+No changes yet.
+
+## v1.0.15 - 2026-11-10 - Printer cards, File Library and Klipper macros
+
 ### Security
 
+- Require a signed-in queue operator, staff member or the job's owner for
+  `GET /api/jobs/<id>/filaments`. It previously answered anonymous requests,
+  exposing a job's filament details and letting anyone trigger G-code parsing.
 - Strip any client-supplied `X-Remote-User` header in the managed Apache proxy
   block. Previously, SSO identity headers could reach `/api/auth/sso` through
   proxy paths not covered by the Kerberos-protected `<Location>` (for example
@@ -108,6 +115,15 @@ changes to The Print Farm.
 
 ### Fixed
 
+- **Documentation brought up to date** with the current dashboard and API:
+  - **New topics:** printer cards, readable job names, filament load/unload,
+    Klipper macros, single-user mode, the File Library rework, READY status,
+    printer settings in Details, and how shared job files are kept.
+  - **Corrected permissions:** library folder and move routes are staff-only;
+    temperature, filament and light controls are available to approved
+    students on printers that are not staff-only.
+  - **Config example:** `config.example.yaml` now shows `require_plate_clear`
+    and `pinned_macros`.
 - **Klipper fixes.**
   - **Layer counts:** the cached layer count for a file name is now cleared on
     every upload. With shorter printer file names, two slices of the same

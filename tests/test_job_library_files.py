@@ -102,3 +102,20 @@ class VirtualPrinterLibraryTests(unittest.TestCase):
             self.assertEqual(len(files), 1)
             self.assertEqual(files[0]["original_name"], "part.gcode")
             self.assertEqual(files[0]["uploaded_by"], "orca_virtual/P1S-01")
+
+
+class JobFilamentsAuthTests(unittest.TestCase):
+    def test_job_filaments_requires_login(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = JobQueue(os.path.join(tmp, "farm.db"), tmp)
+            path = os.path.join(tmp, "a.gcode")
+            with open(path, "w") as fh:
+                fh.write("; filament_type = PLA\nG1 X1\n")
+            job_id = queue.add_job(filename="a.gcode", original_name="a.gcode", file_path=path)
+            config = {"web": {"secret_key": "t"}, "printers": [], "student_access": {"allowlist": [], "banlist": []}}
+            app = create_app(FakeFarm(), queue, config=config)
+            self.assertEqual(app.test_client().get(f"/api/jobs/{job_id}/filaments").status_code, 401)
+            staff = app.test_client()
+            with staff.session_transaction() as s:
+                s.update(role="staff", admin=True, username="teacher")
+            self.assertEqual(staff.get(f"/api/jobs/{job_id}/filaments").status_code, 200)
