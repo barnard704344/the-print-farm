@@ -88,6 +88,13 @@ changes to The Print Farm.
 
 ### Fixed
 
+- **Readable job names.** Bambu printers used to receive the stored file
+  name, e.g. `f627a845…_cade_pip2_PLA_9m8s.3mf`, so cards, the Camera Wall and
+  the printer screen showed a long, unreadable name. Printers now get a short
+  name (`cade_pip2.3mf`). The dashboard shows a tidy name ("cade pip2")
+  everywhere, with the full file name in the tooltip. The tidy name drops the
+  random prefix, the extension and OrcaSlicer's `_PLA_9m8s` filament/time
+  suffix, which is already shown separately.
 - **Deleting a job no longer deletes a file another queued job needs.**
   Reprints, per-printer copies and repeat OrcaSlicer uploads of the same model
   share one file. Deleting one of those jobs used to remove the file if it

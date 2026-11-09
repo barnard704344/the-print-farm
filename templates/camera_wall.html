@@ -162,6 +162,19 @@
             } catch (e) { return false; }
         }
 
+        // Readable job/file names: drop the stored-file prefix, the extension and
+        // OrcaSlicer's "_PLA_9m8s" filament/time suffix (shown separately anyway).
+        // Keep in step with src/job_names.py.
+        function prettyJobName(name) {
+            const raw = String(name || '').trim();
+            const noPrefix = raw.replace(/^(?:[0-9a-f]{32}|[0-9a-f]{64})_/i, '');
+            const noExt = noPrefix.replace(/\.(?:gcode\.3mf|3mf|gcode|bgcode)$/i, '');
+            const stem = noExt
+                .replace(/_[A-Za-z][A-Za-z0-9+\-]{1,15}_(?=\d)(?:\d+d)?(?:\d+h)?(?:\d+m)?(?:\d+s)?$/, '')
+                .replace(/^[\s_.-]+|[\s_.-]+$/g, '') || noExt || raw;
+            return stem.replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+        }
+
         // ── Auth (same flow as the dashboard) ────────────
         async function authStatus() {
             const res = await fetch(BASE + '/api/auth/status', { credentials: 'same-origin' });
@@ -245,7 +258,8 @@
             plateEl.textContent = plate ? '⚠ Clear the build plate before the next job' : '';
 
             const active = running || paused;
-            job.textContent = active || status === 'FINISH' ? (p.subtask_name || '') : (p.connected ? 'Ready' : 'Printer offline');
+            job.textContent = active || status === 'FINISH' ? prettyJobName(p.subtask_name) : (p.connected ? 'Ready' : 'Printer offline');
+            job.title = p.subtask_name || '';
             bar.hidden = stats.hidden = !active;
             const percent = Math.max(0, Math.min(100, Number(p.mc_percent) || 0));
             fill.style.width = `${percent}%`;

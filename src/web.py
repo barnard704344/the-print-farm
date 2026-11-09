@@ -27,6 +27,7 @@ from werkzeug.utils import secure_filename
 
 from .config_store import load_config as load_yaml_config, save_config as save_yaml_config
 from .discovery import discover_printers, scan_subnet, get_local_subnets, test_bambu_connection, test_klipper_connection, scan_moonraker_port
+from .job_names import printer_file_name
 from .gcode_to_3mf import wrap_gcode_as_3mf, parse_gcode_filaments, parse_gcode_model_name
 from .ldap_auth import authenticate_user, test_ad_connection, lookup_user
 from .file_library import parse_gcode_metadata
@@ -1296,13 +1297,11 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
                 return
 
             file_path = job["file_path"]
-            remote_name = job["filename"]
             printer_type = farm_manager.get_printer_type(printer_name)
 
-            # Use original name for Klipper so the printer shows
-            # a clean filename instead of the UUID-prefixed one.
-            if printer_type == "klipper" and job.get("original_name"):
-                remote_name = job["original_name"]
+            # Printers show the uploaded file name as the job name, so send a
+            # short readable one rather than the UUID-prefixed stored name.
+            remote_name = printer_file_name(job.get("original_name") or "", job["filename"])
 
             # BambuLab printers need .gcode wrapped in .3mf
             # Klipper printers take raw .gcode directly

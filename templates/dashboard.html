@@ -5167,9 +5167,9 @@
             else if (isRunning) label = 'Printing';
             else if (status === 'pause_filament') label = 'Paused — filament';
             else if (isPaused) label = 'Paused';
-            else if (status === 'finish') { label = 'Finished'; if (p.subtask_name) title = p.subtask_name; }
-            else if (status === 'failed') { label = 'Failed'; if (p.subtask_name) title = p.subtask_name; }
-            if (active) title = p.subtask_name || 'Untitled job';
+            else if (status === 'finish') { label = 'Finished'; if (p.subtask_name) title = prettyJobName(p.subtask_name); }
+            else if (status === 'failed') { label = 'Failed'; if (p.subtask_name) title = prettyJobName(p.subtask_name); }
+            if (active) title = prettyJobName(p.subtask_name) || 'Untitled job';
 
             const barWidth = active ? percent : (connected && status === 'finish' ? 100 : 0);
             const barClass = isPaused ? 'paused' : status === 'finish' ? 'done' : status === 'failed' ? 'failed' : '';
@@ -5185,7 +5185,7 @@
 
             return `
                 <div class="pc-job-label">${htmlEscape(label)}</div>
-                <div class="pc-job-name" title="${htmlEscape(title)}">${htmlEscape(title)}</div>
+                <div class="pc-job-name" title="${htmlEscape(p.subtask_name || title)}">${htmlEscape(title)}</div>
                 <div class="pc-job-progress">
                     <div class="progress-bar-container"><div class="progress-bar ${barClass}" style="width:${barWidth}%"></div></div>
                     <span class="pc-job-pct">${active ? percent + '%' : '—'}</span>
@@ -7159,7 +7159,7 @@
                 <tr>
                     ${isAdmin ? `<td><input type="checkbox" class="job-select-cb" data-id="${job.id}" data-week="${weekId || ''}" onchange="onJobCheckboxChange()"></td>` : ''}
                     <td>${job.id}</td>
-                    <td title="${escapeHtml(job.original_name)}">${escapeHtml(job.original_name)}</td>
+                    <td class="job-name-cell" title="${htmlEscape(job.original_name)}">${htmlEscape(prettyJobName(job.original_name))}</td>
                     <td><span class="job-status job-${status}">${escapeHtml(status)}</span></td>
                     <td>${escapeHtml(job.printer_name || '--')}</td>
                     <td>${escapeHtml(job.submitted_by || '--')}</td>
@@ -7748,7 +7748,7 @@
 
         function libraryCheckbox(file) {
             if (!libraryCanSelect()) return '';
-            const name = htmlEscape(file.original_name || 'file');
+            const name = htmlEscape(prettyJobName(file.original_name) || 'file');
             return `<label class="lib-check"><input type="checkbox" data-lib-select="${Number(file.id)}" ${librarySelected.has(file.id) ? 'checked' : ''} aria-label="Select ${name}"></label>`;
         }
 
@@ -7792,7 +7792,7 @@
                                 ${f.thumbnail_path ? `<img src="${BASE}/api/library/files/${Number(f.id)}/thumbnail" alt="" loading="lazy">` : '📄'}
                             </span>
                             <span class="lib-row-name" title="${htmlEscape(f.original_name)}">
-                                ${htmlEscape(f.original_name)}
+                                ${htmlEscape(prettyJobName(f.original_name))}
                                 ${searching ? `<span class="lib-row-loc">${htmlEscape(libraryFileLocation(f))}</span>` : ''}
                             </span>
                             <span>${htmlEscape(f.filament_type || '—')}</span>
@@ -7818,7 +7818,7 @@
                             ${f.thumbnail_path ? `<img src="${BASE}/api/library/files/${Number(f.id)}/thumbnail" alt="" loading="lazy">` : '<div class="no-thumb">📄</div>'}
                         </div>
                         <div class="library-card-info">
-                            <div class="library-card-name" title="${htmlEscape(f.original_name)}">${htmlEscape(f.original_name)}</div>
+                            <div class="library-card-name" title="${htmlEscape(f.original_name)}">${htmlEscape(prettyJobName(f.original_name))}</div>
                             ${searching ? `<div class="lib-row-loc">📁 ${htmlEscape(libraryFileLocation(f))}</div>` : ''}
                             <div class="library-card-meta">${libraryFileMeta(f).map(m => `<span>${htmlEscape(m)}</span>`).join('')}</div>
                         </div>
@@ -8132,7 +8132,7 @@
             const folderIds = new Set(files.map(f => f.folder_id ?? null));
             openLibraryMovePicker({
                 title: files.length === 1 ? 'Move file' : `Move ${files.length} files`,
-                context: files.length === 1 ? files[0].original_name : 'Choose where to put the selected files.',
+                context: files.length === 1 ? prettyJobName(files[0].original_name) : 'Choose where to put the selected files.',
                 currentId: folderIds.size === 1 ? [...folderIds][0] : undefined,
                 onConfirm: dest => moveLibraryFiles(files.map(f => f.id), dest),
             });
@@ -8226,7 +8226,7 @@
         async function deleteLibraryFiles(ids) {
             if (!ids.length) return;
             const one = ids.length === 1 ? libraryFiles.find(f => f.id === ids[0]) : null;
-            const label = one ? `“${one.original_name}”` : `${ids.length} files`;
+            const label = one ? `“${prettyJobName(one.original_name)}”` : `${ids.length} files`;
             if (!confirm(`Delete ${label} from the library? This removes the file from the server.`)) return;
             const res = await apiPost(`${BASE}/api/library/files/bulk-delete`, { file_ids: ids });
             const skipped = res.skipped || [];
@@ -8266,8 +8266,8 @@
             libraryPrintState = { fileIds: files.map(f => f.id), printer: '' };
             document.getElementById('libraryPrintTitle').textContent = files.length === 1 ? 'Print file' : `Print ${files.length} files`;
             document.getElementById('libraryPrintContext').textContent = files.length === 1
-                ? files[0].original_name
-                : files.map(f => f.original_name).slice(0, 3).join(', ') + (files.length > 3 ? ` and ${files.length - 3} more` : '');
+                ? prettyJobName(files[0].original_name)
+                : files.map(f => prettyJobName(f.original_name)).slice(0, 3).join(', ') + (files.length > 3 ? ` and ${files.length - 3} more` : '');
             document.getElementById('libraryPrintCopies').value = 1;
             document.getElementById('libraryPrintError').textContent = '';
             const list = document.getElementById('libraryPrintPrinters');
@@ -8333,6 +8333,19 @@
             if (bytes < 1024) return bytes + ' B';
             if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
             return (bytes / 1048576).toFixed(1) + ' MB';
+        }
+
+        // Readable job/file names: drop the stored-file prefix, the extension and
+        // OrcaSlicer's "_PLA_9m8s" filament/time suffix (shown separately anyway).
+        // Keep in step with src/job_names.py.
+        function prettyJobName(name) {
+            const raw = String(name || '').trim();
+            const noPrefix = raw.replace(/^(?:[0-9a-f]{32}|[0-9a-f]{64})_/i, '');
+            const noExt = noPrefix.replace(/\.(?:gcode\.3mf|3mf|gcode|bgcode)$/i, '');
+            const stem = noExt
+                .replace(/_[A-Za-z][A-Za-z0-9+\-]{1,15}_(?=\d)(?:\d+d)?(?:\d+h)?(?:\d+m)?(?:\d+s)?$/, '')
+                .replace(/^[\s_.-]+|[\s_.-]+$/g, '') || noExt || raw;
+            return stem.replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
         }
 
         function escapeHtml(text) {
