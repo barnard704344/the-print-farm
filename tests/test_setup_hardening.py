@@ -124,6 +124,10 @@ class PrivilegedHelperTests(unittest.TestCase):
         with self.assertRaises(helper.HelperError):
             helper.update_proxy_config(content, 5000)
 
+    def test_managed_proxy_strips_client_sso_identity_header(self):
+        block = helper.render_proxy_block(5000)
+        self.assertIn("RequestHeader unset X-Remote-User early", block)
+
     def test_duplicate_managed_proxy_blocks_are_rejected(self):
         block = helper.render_proxy_block(5000)
         content = f"<VirtualHost *:80>\n{block}\n{block}\n</VirtualHost>\n"

@@ -608,7 +608,13 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
     @app.route("/api/orca/api-key")
     @authenticated_session_required
     def get_orca_api_key():
-        """Return the upload-only Orca key to a logged-in dashboard user."""
+        """Return the upload-only Orca key to staff and approved students.
+
+        Anyone holding this key can submit jobs, so unapproved or banned
+        students must not receive it.
+        """
+        if not has_print_access():
+            return _print_access_denied_response()
         response = jsonify({
             "ok": True,
             "api_key": orca_upload_key,
@@ -1295,6 +1301,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
 
     @app.route(prefix + "/api/jobs/<int:job_id>/check_filament", methods=["POST"])
     @app.route("/api/jobs/<int:job_id>/check_filament", methods=["POST"])
+    @queue_operator_or_owner_required
     def check_filament(job_id):
         """Check if a printer's AMS/MMU has the filaments a job needs.
 

@@ -5,6 +5,20 @@ changes to The Print Farm.
 
 ## Unreleased
 
+### Security
+
+- Strip any client-supplied `X-Remote-User` header in the managed Apache proxy
+  block. Previously, SSO identity headers could reach `/api/auth/sso` through
+  proxy paths not covered by the Kerberos-protected `<Location>` (for example
+  `/the-print-farm/the-print-farm/api/auth/sso`), allowing staff impersonation.
+  Existing installations with a hand-written SSO `<Location>` should also add
+  `RequestHeader unset X-Remote-User early` at the VirtualHost level.
+- Require authentication for `POST /api/jobs/<id>/check_filament`, which
+  previously accepted anonymous requests.
+- Only staff and approved (allowlisted, not banned) students can fetch the
+  OrcaSlicer upload key from the dashboard. Rotate `web.orca_api_key` if
+  unapproved students may already hold it.
+
 ### Added
 
 - Added a staff-only **Reconnect** workflow for offline printers. It scans for
@@ -25,6 +39,10 @@ changes to The Print Farm.
 
 ### Fixed
 
+- The service now loads its configuration from `FARM_CONFIG`, the same file the
+  web UI saves to. Previously startup read `config/config.yaml` while the UI
+  wrote `FARM_CONFIG`, so dashboard changes (student access, bans, Reconnect,
+  AD settings) were lost on restart.
 - Klipper toolchanger cards no longer lose per-tool temperatures, temperature
   controls, and tool fans when Spoolman is not configured or Happy Hare is
   enabled. Only the per-tool spool row now depends on Spoolman.

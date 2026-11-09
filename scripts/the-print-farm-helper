@@ -156,6 +156,9 @@ def render_proxy_block(web_port):
     return "\n".join(
         [
             PROXY_BEGIN,
+            # Never trust a client-supplied SSO identity. A Kerberos-protected
+            # <Location> may set it again later in the request.
+            "    RequestHeader unset X-Remote-User early",
             "    ProxyPreserveHost On",
             f'    ProxyPassMatch "^/api/(version|connection|printer|files/local)$" '
             f'"http://127.0.0.1:{web_port}/api/$1"',

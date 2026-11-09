@@ -668,8 +668,10 @@ def main():
     )
     parser.add_argument(
         "-c", "--config",
-        default="config/config.yaml",
-        help="Path to config file (default: config/config.yaml)",
+        # Must match the path the web UI saves to (src/web.py reads FARM_CONFIG),
+        # otherwise dashboard changes are silently lost on the next restart.
+        default=os.environ.get("FARM_CONFIG", "config/config.yaml"),
+        help="Path to config file (default: $FARM_CONFIG, else config/config.yaml)",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
