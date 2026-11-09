@@ -82,6 +82,24 @@ The Print Farm includes a student access control system designed for school envi
 
 Staff and admin users can always print. Student accounts can sign in and view the dashboard, but they must be added to the **Student Print Access allowlist** before they can upload jobs, send jobs to printers, reprint jobs, or print from the file library.
 
+What each account can do:
+
+| | Students not on the allowlist | Allowlisted students | Staff |
+|---|---|---|---|
+| View printer cards and live cameras | Yes | Yes | Yes |
+| Printer card controls (temperatures, light, fans, AMS trays, filament load/unload) | Read-only | Yes | Yes |
+| Pause, resume, or stop a print | Own active job only | Any printer that is not staff-only | Yes |
+| Upload, send, and reprint their own jobs | No | Yes | Yes |
+| View the shared **Queued Jobs** list, and send or cancel any queued job | No | Yes | Yes |
+| Staff-only printers, delete/bulk actions, requeue, e-stop, printer management, Settings | No | No | Yes |
+
+Job History continues to show students only their own jobs. Allowlisted
+students cannot cancel another user's print once it has started.
+
+Allowlist entries match the student's login username (for example
+`firstname.lastname`) or display name, ignoring case. Email addresses are not
+matched.
+
 A separate **ban list** is also available. This is useful for keeping a record of students whose print access has been removed. If a student appears on both lists, the ban list takes priority.
 
 Student access is managed from:

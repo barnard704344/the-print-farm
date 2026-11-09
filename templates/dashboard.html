@@ -1723,6 +1723,7 @@
             line-height: 1;
         }
         body.is-admin .queue-count-badge.has-jobs { display: inline-flex; }
+        body.queue-operator .queue-count-badge.has-jobs { display: inline-flex; }
 
         .queue-subtabs {
             display: flex;
@@ -1750,6 +1751,7 @@
 
         .queue-subtab.admin-only { display: none; }
         body.is-admin .queue-subtab.admin-only { display: inline-flex; }
+        body.queue-operator .queue-subtab.admin-only { display: inline-flex; }
 
         .queue-subtab:hover {
             color: var(--text);
@@ -3382,6 +3384,13 @@
         let hasLocalUsers = false;
         let jobQueueView = 'history';
         let jobQueueViewTouched = false;
+        let queueOperator = false;  // approved student who may work on the shared queue
+        function canWorkQueue() { return isAdmin || queueOperator; }
+        // Printer card controls: staff, or approved students on printers that are not staff-only.
+        // Everyone else sees the same card read-only.
+        function canControlPrinter(p) {
+            return isAdmin || (queueOperator && printAllowed && !(p && p.staff_only));
+        }
         let myActivePrinters = new Set();  // printers with the current user's active jobs
         let cameraStreaming = {};   // {printerName: true/false}
         let cameraRefreshTimers = {};  // per-printer snapshot refresh intervals
@@ -3398,6 +3407,7 @@
                 userRole = data.role || null;
                 displayName = data.display_name || '';
                 userName = data.username || '';
+                queueOperator = data.queue_operator === true;
                 printAllowed = data.print_allowed === true;
                 printDeniedReason = data.print_denied_reason || '';
                 adEnabled = data.ad_enabled === true;
@@ -3406,6 +3416,7 @@
                 isAdmin = false;
                 isAuthenticated = false;
                 userRole = null;
+                queueOperator = false;
                 printAllowed = false;
                 printDeniedReason = '';
             }
@@ -3414,11 +3425,12 @@
 
         async function updateAuthUI() {
             const area = document.getElementById('authArea');
-            if (isAdmin && !jobQueueViewTouched) {
+            if (canWorkQueue() && !jobQueueViewTouched) {
                 jobQueueView = 'queued';
-            } else if (!isAdmin) {
+            } else if (!canWorkQueue()) {
                 jobQueueView = 'history';
             }
+            document.body.classList.toggle('queue-operator', isAuthenticated && queueOperator);
             if (isAuthenticated) {
                 if (isAdmin) {
                     document.body.classList.add('is-admin');
@@ -3532,6 +3544,7 @@
             userRole = null;
             displayName = '';
             userName = '';
+            queueOperator = false;
             printAllowed = false;
             printDeniedReason = '';
             jobQueueViewTouched = false;
@@ -4517,13 +4530,13 @@
                         <span data-field="speed">Speed: ${p.spd_mag}%</span>
                     </div>
                     <div class="printer-temps" data-field="temps">
-                        ${renderTemperatureTiles(name, p, isAdmin, isBambu, isKlipper)}
+                        ${renderTemperatureTiles(name, p, canControlPrinter(p), isBambu, isKlipper)}
                     </div>
-                    ${(isAdmin || myActivePrinters.has(name)) ? `<div class="printer-controls" data-field="controls">
+                    ${(canControlPrinter(p) || myActivePrinters.has(name)) ? `<div class="printer-controls" data-field="controls">
                         ${isPaused ? `<button class="btn btn-success" onclick="printerCmd('${name}','resume')">Resume</button>` : ''}
                         ${isRunning ? `<button class="btn btn-warning" onclick="printerCmd('${name}','pause')">Pause</button>` : ''}
                         ${isRunning || isPaused ? `<button class="btn btn-danger" onclick="printerCmd('${name}','stop')">Stop</button>` : ''}
-                        ${isAdmin && isBambu ? `<button class="btn" onclick="printerCmd('${name}','light')" title="Toggle light">
+                        ${canControlPrinter(p) && isBambu ? `<button class="btn" onclick="printerCmd('${name}','light')" title="Toggle light">
                             ${p.chamber_light ? '💡' : '🔅'}
                         </button>` : ''}
                     </div>` : ''}
@@ -4556,13 +4569,13 @@
             }
 
             // Discovered fans
-            html += renderFanRows(name, fans);
+            html += renderFanRows(name, fans, canControlPrinter(p));
 
             // LEDs & output pins
             for (const led of leds) {
                 const displayName = led.name.replace(/_/g, ' ');
                 const icon = led.on ? '💡' : '🔅';
-                if (isAdmin) {
+                if (canControlPrinter(p)) {
                     html += `<div class="fanled-row">
                         <span class="fanled-name">${icon} ${displayName}</span>
                         <button class="fanled-toggle" onclick="toggleKlipperLed('${name}','${led.object}',${!led.on})" title="${led.on ? 'Turn off' : 'Turn on'}">
@@ -4733,14 +4746,14 @@
             return objects;
         }
 
-        function renderFanRows(name, fans) {
+        function renderFanRows(name, fans, canControl) {
             return fans.map(fan => {
                 const pct = clampNumber(Math.round(fan.speed * 100), 0, 100);
                 const icon = fan.type === 'heater_fan' ? '🔥' : '🌀';
                 const displayName = escapeHtml(String(fan.name || '').replace(/_/g, ' '));
                 const safeName = jsArg(name);
                 const safeObject = jsArg(fan.object);
-                if (fan.controllable && isAdmin) {
+                if (fan.controllable && canControl) {
                     return `<div class="fanled-row">
                         <span class="fanled-name">${icon} ${displayName}</span>
                         <input type="range" class="fanled-slider" min="0" max="100" value="${pct}"
@@ -4757,7 +4770,7 @@
             }).join('');
         }
 
-        function renderToolheadGroup(name, p, tool, idx, spoolData) {
+        function renderToolheadGroup(name, p, tool, idx, spoolData, showSpool = true) {
             const toolName = tool.name || `T${idx}`;
             const docked = !!tool.docked;
             const stateLabel = docked ? 'Docked' : tool.active ? 'Active' : 'Ready';
@@ -4766,7 +4779,7 @@
             const safeName = jsArg(name);
             const safeTool = jsArg(toolName);
             const safeHeater = jsArg(heater);
-            const fanHtml = renderFanRows(name, fansForTool(p, tool));
+            const fanHtml = renderFanRows(name, fansForTool(p, tool), canControlPrinter(p));
             return `
                 <div class="toolhead-group ${tool.active ? 'active' : ''} ${docked ? 'docked' : ''}" data-tool-index="${idx}" data-tool-name="${escapeHtml(toolName)}">
                     <div class="toolhead-header">
@@ -4778,20 +4791,20 @@
                             <span data-field="tool-temp">${formatTemp(tool.temperature)}</span>
                             <span data-field="tool-target">/ ${formatTemp(tool.target)}</span>
                         </div>
-                        ${isAdmin ? `<div class="toolhead-control">
+                        ${canControlPrinter(p) ? `<div class="toolhead-control">
                             <input type="number" class="temp-input" id="tool-${idx}-${name}" placeholder="°C" min="0" max="300" ${docked ? 'disabled' : ''}>
                             <button class="temp-set-btn" onclick="setKlipperToolTemp(${safeName}, ${idx}, ${safeHeater})" ${docked ? 'disabled title="Tool is docked"' : ''}>Set</button>
                             <button class="temp-off-btn" onclick="setTemp(${safeName},'nozzle_temp',0,{heater:${safeHeater}})">Off</button>
                         </div>` : ''}
                     </div>
                     ${fanHtml}
-                    ${renderSpoolAssignmentRow({
+                    ${showSpool ? renderSpoolAssignmentRow({
                         printerName: name,
                         label: 'Spool',
                         spoolData,
                         assignArgs: `${safeName},${safeTool}`,
                         unassignArgs: `${safeName},${safeTool}`,
-                    })}
+                    }) : ''}
                 </div>`;
         }
 
@@ -4802,7 +4815,7 @@
                     const swatchColor = safeCssColor(t.color || '#333', '#333333');
                     const activeClass = t.active ? 'active' : '';
                     const emptyClass = !t.loaded ? 'empty' : '';
-                    if (isAdmin) {
+                    if (canControlPrinter(p)) {
                         const configureAction = `openTrayConfig(${nameArg}, ${Number(t.id)}, ${Number(t.slot)}, ${jsArg(t.type || '')}, ${jsArg(safeCssColor(t.color, '#333333'))}, ${jsArg(t.nozzle_temp_min)}, ${jsArg(t.nozzle_temp_max)})`;
                         const trayTitle = t.is_bbl
                             ? 'Bambu RFID filament — click to override the tag colour or type'
@@ -4841,7 +4854,7 @@
                             <span>${p.ams_tray_now < 254 ? `Tray ${p.ams_tray_now + 1}` : p.ams_tray_now === 254 ? 'External' : 'None'}</span>
                         </div>
                         <div class="ams-trays">${trays}</div>
-                        ${isAdmin ? `<div class="ams-external ${externalActive ? 'active' : ''}" onclick="event.stopPropagation()">
+                        ${canControlPrinter(p) ? `<div class="ams-external ${externalActive ? 'active' : ''}" onclick="event.stopPropagation()">
                             <span onclick="amsLoadTray(${nameArg}, 254)" style="cursor:pointer">🔗 External Spool${externalActive ? ' (active)' : ''}</span>
                             <span style="margin-left:auto;">
                                 <button class="btn" onclick="amsLoadTray(${nameArg}, 255)" style="font-size:10px;padding:2px 8px;">Unload</button>
@@ -4859,14 +4872,19 @@
 
                 const spoolData = _printerSpoolCache[name];
                 let spoolHtml = '';
-                if (spoolmanConfigured && !hasMmu && toolSpools.length > 1) {
+                if (toolSpools.length > 1) {
+                    // Toolchangers always get per-tool panels: temperature tiles and tool
+                    // fans are rendered only here, so they must not depend on Spoolman.
+                    // The spool row inside each panel still needs Spoolman (and no MMU).
                     const cachedTools = _toolSpoolCache[name] || {};
+                    const showSpool = spoolmanConfigured && !hasMmu;
                     spoolHtml = `<div class="toolhead-groups">${toolSpools.map((tool, idx) => renderToolheadGroup(
                         name,
                         p,
                         tool,
                         idx,
                         cachedTools[tool.name],
+                        showSpool,
                     )).join('')}</div>`;
                 } else if (spoolmanConfigured && !hasMmu) {
                     if (spoolData && spoolData.id) {
@@ -4888,7 +4906,7 @@
                     }
                 }
 
-                if (isAdmin) {
+                if (canControlPrinter(p)) {
                     return `
                         <div class="filament-controls" data-field="filament">
                             ${spoolHtml}
@@ -4957,10 +4975,10 @@
                 const existingTools = tempsEl.querySelectorAll('.klipper-tool-temp');
                 if (isKlipperToolchanger(p)) {
                     if (existingTools.length) {
-                        tempsEl.innerHTML = renderTemperatureTiles(name, p, isAdmin, isBambu, isKlipper);
+                        tempsEl.innerHTML = renderTemperatureTiles(name, p, canControlPrinter(p), isBambu, isKlipper);
                     }
                 } else if (existingTools.length !== tools.length) {
-                    tempsEl.innerHTML = renderTemperatureTiles(name, p, isAdmin, isBambu, isKlipper);
+                    tempsEl.innerHTML = renderTemperatureTiles(name, p, canControlPrinter(p), isBambu, isKlipper);
                 } else {
                     tools.forEach((tool, idx) => {
                         const item = tempsEl.querySelector(`.klipper-tool-temp[data-tool-index="${idx}"]`);
@@ -4995,12 +5013,12 @@
 
             // Controls (need rebuild since buttons change with status)
             const ctrlEl = card.querySelector('[data-field="controls"]');
-            if (ctrlEl && isAdmin) {
+            if (ctrlEl && (canControlPrinter(p) || myActivePrinters.has(name))) {
                 ctrlEl.innerHTML = `
                     ${isPaused ? `<button class="btn btn-success" onclick="printerCmd('${name}','resume')">Resume</button>` : ''}
                     ${isRunning ? `<button class="btn btn-warning" onclick="printerCmd('${name}','pause')">Pause</button>` : ''}
                     ${isRunning || isPaused ? `<button class="btn btn-danger" onclick="printerCmd('${name}','stop')">Stop</button>` : ''}
-                    ${isBambu ? `<button class="btn" onclick="printerCmd('${name}','light')" title="Toggle light">
+                    ${canControlPrinter(p) && isBambu ? `<button class="btn" onclick="printerCmd('${name}','light')" title="Toggle light">
                         ${p.chamber_light ? '💡' : '🔅'}
                     </button>` : ''}
                 `;
@@ -6026,7 +6044,7 @@
             const queuedCount = document.getElementById('queueSubtabQueuedCount');
             if (!queuedTab || !historyTab || !queuedCount) return;
 
-            const showQueued = isAdmin && jobQueueView === 'queued';
+            const showQueued = canWorkQueue() && jobQueueView === 'queued';
             queuedTab.classList.toggle('active', showQueued);
             historyTab.classList.toggle('active', !showQueued);
             queuedTab.setAttribute('aria-selected', String(showQueued));
@@ -6035,7 +6053,7 @@
         }
 
         function switchJobQueueView(view) {
-            if (view === 'queued' && !isAdmin) return;
+            if (view === 'queued' && !canWorkQueue()) return;
             jobQueueView = view === 'queued' ? 'queued' : 'history';
             jobQueueViewTouched = true;
             clearBulkSelection();
@@ -6043,7 +6061,7 @@
         }
 
         function renderCurrentJobView() {
-            if (!isAdmin && jobQueueView === 'queued') {
+            if (!canWorkQueue() && jobQueueView === 'queued') {
                 jobQueueView = 'history';
             }
             updateJobQueueSubtabs();
@@ -6086,7 +6104,7 @@
                 <table class="job-table" id="queuedJobsTable">
                     <thead>
                         <tr>
-                            <th style="width:32px;"><input type="checkbox" id="${weekId}_all" aria-label="Select all visible queued jobs" onchange="toggleWeekSelection('${weekId}')"></th>
+                            ${isAdmin ? `<th style="width:32px;"><input type="checkbox" id="${weekId}_all" aria-label="Select all visible queued jobs" onchange="toggleWeekSelection('${weekId}')"></th>` : ''}
                             <th>#</th><th>File</th><th>Status</th><th>Printer</th>
                             <th>Submitted By</th><th>Copies</th><th>Est. Time</th><th>Priority</th><th>Created</th><th>Actions</th>
                         </tr>
@@ -6202,9 +6220,11 @@
             const status = String(job.status || 'unknown').toLowerCase().replace(/[^a-z_]/g, '');
             const isOwner = isAuthenticated && userName && job.submitted_by === userName;
             const canUseJobActions = isAdmin || (isOwner && printAllowed);
-            const canCancel = canUseJobActions && (status === 'queued' || status === 'uploading' || status === 'printing');
+            const canOperateQueued = queueOperator && printAllowed && status === 'queued';
+            const canCancel = (canUseJobActions && (status === 'queued' || status === 'uploading' || status === 'printing'))
+                || canOperateQueued;
             const canDelete = isAdmin;
-            const canAssign = canUseJobActions && status === 'queued';
+            const canAssign = (canUseJobActions || canOperateQueued) && status === 'queued';
             const canReprint = canUseJobActions && ['completed', 'failed', 'cancelled'].includes(status);
 
             let assignBtn = '';
@@ -6482,7 +6502,7 @@
 
         async function refreshJobs() {
             try {
-                const queuedRequest = isAdmin
+                const queuedRequest = canWorkQueue()
                     ? fetch(BASE + '/api/jobs/queued').catch(() => null)
                     : null;
                 const res = await fetch(BASE + '/api/jobs');
@@ -6523,7 +6543,7 @@
                 document.getElementById('queueStats').textContent =
                     `${data.stats.queued || 0} queued · ${data.stats.printing || 0} printing · ${data.stats.completed || 0} completed`;
                 const navCount = document.getElementById('queueNavCount');
-                const queuedCount = isAdmin ? latestQueuedJobs.length : (data.stats.queued || 0);
+                const queuedCount = canWorkQueue() ? latestQueuedJobs.length : (data.stats.queued || 0);
                 navCount.textContent = queuedCount;
                 navCount.classList.toggle('has-jobs', queuedCount > 0);
                 updateJobQueueSubtabs();

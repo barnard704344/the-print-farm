@@ -205,6 +205,12 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             return False
         return _current_user_in_entries(access.get("allowlist", []))
 
+    def is_queue_operator():
+        """Approved (allowlisted, not banned) students may work on the shared queue."""
+        if is_admin() or _check_admin_api_key():
+            return False
+        return session.get("role") == "student" and has_print_access()
+
     def _print_access_denied_response():
         if not is_authenticated() and not _check_admin_api_key():
             return jsonify({"error": "Login required"}), 401
@@ -493,6 +499,34 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             return jsonify({"error": "Not authorised"}), 403
         return decorated
 
+    def queue_operator_or_owner_required(f):
+        """Owner/admin access, plus approved students for jobs still in the queue.
+
+        Queue operators may view, send, or cancel any queued job that is not
+        tied to a staff-only printer. Jobs already printing stay owner/staff only.
+        """
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if is_admin() or _check_admin_api_key():
+                return f(*args, **kwargs)
+            if not is_authenticated():
+                return jsonify({"error": "Login required"}), 401
+            if not has_print_access():
+                return _print_access_denied_response()
+            job_id = kwargs.get("job_id")
+            job = job_queue.get_job(job_id) if job_id else None
+            if job and _is_job_owner(job):
+                return f(*args, **kwargs)
+            if (
+                job
+                and is_queue_operator()
+                and job.get("status") == "queued"
+                and not _is_staff_only_printer(job.get("printer_name") or "")
+            ):
+                return f(*args, **kwargs)
+            return jsonify({"error": "Not authorised"}), 403
+        return decorated
+
     def _has_active_job_on_printer(printer_name):
         """True when the current user has an active job on the given printer."""
         uname = session.get("username", "")
@@ -512,9 +546,31 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             if not is_authenticated():
                 return jsonify({"error": "Login required"}), 401
             name = kwargs.get("name")
-            if name and _has_active_job_on_printer(name):
+            if name and (_has_active_job_on_printer(name) or _can_operate_printer(name)):
                 return f(*args, **kwargs)
             return jsonify({"error": "Not authorised"}), 403
+        return decorated
+
+    def _can_operate_printer(name):
+        """Approved students may operate printers that are not staff-only."""
+        return bool(
+            name
+            and is_queue_operator()
+            and farm_manager.get_printer(name)
+            and not _is_staff_only_printer(name)
+        )
+
+    def printer_control_required(f):
+        """Staff, or an approved student on a printer that is not staff-only."""
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if is_admin() or _check_admin_api_key():
+                return f(*args, **kwargs)
+            if not is_authenticated():
+                return jsonify({"error": "Login required"}), 401
+            if _can_operate_printer(kwargs.get("name")):
+                return f(*args, **kwargs)
+            return jsonify({"error": "Printer controls are read-only for this account"}), 403
         return decorated
 
     @app.route(prefix + "/")
@@ -541,6 +597,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             "role": role,
             "display_name": session.get("display_name", ""),
             "username": session.get("username", ""),
+            "queue_operator": is_queue_operator(),
             "ad_enabled": _ad_enabled(),
             "has_local_users": bool(app_config.get("local_users")),
             "print_allowed": print_allowed,
@@ -808,7 +865,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
 
     @app.route(prefix + "/api/printer/<name>/light", methods=["POST"])
     @app.route("/api/printer/<name>/light", methods=["POST"])
-    @admin_required
+    @printer_control_required
     def printer_light(name):
         client = farm_manager.get_printer(name)
         if not client:
@@ -819,7 +876,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
 
     @app.route(prefix + "/api/printer/<name>/led", methods=["POST"])
     @app.route("/api/printer/<name>/led", methods=["POST"])
-    @admin_required
+    @printer_control_required
     def printer_led(name):
         """Toggle a specific LED or output pin on a Klipper printer."""
         client = farm_manager.get_printer(name)
@@ -845,7 +902,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
 
     @app.route(prefix + "/api/printer/<name>/fan_speed", methods=["POST"])
     @app.route("/api/printer/<name>/fan_speed", methods=["POST"])
-    @admin_required
+    @printer_control_required
     def printer_fan_speed(name):
         """Set speed of a fan_generic on a Klipper printer."""
         client = farm_manager.get_printer(name)
@@ -881,7 +938,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
 
     @app.route(prefix + "/api/printer/<name>/bed_temp", methods=["POST"])
     @app.route("/api/printer/<name>/bed_temp", methods=["POST"])
-    @admin_required
+    @printer_control_required
     def printer_bed_temp(name):
         client = farm_manager.get_printer(name)
         if not client:
@@ -893,7 +950,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
 
     @app.route(prefix + "/api/printer/<name>/nozzle_temp", methods=["POST"])
     @app.route("/api/printer/<name>/nozzle_temp", methods=["POST"])
-    @admin_required
+    @printer_control_required
     def printer_nozzle_temp(name):
         client = farm_manager.get_printer(name)
         if not client:
@@ -909,7 +966,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
 
     @app.route(prefix + "/api/printer/<name>/unload_filament", methods=["POST"])
     @app.route("/api/printer/<name>/unload_filament", methods=["POST"])
-    @admin_required
+    @printer_control_required
     def printer_unload_filament(name):
         client = farm_manager.get_printer(name)
         if not client:
@@ -919,7 +976,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
 
     @app.route(prefix + "/api/printer/<name>/load_filament", methods=["POST"])
     @app.route("/api/printer/<name>/load_filament", methods=["POST"])
-    @admin_required
+    @printer_control_required
     def printer_load_filament(name):
         client = farm_manager.get_printer(name)
         if not client:
@@ -929,7 +986,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
 
     @app.route(prefix + "/api/printer/<name>/ams_load", methods=["POST"])
     @app.route("/api/printer/<name>/ams_load", methods=["POST"])
-    @admin_required
+    @printer_control_required
     def printer_ams_load(name):
         """Load filament from a specific AMS tray."""
         client = farm_manager.get_printer(name)
@@ -946,7 +1003,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
 
     @app.route(prefix + "/api/printer/<name>/tray_config", methods=["POST"])
     @app.route("/api/printer/<name>/tray_config", methods=["POST"])
-    @admin_required
+    @printer_control_required
     def printer_tray_config(name):
         """Set filament type/color for an AMS tray."""
         client = farm_manager.get_printer(name)
@@ -997,7 +1054,9 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
     @login_required
     def queued_jobs():
         jobs = job_queue.get_queued_jobs()
-        if not (is_admin() or _check_admin_api_key()):
+        if is_queue_operator():
+            jobs = [j for j in jobs if _is_job_owner(j) or not _is_staff_only_printer(j.get("printer_name") or "")]
+        elif not (is_admin() or _check_admin_api_key()):
             jobs = [j for j in jobs if _is_job_owner(j)]
         return jsonify([{k: v for k, v in j.items() if k not in ("file_path", "filename")} for j in jobs])
 
@@ -1012,7 +1071,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
 
     @app.route(prefix + "/api/jobs/<int:job_id>")
     @app.route("/api/jobs/<int:job_id>")
-    @owner_or_admin_required
+    @queue_operator_or_owner_required
     def get_job(job_id):
         job = job_queue.get_job(job_id)
         if not job:
@@ -1374,7 +1433,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
 
     @app.route(prefix + "/api/jobs/<int:job_id>/assign", methods=["POST"])
     @app.route("/api/jobs/<int:job_id>/assign", methods=["POST"])
-    @owner_or_admin_required
+    @queue_operator_or_owner_required
     def assign_job(job_id):
         data = request.get_json(silent=True) or {}
         printer_name = data.get("printer")
@@ -1500,7 +1559,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
 
     @app.route(prefix + "/api/jobs/<int:job_id>/cancel", methods=["POST"])
     @app.route("/api/jobs/<int:job_id>/cancel", methods=["POST"])
-    @owner_or_admin_required
+    @queue_operator_or_owner_required
     def cancel_job(job_id):
         job = job_queue.get_job(job_id)
         if job and job["status"] == "printing" and job.get("printer_name"):

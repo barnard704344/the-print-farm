@@ -13,9 +13,23 @@ changes to The Print Farm.
   OrcaSlicer configuration, and integrations.
 - Added bounded `/21` through `/24` scans for routed printer VLANs, including
   configurable default ranges under `discovery.scan_subnets`.
+- Allowlisted students can now work on the shared print queue. They see the
+  **Queued Jobs** tab and can send or cancel any queued job on printers that are
+  not staff-only, including unowned jobs submitted from OrcaSlicer. Jobs already
+  printing, delete, bulk actions, and requeue remain staff-only.
+- Allowlisted students can use printer card controls (pause/resume/stop,
+  temperatures, chamber light, fans and LEDs, filament load/unload, AMS tray
+  load and tray configuration) on printers that are not staff-only. Other
+  students see printer cards and cameras read-only. Rename, remove, reconnect,
+  the staff-only toggle, Klipper e-stop, and Settings remain staff-only.
 
 ### Fixed
 
+- Klipper toolchanger cards no longer lose per-tool temperatures, temperature
+  controls, and tool fans when Spoolman is not configured or Happy Hare is
+  enabled. Only the per-tool spool row now depends on Spoolman.
+- Printer card pause/resume/stop buttons now refresh with status for students
+  who own the active job.
 - Keep the Reconnect action in sync when an existing dashboard card transitions
   from online to offline.
 - Exclude addresses assigned to other configured printers and require cached
@@ -24,6 +38,8 @@ changes to The Print Farm.
 
 ### Documentation
 
+- Documented the student access levels for viewing, queue work, and printer
+  controls, and how allowlist entries are matched.
 - Documented IP-change recovery, routed subnet scanning, identity safeguards,
   and the new discovery configuration with an example `/21` printer VLAN.
 
