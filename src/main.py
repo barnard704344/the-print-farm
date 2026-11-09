@@ -430,6 +430,9 @@ def cmd_run(args, config: dict):
                      config=config, file_library=library,
                      spoolman_client=spoolman,
                      vp_manager=vp_manager)
+    if web_cfg.get("auth_enabled", True) is False:
+        logger.warning("Login is DISABLED (single-user mode): anyone who can reach the "
+                       "dashboard has full staff access. Turn it back on in Settings.")
     start_web_server(app, host=host, port=port)
     print(f"Dashboard: http://{host}:{port}")
 

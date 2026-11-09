@@ -448,6 +448,44 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             str(admin_api_key),
         )
 
+    # ── Single-user mode (login disabled) ─────────────────
+    # Small farms with one operator can turn login off. Every visitor is then
+    # treated as the staff admin, so all existing permission checks pass
+    # unchanged. Sessions created this way are marked and dropped as soon as
+    # login is turned back on.
+    SINGLE_USER_SESSION = {
+        "role": "staff",
+        "admin": True,
+        "username": "admin",
+        "display_name": "Admin",
+        "auth_bypass": True,
+    }
+
+    def auth_disabled():
+        return (app_config.get("web") or {}).get("auth_enabled", True) is False
+
+    @app.before_request
+    def apply_auth_mode():
+        if auth_disabled():
+            if not session.get("auth_bypass"):
+                session.clear()
+                session.update(SINGLE_USER_SESSION)
+                session.permanent = True
+        elif session.get("auth_bypass"):
+            session.clear()
+        return None
+
+    def _staff_login_available(cfg=None):
+        """True when someone could still sign in as staff with login enabled."""
+        cfg = cfg if cfg is not None else app_config
+        for user in cfg.get("local_users") or []:
+            if user.get("role", "staff") == "staff" and (user.get("password_hash") or user.get("password")):
+                return True
+        web = cfg.get("web") or {}
+        if web.get("admin_password_hash") or admin_password:
+            return True
+        return bool((cfg.get("active_directory") or {}).get("enabled"))
+
     @app.before_request
     def reject_cross_site_state_changes():
         """Block browser CSRF while leaving API-key integrations unaffected."""
@@ -608,6 +646,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
                 else "Student print access has not been approved"
             )
         return jsonify({
+            "auth_enabled": not auth_disabled(),
             "admin": is_admin(),
             "authenticated": is_authenticated(),
             "role": role,
@@ -642,6 +681,8 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
     @app.route(prefix + "/api/auth/login", methods=["POST"])
     @app.route("/api/auth/login", methods=["POST"])
     def auth_login():
+        if auth_disabled():
+            return jsonify({"ok": True, "role": "staff", "display_name": session.get("display_name", "Admin")})
         data = request.get_json(silent=True) or {}
         username = data.get("username", "").strip()
         password = data.get("password", "")
@@ -733,6 +774,8 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
     @app.route(prefix + "/api/auth/logout", methods=["POST"])
     @app.route("/api/auth/logout", methods=["POST"])
     def auth_logout():
+        if auth_disabled():
+            return jsonify({"ok": True, "message": "Login is disabled (single-user mode)"})
         session.pop("admin", None)
         session.pop("role", None)
         session.pop("display_name", None)
@@ -2466,6 +2509,76 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             return jsonify({"ok": False, "error": str(e)}), 500
         farm_manager.set_plate_clear_required(name, required)
         return jsonify({"ok": True, **farm_manager.get_plate_state(name)})
+
+    # ── Authentication mode API ───────────────────────────
+
+    @app.route(prefix + "/api/auth/config", methods=["GET"])
+    @app.route("/api/auth/config", methods=["GET"])
+    @staff_session_required
+    def auth_get_config():
+        return jsonify({
+            "auth_enabled": not auth_disabled(),
+            "staff_login_available": _staff_login_available(),
+        })
+
+    @app.route(prefix + "/api/auth/config", methods=["POST"])
+    @app.route("/api/auth/config", methods=["POST"])
+    @staff_session_required
+    def auth_save_config():
+        """Turn login on or off. Turning it on needs a way for staff to sign in,
+        so a staff account can be created in the same request."""
+        data = request.get_json(silent=True) or {}
+        enable = bool(data.get("auth_enabled", True))
+        try:
+            file_config = load_yaml_config(config_path)
+        except Exception as exc:
+            logger.error("Could not read config: %s", exc)
+            return jsonify({"ok": False, "message": "Could not read the config file"}), 500
+
+        new_user = None
+        if enable and not _staff_login_available(file_config):
+            username = str(data.get("username") or "").strip()
+            password = str(data.get("password") or "")
+            if not username or not password:
+                return jsonify({
+                    "ok": False,
+                    "needs_account": True,
+                    "message": "Create a staff account first, or you would be locked out",
+                }), 400
+            if not re.match(r"^[A-Za-z0-9._-]{1,64}$", username):
+                return jsonify({"ok": False, "message": "Username may contain letters, numbers, dot, underscore, and hyphen"}), 400
+            if len(password) < 12:
+                return jsonify({"ok": False, "message": "Password must be at least 12 characters"}), 400
+            new_user = {
+                "username": username,
+                "password_hash": generate_password_hash(password),
+                "role": "staff",
+                "display_name": str(data.get("display_name") or username).strip()[:100] or username,
+            }
+            file_config.setdefault("local_users", [])
+            if not isinstance(file_config["local_users"], list):
+                file_config["local_users"] = []
+            file_config["local_users"].append(new_user)
+
+        file_config.setdefault("web", {})["auth_enabled"] = enable
+        try:
+            save_yaml_config(config_path, file_config)
+        except OSError as exc:
+            logger.error("Could not save auth config: %s", exc)
+            return jsonify({"ok": False, "message": "Could not save the config file"}), 500
+
+        app_config.setdefault("web", {})["auth_enabled"] = enable
+        if new_user:
+            app_config.setdefault("local_users", []).append(dict(new_user))
+        if enable:
+            # Drop the single-user session; the browser must now sign in.
+            session.clear()
+            logger.info("Login enabled")
+            message = "Login enabled. Sign in to continue."
+        else:
+            logger.warning("Login DISABLED: every visitor now has full staff access")
+            message = "Login disabled. Everyone who can open this page has full control."
+        return jsonify({"ok": True, "auth_enabled": enable, "message": message})
 
     # ── Active Directory Config API ───────────────────────
 

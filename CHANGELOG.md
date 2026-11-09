@@ -21,6 +21,13 @@ changes to The Print Farm.
 
 ### Added
 
+- **Single-user mode.** Small farms with one operator can tick **Disable
+  login** in Settings (or set `web.auth_enabled: false`). Every visitor is
+  then treated as staff, the header shows "Single-user mode", and a warning is
+  logged at startup. Turning login back on requires a staff sign-in method; if
+  there is none, Settings asks for a username and password and creates a local
+  staff account, so you can't lock yourself out. API-key integrations and
+  OrcaSlicer upload keys are unaffected.
 - **Redesigned printer cards.** Each card now shows nozzle size and type under
   the name, plus status chips for Wi-Fi signal, HMS alerts and print errors
   (codes in the tooltip), the chamber light (a toggle for anyone who can control

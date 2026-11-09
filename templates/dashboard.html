@@ -2548,6 +2548,35 @@
         <!-- Settings Tab (Admin only) -->
         <div class="tab-content" id="tab-settings">
             <div class="setup-section" style="max-width:700px;">
+                <h3 style="margin-bottom:16px;">Login</h3>
+                <p style="color:var(--text-muted); font-size:13px; margin-bottom:16px;">
+                    For a small farm with a single operator you can turn login off. Everyone who can open the dashboard
+                    then has full staff control, so only do this on a network you trust.
+                </p>
+                <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                    <input type="checkbox" id="authDisabled" style="width:18px; height:18px;" onchange="onAuthDisabledToggle()">
+                    <span>Disable login (single-user mode)</span>
+                </label>
+                <div id="authAccountFields" style="display:none; margin-top:14px; padding:12px; border:1px solid var(--border); border-radius:8px;">
+                    <p style="font-size:13px; margin-bottom:10px;">There is no staff account to sign in with. Create one before turning login back on.</p>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                        <div>
+                            <label for="authNewUsername" style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Username</label>
+                            <input id="authNewUsername" class="ad-input" autocomplete="username" value="admin">
+                        </div>
+                        <div>
+                            <label for="authNewPassword" style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Password (12+ characters)</label>
+                            <input id="authNewPassword" class="ad-input" type="password" autocomplete="new-password">
+                        </div>
+                    </div>
+                </div>
+                <div style="display:flex; gap:8px; margin-top:12px;">
+                    <button class="btn btn-success" onclick="saveAuthConfig()">Save</button>
+                </div>
+                <div id="authConfigResult" style="font-size:13px; margin-top:6px;"></div>
+            </div>
+
+            <div class="setup-section" style="max-width:700px; margin-top:32px;">
                 <h3 style="margin-bottom:16px;">Active Directory Configuration</h3>
                 <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
                     Configure LDAP/Active Directory authentication. When enabled, users log in with their AD credentials.
@@ -3620,6 +3649,7 @@
 
         let isAdmin = false;
         let isAuthenticated = false;
+        let authEnabled = true;  // false = single-user mode, no login
         let userRole = null;
         let displayName = '';
         let userName = '';
@@ -3647,6 +3677,7 @@
             try {
                 const res = await fetch(BASE + '/api/auth/status');
                 const data = await res.json();
+                authEnabled = data.auth_enabled !== false;
                 isAdmin = data.admin === true;
                 isAuthenticated = data.authenticated === true;
                 userRole = data.role || null;
@@ -3685,8 +3716,10 @@
                 const roleLabel = userRole === 'staff' ? 'Staff' : userRole === 'student' ? 'Student' : 'Admin';
                 const roleColor = isAdmin ? 'var(--accent)' : 'var(--info)';
                 const nameStr = displayName ? ` — ${escapeHtml(displayName)}` : '';
-                area.innerHTML = `<span style="font-size:12px; color:${roleColor}; margin-right:8px;">${roleLabel}${nameStr}</span>
-                    <button class="btn" onclick="doLogout()" style="font-size:12px; padding:4px 12px;">Logout</button>`;
+                area.innerHTML = authEnabled
+                    ? `<span style="font-size:12px; color:${roleColor}; margin-right:8px;">${roleLabel}${nameStr}</span>
+                    <button class="btn" onclick="doLogout()" style="font-size:12px; padding:4px 12px;">Logout</button>`
+                    : `<span style="font-size:12px; color:var(--text-muted);" title="Login is turned off in Settings">Single-user mode</span>`;
             } else {
                 document.body.classList.remove('is-admin');
                 area.innerHTML = `<button class="btn" onclick="showLoginModal()" style="font-size:12px; padding:4px 12px;">Login</button>`;
@@ -3890,6 +3923,56 @@
                 }
             } catch (e) {
                 resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(e.message)}</span>`;
+            }
+        }
+
+        // ── Login on/off (single-user mode) ──────────────────
+        let authStaffLoginAvailable = true;
+
+        async function loadAuthConfig() {
+            try {
+                const res = await fetch(BASE + '/api/auth/config');
+                if (!res.ok) return;
+                const data = await res.json();
+                authStaffLoginAvailable = data.staff_login_available !== false;
+                document.getElementById('authDisabled').checked = data.auth_enabled === false;
+                document.getElementById('authConfigResult').innerHTML = '';
+                onAuthDisabledToggle();
+            } catch (e) {}
+        }
+
+        function onAuthDisabledToggle() {
+            const disabling = document.getElementById('authDisabled').checked;
+            const needsAccount = !disabling && !authEnabled && !authStaffLoginAvailable;
+            document.getElementById('authAccountFields').style.display = needsAccount ? 'block' : 'none';
+        }
+
+        async function saveAuthConfig() {
+            const resultEl = document.getElementById('authConfigResult');
+            const disable = document.getElementById('authDisabled').checked;
+            if (disable && authEnabled && !confirm('Turn off login? Anyone who can open this dashboard will have full staff control.')) return;
+            const payload = { auth_enabled: !disable };
+            if (!disable && !authStaffLoginAvailable) {
+                payload.username = document.getElementById('authNewUsername').value.trim();
+                payload.password = document.getElementById('authNewPassword').value;
+            }
+            const data = await apiPost(BASE + '/api/auth/config', payload);
+            if (data.ok === false) {
+                if (data.needs_account) {
+                    authStaffLoginAvailable = false;
+                    onAuthDisabledToggle();
+                }
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(data.message || 'Save failed')}</span>`;
+                return;
+            }
+            document.getElementById('authNewPassword').value = '';
+            resultEl.innerHTML = `<span style="color:var(--accent);">&#10003; ${escapeHtml(data.message || 'Saved')}</span>`;
+            await checkAuth();
+            if (data.auth_enabled) {
+                document.querySelector('.tab[data-tab="printers"]')?.click();
+                showLoginModal();
+            } else {
+                loadAuthConfig();
             }
         }
 
@@ -4540,7 +4623,7 @@
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 tab.classList.add('active');
                 document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
-                if (tab.dataset.tab === 'settings') { loadADConfig(); loadStudentAccessConfig(); populateObicoPrinterDropdown(); loadSpoolmanConfig(); loadPoolConfig(); loadNotificationConfig(); loadUiConfig(); }
+                if (tab.dataset.tab === 'settings') { loadAuthConfig(); loadADConfig(); loadStudentAccessConfig(); populateObicoPrinterDropdown(); loadSpoolmanConfig(); loadPoolConfig(); loadNotificationConfig(); loadUiConfig(); }
                 if (tab.dataset.tab === 'library') refreshLibrary();
             });
         });
