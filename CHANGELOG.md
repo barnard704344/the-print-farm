@@ -88,6 +88,19 @@ changes to The Print Farm.
 
 ### Fixed
 
+- **Klipper fixes.**
+  - **Layer counts:** the cached layer count for a file name is now cleared on
+    every upload. With shorter printer file names, two slices of the same
+    model can share a name and would otherwise show the old layer total.
+  - **Toolchanger temperatures:** toolhead panels now use the same
+    click-to-set popover as the other tiles. The old inputs could switch a
+    heater off: an empty box, or a printer name with a space, sent 0 °C, and
+    typed values were wiped by every card refresh.
+  - **E-Stop:** now asks for confirmation, since Klipper needs a
+    FIRMWARE_RESTART afterwards. Printer names are escaped in the E-Stop and
+    light buttons.
+  - **Temperature input:** the nozzle and bed temperature endpoints return 400
+    for non-numeric input instead of a server error.
 - **Printers ready for a job now say READY.** Bambu printers stay in FINISH
   until the next job starts, so cards kept saying "Finished" even after the
   plate was cleared. A printer that is idle, or finished with its plate

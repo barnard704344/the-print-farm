@@ -5365,14 +5365,14 @@
                 const icon = led.on ? '💡' : '🔅';
                 if (canControlPrinter(p)) {
                     html += `<div class="fanled-row">
-                        <span class="fanled-name">${icon} ${displayName}</span>
-                        <button class="fanled-toggle" onclick="toggleKlipperLed('${name}','${led.object}',${!led.on})" title="${led.on ? 'Turn off' : 'Turn on'}">
+                        <span class="fanled-name">${icon} ${escapeHtml(displayName)}</span>
+                        <button class="fanled-toggle" onclick="toggleKlipperLed(${jsArg(name)},${jsArg(led.object)},${!led.on})" title="${led.on ? 'Turn off' : 'Turn on'}">
                             ${led.on ? '💡' : '🔅'}
                         </button>
                     </div>`;
                 } else {
                     html += `<div class="fanled-row">
-                        <span class="fanled-name">${icon} ${displayName}</span>
+                        <span class="fanled-name">${icon} ${escapeHtml(displayName)}</span>
                         <span class="fanled-pct">${led.on ? 'ON' : 'OFF'}</span>
                     </div>`;
                 }
@@ -5381,12 +5381,18 @@
             // E-Stop for Klipper printers
             if (isAdmin && (p.type === 'klipper')) {
                 html += `<div class="fanled-row" style="margin-top:4px;padding-top:6px;border-top:1px solid var(--border)">
-                    <button class="btn" onclick="printerCmd('${name}','emergency_stop')" title="Emergency Stop" style="color:#ff4444;width:100%;font-weight:600;">&#9888; E-Stop</button>
+                    <button class="btn" onclick="confirmEmergencyStop(${jsArg(name)})" title="Emergency Stop" style="color:#ff4444;width:100%;font-weight:600;">&#9888; E-Stop</button>
                 </div>`;
             }
 
             html += `</div>`;
             return html;
+        }
+
+        function confirmEmergencyStop(name) {
+            if (confirm(`Emergency stop ${name}?\n\nKlipper halts immediately and needs a FIRMWARE_RESTART before it can print again.`)) {
+                printerCmd(name, 'emergency_stop');
+            }
         }
 
         function renderMmuSection(name, p) {
@@ -5543,7 +5549,7 @@
                 const safeObject = jsArg(fan.object);
                 if (fan.controllable && canControl) {
                     return `<div class="fanled-row">
-                        <span class="fanled-name">${icon} ${displayName}</span>
+                        <span class="fanled-name">${icon} ${escapeHtml(displayName)}</span>
                         <input type="range" class="fanled-slider" min="0" max="100" value="${pct}"
                             onchange="setKlipperFan(${safeName},${safeObject},this.value/100)"
                             title="${pct}%">
@@ -5551,7 +5557,7 @@
                     </div>`;
                 }
                 return `<div class="fanled-row">
-                    <span class="fanled-name">${icon} ${displayName}</span>
+                    <span class="fanled-name">${icon} ${escapeHtml(displayName)}</span>
                     <div class="fanled-bar-wrap"><div class="fanled-bar" style="width:${pct}%"></div></div>
                     <span class="fanled-pct">${pct}%</span>
                 </div>`;
@@ -5580,9 +5586,9 @@
                             <span data-field="tool-target">/ ${formatTemp(tool.target)}</span>
                         </div>
                         ${canControlPrinter(p) ? `<div class="toolhead-control">
-                            <input type="number" class="temp-input" id="tool-${idx}-${name}" placeholder="°C" min="0" max="300" ${docked ? 'disabled' : ''}>
-                            <button class="temp-set-btn" onclick="setKlipperToolTemp(${safeName}, ${idx}, ${safeHeater})" ${docked ? 'disabled title="Tool is docked"' : ''}>Set</button>
-                            <button class="temp-off-btn" onclick="setTemp(${safeName},'nozzle_temp',0,{heater:${safeHeater}})">Off</button>
+                            <button type="button" class="temp-set-btn pc-temp-btn" ${docked ? 'disabled title="Tool is docked"' : `title="Set ${escapeHtml(toolName)} temperature"`}
+                                onclick="openTempPopover(this, ${safeName}, 'nozzle_temp', ${safeTool}, ${safeHeater}, 300, ${Number(tool.target) || 0})">Set temp</button>
+                            <button type="button" class="temp-off-btn" onclick="setTemp(${safeName},'nozzle_temp',0,{heater:${safeHeater}})">Off</button>
                         </div>` : ''}
                     </div>
                     ${fanHtml}
@@ -6035,13 +6041,6 @@
             const temp = parseInt(input?.value) || 0;
             if (temp > 300) { alert('Max nozzle temp is 300°C'); return; }
             setTemp(name, 'nozzle_temp', temp);
-        }
-
-        function setKlipperToolTemp(name, toolIndex, heater) {
-            const input = document.getElementById(`tool-${toolIndex}-${printerDomId(name)}`);
-            const temp = parseInt(input?.value) || 0;
-            if (temp > 300) { alert('Max hotend temp is 300°C'); return; }
-            setTemp(name, 'nozzle_temp', temp, { heater });
         }
 
         function setBedTemp(name) {

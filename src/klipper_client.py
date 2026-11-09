@@ -270,6 +270,9 @@ class KlipperClient:
     def upload_file(self, local_path: str, remote_filename: str) -> bool:
         """Upload a G-code file to Klipper via Moonraker's file upload API."""
         logger.info(f"[{self.name}] Uploading {remote_filename} via Moonraker...")
+        # Uploads reuse short names (e.g. two slices of one model), so a cached
+        # layer count for this name may belong to a different file.
+        self._layer_cache.pop(remote_filename, None)
         try:
             with open(local_path, "rb") as f:
                 resp = self._session.post(

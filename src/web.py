@@ -1010,7 +1010,10 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         if not client:
             return jsonify({"error": "Printer not found"}), 404
         data = request.get_json(silent=True) or {}
-        temp = int(data.get("temp", 0))
+        try:
+            temp = int(data.get("temp", 0))
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Temperature must be a number"}), 400
         ok = client.set_bed_temperature(temp)
         return jsonify({"ok": ok, "temp": temp})
 
@@ -1022,7 +1025,10 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         if not client:
             return jsonify({"error": "Printer not found"}), 404
         data = request.get_json(silent=True) or {}
-        temp = int(data.get("temp", 0))
+        try:
+            temp = int(data.get("temp", 0))
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Temperature must be a number"}), 400
         heater = str(data.get("heater", "") or "")
         if farm_manager.get_printer_type(name) == "klipper":
             ok = client.set_nozzle_temperature(temp, heater=heater)
