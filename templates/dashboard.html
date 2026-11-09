@@ -7036,19 +7036,49 @@
             renderCurrentJobView();
         }
 
-        function renderCurrentJobView() {
+        // The job list refreshes every few seconds. Keep what the viewer has
+        // opened and ticked across refreshes, and skip re-rendering when
+        // nothing changed so the table doesn't flicker or lose its place.
+        const jobWeekOpen = new Map();      // weekId -> expanded?
+        const selectedJobIds = new Set();
+        let lastJobViewKey = '';
+
+        function renderCurrentJobView({ skipIfUnchanged = false } = {}) {
             if (!canWorkQueue() && jobQueueView === 'queued') {
                 jobQueueView = 'history';
             }
             updateJobQueueSubtabs();
-            if (jobQueueView === 'queued') {
-                renderQueuedJobs(latestQueuedJobs);
-                return;
-            }
-            const historyJobs = isAdmin
-                ? latestJobs.filter(job => String(job.status || '').toLowerCase() !== 'queued')
-                : latestJobs;
-            renderJobsGroupedByWeek(historyJobs);
+            const jobs = jobQueueView === 'queued'
+                ? latestQueuedJobs
+                : (isAdmin
+                    ? latestJobs.filter(job => String(job.status || '').toLowerCase() !== 'queued')
+                    : latestJobs);
+            const key = JSON.stringify([jobQueueView, isAdmin, queuedJobsVisibleCount, jobs]);
+            if (skipIfUnchanged && key === lastJobViewKey) return;
+            lastJobViewKey = key;
+
+            // Only keep selections for jobs that are still listed in this view.
+            const listed = new Set(jobs.map(job => job.id));
+            for (const id of [...selectedJobIds]) if (!listed.has(id)) selectedJobIds.delete(id);
+
+            if (jobQueueView === 'queued') renderQueuedJobs(jobs);
+            else renderJobsGroupedByWeek(jobs);
+            syncJobSelectionUI();
+        }
+
+        function syncJobSelectionUI() {
+            document.querySelectorAll('[id$="_all"]').forEach(master => {
+                if (!master.id.startsWith('week_') && master.id !== 'queued_jobs_all') return;
+                const weekId = master.id.slice(0, -4);
+                const boxes = [...document.querySelectorAll(`.job-select-cb[data-week="${weekId}"]`)];
+                const ticked = boxes.filter(cb => cb.checked).length;
+                master.checked = boxes.length > 0 && ticked === boxes.length;
+                master.indeterminate = ticked > 0 && ticked < boxes.length;
+            });
+            const toolbar = document.getElementById('bulkToolbar');
+            if (!toolbar) return;
+            toolbar.style.display = selectedJobIds.size ? 'flex' : 'none';
+            document.getElementById('bulkCount').textContent = `${selectedJobIds.size} selected`;
         }
 
         function renderQueuedJobs(jobs) {
@@ -7092,7 +7122,7 @@
 
         function showMoreQueuedJobs() {
             queuedJobsVisibleCount += 25;
-            renderQueuedJobs(latestQueuedJobs);
+            renderCurrentJobView();
         }
 
         function renderJobsGroupedByWeek(jobs) {
@@ -7115,7 +7145,7 @@
             let html = '';
             for (const group of groups) {
                 const weekId = 'week_' + group.label.replace(/[^a-z0-9]/gi, '_');
-                const isExpanded = group.label === 'This Week';
+                const isExpanded = jobWeekOpen.has(weekId) ? jobWeekOpen.get(weekId) : group.label === 'This Week';
                 html += `<table class="job-table" style="margin-bottom:24px;">
                     <thead>
                         <tr style="background:rgba(255,255,255,0.06);">
@@ -7144,6 +7174,7 @@
             const toggle = document.getElementById(weekId + '_toggle');
             if (!cols || !body || !toggle) return;
             const willExpand = body.style.display === 'none';
+            jobWeekOpen.set(weekId, willExpand);
             cols.style.display = willExpand ? '' : 'none';
             body.style.display = willExpand ? '' : 'none';
             toggle.innerHTML = willExpand ? '&#9662;' : '&#9656;';
@@ -7151,33 +7182,31 @@
 
         function toggleWeekSelection(weekId) {
             const master = document.getElementById(weekId + '_all');
-            document.querySelectorAll(`.job-select-cb[data-week="${weekId}"]`).forEach(cb => { cb.checked = master.checked; });
-            onJobCheckboxChange();
+            document.querySelectorAll(`.job-select-cb[data-week="${weekId}"]`).forEach(cb => {
+                cb.checked = master.checked;
+                if (cb.checked) selectedJobIds.add(Number(cb.dataset.id)); else selectedJobIds.delete(Number(cb.dataset.id));
+            });
+            syncJobSelectionUI();
         }
 
-        function onJobCheckboxChange() {
-            const checked = document.querySelectorAll('.job-select-cb:checked');
-            const toolbar = document.getElementById('bulkToolbar');
-            const countEl = document.getElementById('bulkCount');
-            if (checked.length > 0) {
-                toolbar.style.display = 'flex';
-                countEl.textContent = `${checked.length} selected`;
-            } else {
-                toolbar.style.display = 'none';
+        function onJobCheckboxChange(cb) {
+            if (cb) {
+                if (cb.checked) selectedJobIds.add(Number(cb.dataset.id));
+                else selectedJobIds.delete(Number(cb.dataset.id));
             }
+            syncJobSelectionUI();
         }
 
         function clearBulkSelection() {
+            selectedJobIds.clear();
             document.querySelectorAll('.job-select-cb').forEach(cb => cb.checked = false);
-            document.querySelectorAll('[id$="_all"]').forEach(cb => cb.checked = false);
-            onJobCheckboxChange();
+            syncJobSelectionUI();
         }
 
         async function bulkDeleteSelected() {
-            const checked = [...document.querySelectorAll('.job-select-cb:checked')];
-            if (checked.length === 0) return;
-            if (!confirm(`Delete ${checked.length} job(s)?`)) return;
-            const ids = checked.map(cb => parseInt(cb.dataset.id));
+            const ids = [...selectedJobIds];
+            if (ids.length === 0) return;
+            if (!confirm(`Delete ${ids.length} job(s)?`)) return;
             const deleteLib = document.getElementById('bulkDeleteLib').checked;
             try {
                 const res = await fetch(`${BASE}/api/jobs/bulk_delete`, {
@@ -7246,7 +7275,7 @@
 
             return `
                 <tr>
-                    ${isAdmin ? `<td><input type="checkbox" class="job-select-cb" data-id="${job.id}" data-week="${weekId || ''}" onchange="onJobCheckboxChange()"></td>` : ''}
+                    ${isAdmin ? `<td><input type="checkbox" class="job-select-cb" data-id="${job.id}" data-week="${weekId || ''}" ${selectedJobIds.has(job.id) ? 'checked' : ''} onchange="onJobCheckboxChange(this)"></td>` : ''}
                     <td>${job.id}</td>
                     <td class="job-name-cell" title="${htmlEscape(job.original_name)}">${htmlEscape(prettyJobName(job.original_name))}</td>
                     <td><span class="job-status job-${status}">${escapeHtml(status)}</span></td>
@@ -7594,7 +7623,7 @@
                 // Don't re-render while a dropdown is open — it would clobber it mid-interaction
                 if (document.querySelector('.send-dropdown.open')) return;
 
-                renderCurrentJobView();
+                renderCurrentJobView({ skipIfUnchanged: true });
             } catch (err) {
                 console.error('Failed to refresh jobs:', err);
             }

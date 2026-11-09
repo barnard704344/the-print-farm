@@ -17,6 +17,13 @@ changes to The Print Farm.
     side by side. Toolheads sit next to each other, and Macros sit beside Fans
     & Lights; AMS units keep the full width.
 
+### Fixed
+
+- **Job History week groups no longer snap shut.** The list refreshes every 5
+  seconds and used to rebuild with only "This Week" open, closing any week you
+  had opened and unticking selected jobs. Open weeks and ticked jobs now stay
+  as they are, and the list only redraws when the jobs actually change.
+
 ## v1.0.15 - 2026-11-10 - Printer cards, File Library and Klipper macros
 
 ### Security
