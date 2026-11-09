@@ -861,6 +861,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         for name in states:
             states[name]["staff_only"] = _is_staff_only_printer(name)
             states[name]["orca_port"] = _get_printer_orca_port(name)
+            states[name]["pinned_macros"] = _pinned_macros(name)
             cfg = _get_printer_config_fields(name)
             if staff:
                 states[name].update(cfg)
@@ -1035,6 +1036,82 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         else:
             ok = client.set_nozzle_temperature(temp)
         return jsonify({"ok": ok, "temp": temp, "heater": heater})
+
+    # ── Klipper macros ────────────────────────────────────
+
+    def _printer_config(name):
+        return next((p for p in app_config.get("printers", []) if p.get("name") == name), None)
+
+    def _pinned_macros(name):
+        cfg = _printer_config(name) or {}
+        pinned = cfg.get("pinned_macros") or []
+        return [str(m).upper() for m in pinned if isinstance(m, str)][:12]
+
+    def _klipper_client_or_error(name):
+        client = farm_manager.get_printer(name)
+        if not client:
+            return None, (jsonify({"ok": False, "message": "Printer not found"}), 404)
+        if farm_manager.get_printer_type(name) != "klipper" or not hasattr(client, "run_macro"):
+            return None, (jsonify({"ok": False, "message": "Macros are only available on Klipper printers"}), 400)
+        return client, None
+
+    @app.route(prefix + "/api/printer/<name>/macros", methods=["GET"])
+    @app.route("/api/printer/<name>/macros", methods=["GET"])
+    @printer_control_required
+    def printer_macros(name):
+        client, error = _klipper_client_or_error(name)
+        if error:
+            return error
+        try:
+            macros = client.list_macros(refresh=request.args.get("refresh") == "1")
+        except Exception as e:
+            logger.warning("Could not list macros on %s: %s", name, e)
+            return jsonify({"ok": False, "message": "Could not read macros from the printer"}), 502
+        return jsonify({"ok": True, "macros": macros, "pinned": _pinned_macros(name)})
+
+    @app.route(prefix + "/api/printer/<name>/macros/run", methods=["POST"])
+    @app.route("/api/printer/<name>/macros/run", methods=["POST"])
+    @printer_control_required
+    def printer_run_macro(name):
+        client, error = _klipper_client_or_error(name)
+        if error:
+            return error
+        data = request.get_json(silent=True) or {}
+        params = data.get("params") or {}
+        if not isinstance(params, dict) or len(params) > 20:
+            return jsonify({"ok": False, "message": "Invalid parameters"}), 400
+        try:
+            ok, message = client.run_macro(str(data.get("macro") or ""), params)
+        except Exception as e:
+            logger.warning("Macro on %s failed: %s", name, e)
+            return jsonify({"ok": False, "message": "Could not reach the printer"}), 502
+        logger.info("Macro %s on %s by %s: %s", data.get("macro"), name, session.get("username", "?"), message)
+        return jsonify({"ok": ok, "message": message}), (200 if ok else 400)
+
+    @app.route(prefix + "/api/printer/<name>/macros/pinned", methods=["POST"])
+    @app.route("/api/printer/<name>/macros/pinned", methods=["POST"])
+    @admin_required
+    def printer_pin_macros(name):
+        cfg = _printer_config(name)
+        if not cfg:
+            return jsonify({"ok": False, "message": "Printer not found"}), 404
+        pinned = (request.get_json(silent=True) or {}).get("pinned")
+        if not isinstance(pinned, list) or len(pinned) > 12:
+            return jsonify({"ok": False, "message": "Pin up to 12 macros"}), 400
+        clean = []
+        for macro in pinned:
+            macro = str(macro).strip().upper()
+            if not re.match(r"^[A-Z0-9_]{1,64}$", macro):
+                return jsonify({"ok": False, "message": f"Invalid macro name: {macro}"}), 400
+            if macro not in clean:
+                clean.append(macro)
+        cfg["pinned_macros"] = clean
+        try:
+            _save_config()
+        except OSError as e:
+            logger.error("Could not save pinned macros: %s", e)
+            return jsonify({"ok": False, "message": "Could not save the config file"}), 500
+        return jsonify({"ok": True, "pinned": clean})
 
     def _filament_change_error(name):
         """(client, error_response) for a load/unload request on this printer."""

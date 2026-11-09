@@ -17,6 +17,7 @@ Moonraker API reference:
 """
 
 import logging
+import re
 import threading
 import time
 from dataclasses import dataclass, field
@@ -39,6 +40,34 @@ _MMU_OBJECTS = {
 _FAN_PREFIXES = ("fan_generic", "heater_fan", "controller_fan")
 _LED_PREFIXES = ("neopixel", "led", "dotstar")
 _OUTPUT_PIN_PREFIX = "output_pin"
+
+# Macros the dashboard does not offer: print control has its own buttons,
+# slicer start/end macros only make sense inside a print, and Happy Hare MMU
+# macros have their own panel. Names starting with "_" are internal.
+_MACRO_HIDDEN = {
+    "PAUSE", "RESUME", "CANCEL_PRINT", "START_PRINT", "PRINT_START",
+    "END_PRINT", "PRINT_END",
+}
+_MACRO_HIDDEN_PREFIXES = ("_", "MMU_")
+_MACRO_PARAM_RE = re.compile(
+    r"params\.([A-Za-z_][A-Za-z0-9_]*)(?:\s*\|\s*default\(\s*([^)]*?)\s*\))?"
+)
+_MACRO_PARAM_INDEX_RE = re.compile(r"params\[\s*['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]\s*\]")
+MACRO_PARAM_KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,31}$")
+MACRO_PARAM_VALUE_RE = re.compile(r"^[A-Za-z0-9_.+#:/-]{1,128}$")
+
+
+def parse_macro_params(gcode: str) -> list:
+    """Parameters a macro reads, in order, with defaults where given."""
+    found = {}
+    for match in _MACRO_PARAM_RE.finditer(gcode or ""):
+        key = match.group(1).upper()
+        default = (match.group(2) or "").strip().strip("'\"")
+        if key not in found or (default and not found[key]):
+            found[key] = default
+    for match in _MACRO_PARAM_INDEX_RE.finditer(gcode or ""):
+        found.setdefault(match.group(1).upper(), "")
+    return [{"name": k, "default": v} for k, v in found.items()]
 
 # Default polling interval for status updates (seconds)
 POLL_INTERVAL = 2.0
@@ -123,6 +152,8 @@ class KlipperClient:
         # Stores total layer count from Moonraker file metadata as a fallback
         # when the slicer does not emit SET_PRINT_STATS_INFO commands.
         self._layer_cache: dict = {}
+        self._macro_cache: list = []
+        self._macro_cache_at = 0.0
 
         # Obico integration
         self._obico = None
@@ -350,6 +381,109 @@ class KlipperClient:
     def send_gcode(self, gcode: str) -> bool:
         """Send raw G-code to the printer."""
         return self._gcode(gcode)
+
+    # ── Macros ────────────────────────────────────────────────
+
+    def list_macros(self, refresh: bool = False) -> list:
+        """User macros with description and parameters, cached for a minute."""
+        if not refresh and self._macro_cache and time.monotonic() - self._macro_cache_at < 60:
+            return self._macro_cache
+        objects = self._session.get(f"{self._base_url}/printer/objects/list", timeout=5)
+        objects.raise_for_status()
+        names = [
+            obj[len("gcode_macro "):]
+            for obj in objects.json().get("result", {}).get("objects", [])
+            if obj.startswith("gcode_macro ")
+        ]
+        settings = {}
+        try:
+            cfg = self._session.get(
+                f"{self._base_url}/printer/objects/query",
+                params={"configfile": "settings"},
+                timeout=5,
+            )
+            cfg.raise_for_status()
+            settings = cfg.json().get("result", {}).get("status", {}).get("configfile", {}).get("settings", {})
+        except Exception as e:
+            logger.debug(f"[{self.name}] Could not read macro settings: {e}")
+        macros = []
+        for name in names:
+            upper = name.upper()
+            if upper in _MACRO_HIDDEN or upper.startswith(_MACRO_HIDDEN_PREFIXES):
+                continue
+            section = settings.get(f"gcode_macro {name.lower()}", {})
+            description = str(section.get("description") or "").strip()
+            if description == "G-Code macro":  # Klipper's default, says nothing
+                description = ""
+            macros.append({
+                "name": upper,
+                "description": description,
+                "params": parse_macro_params(section.get("gcode", "")),
+            })
+        macros.sort(key=lambda m: m["name"])
+        self._macro_cache = macros
+        self._macro_cache_at = time.monotonic()
+        return macros
+
+    def run_macro(self, macro: str, params: Optional[dict] = None, wait: float = 3.0) -> tuple:
+        """Run a user macro. Returns (ok, message).
+
+        Moonraker answers /printer/gcode/script only when the script finishes,
+        and macros such as purges or heat soaks can take minutes. The request
+        runs in the background; errors that Klipper reports straight away
+        (unknown command, bad parameter) are still returned to the caller.
+        """
+        if not self._connected.is_set():
+            return False, "Printer is not connected"
+        name = str(macro or "").strip().upper()
+        known = {m["name"] for m in self.list_macros()}
+        if name not in known:
+            known = {m["name"] for m in self.list_macros(refresh=True)}
+        if name not in known:
+            return False, f"Unknown macro: {name or '(none)'}"
+        parts = [name]
+        for key, value in (params or {}).items():
+            key = str(key).strip().upper()
+            value = str(value).strip()
+            if value == "":
+                continue
+            if not MACRO_PARAM_KEY_RE.match(key) or not MACRO_PARAM_VALUE_RE.match(value):
+                return False, f"Invalid parameter {key}={value}"
+            parts.append(f"{key}={value}")
+        script = " ".join(parts)
+        outcome = {}
+
+        def _send():
+            try:
+                resp = self._session.post(
+                    f"{self._base_url}/printer/gcode/script",
+                    params={"script": script},
+                    timeout=3600,
+                )
+                if resp.status_code == 200:
+                    outcome["ok"] = True
+                else:
+                    try:
+                        message = resp.json().get("error", {}).get("message", "")
+                    except Exception:
+                        message = resp.text[:200]
+                    outcome["ok"] = False
+                    outcome["message"] = message or f"Klipper returned HTTP {resp.status_code}"
+                    logger.warning(f"[{self.name}] Macro {script} failed: {outcome['message']}")
+            except Exception as e:
+                outcome["ok"] = False
+                outcome["message"] = f"Could not reach Moonraker: {e}"
+                logger.warning(f"[{self.name}] Macro {script} error: {e}")
+
+        logger.info(f"[{self.name}] Running macro: {script}")
+        worker = threading.Thread(target=_send, name=f"macro-{self.name}", daemon=True)
+        worker.start()
+        worker.join(wait)
+        if "ok" not in outcome:
+            return True, f"{name} started"
+        if outcome["ok"]:
+            return True, f"{name} finished"
+        return False, outcome["message"]
 
     def push_status_request(self) -> bool:
         """Force a status refresh (fetch immediately)."""

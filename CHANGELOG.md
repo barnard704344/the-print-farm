@@ -21,6 +21,26 @@ changes to The Print Farm.
 
 ### Added
 
+- **Klipper macros on printer cards.**
+  - **Card buttons:** Klipper cards get a Macros row with pinned macro buttons
+    and an "All macros…" dialog.
+  - **What's listed:** the dialog lists the printer's user macros with their
+    descriptions and the parameters they read (`params.TEMP|default(220)`),
+    and has a search box. Internal macros (`_…`), print-control and slicer
+    macros (PAUSE, RESUME, CANCEL_PRINT, PRINT_START/END) and Happy Hare
+    `MMU_…` macros are hidden.
+  - **Parameters:** macros that take parameters open a form pre-filled with
+    the defaults. Values are limited to safe characters.
+  - **Who can run them:** anyone who can control the printer. Running one
+    during a print asks for confirmation first.
+  - **Pinning:** staff pin up to 12 macros per printer with ☆, saved as
+    `pinned_macros` in the printer's config.
+  - **Background running:** macros run in the background, so long ones
+    (purges, heat soaks) don't time out or mark the printer offline. Errors
+    Klipper reports straight away are still shown.
+  - **New endpoints:** `GET /api/printer/<name>/macros`,
+    `POST /api/printer/<name>/macros/run`,
+    `POST /api/printer/<name>/macros/pinned`.
 - **Reworked File Library.**
   - **Folder tree:** a sidebar shows every folder. Folders expand when you open
     them, or when you hover over one while dragging.

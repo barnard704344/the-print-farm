@@ -3076,6 +3076,17 @@
         </div>
     </div>
 
+    <!-- Klipper Macros Modal -->
+    <div class="modal-overlay" id="macroOverlay" style="display:none" onclick="if(event.target===this)closeMacroDialog()">
+        <div class="modal" style="max-width:560px;" role="dialog" aria-labelledby="macroTitle">
+            <div class="modal-header">
+                <h2 style="font-size:18px;" id="macroTitle">Macros</h2>
+                <button class="modal-close" onclick="closeMacroDialog()" aria-label="Close">&times;</button>
+            </div>
+            <div id="macroBody"></div>
+        </div>
+    </div>
+
     <!-- Login Modal -->
     <div class="modal-overlay" id="loginOverlay" style="display:none">
         <div class="modal" style="max-width:360px;">
@@ -3750,6 +3761,30 @@
         .pd-toggle input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--accent); flex-shrink: 0; }
         .pd-toggle strong { display: block; font-size: 13px; }
         .pd-toggle small { display: block; font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+        .pc-macros { margin-bottom: 12px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
+        .pc-macros-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+        .pc-macro-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+        .pc-macro-btn { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+        .pc-macro-hint { font-size: 11px; color: var(--text-muted); }
+        .macro-toolbar { display: flex; gap: 8px; margin-bottom: 10px; }
+        .macro-toolbar input {
+            flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+            background: var(--bg); color: var(--text); font-size: 13px;
+        }
+        .macro-list { display: flex; flex-direction: column; gap: 4px; max-height: 55vh; overflow-y: auto; }
+        .macro-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; background: var(--surface-soft); }
+        .macro-info { flex: 1; min-width: 0; }
+        .macro-name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; font-weight: 600; word-break: break-all; }
+        .macro-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+        .macro-params { font-size: 11px; color: var(--info); margin-top: 2px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+        .macro-pin { border: 0; background: none; font-size: 18px; color: var(--text-muted); cursor: pointer; padding: 0 2px; line-height: 1; }
+        .macro-pin.on { color: var(--warning); }
+        .macro-empty { color: var(--text-muted); font-size: 13px; padding: 12px 2px; }
+        .macro-form { display: flex; flex-direction: column; gap: 10px; }
+        .macro-param { display: grid; grid-template-columns: 120px 1fr; align-items: center; gap: 10px; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+        .macro-param input { padding: 7px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; }
+        .macro-note { font-size: 11px; color: var(--text-muted); }
+        .macro-form-actions { display: flex; justify-content: flex-end; gap: 8px; }
         .pc-job-last { font-size: 11px; color: var(--text-muted); margin: -4px 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
         /* Temperatures + print controls */
@@ -5295,6 +5330,7 @@
                         </div>
                         ${showControls ? `<div class="pc-actions" data-field="controls">${renderPrinterControls(name, p)}</div>` : ''}
                     </div>
+                    <div data-field="macros">${renderMacroSection(name, p)}</div>
                     ${renderAmsSection(name, p)}
                     ${renderFanLedSection(name, p)}
                     ${renderMmuSection(name, p)}
@@ -5794,6 +5830,8 @@
             // re-render never discards anything the viewer is typing.
             setHtmlIfChanged(card.querySelector('[data-field="temps"]'),
                 renderTemperatureTiles(name, p, canControlPrinter(p), isBambu, isKlipper));
+
+            setHtmlIfChanged(card.querySelector('[data-field="macros"]'), renderMacroSection(name, p));
 
             // Build plate banner
             const plateEl = card.querySelector('[data-field="plate"]');
@@ -8759,6 +8797,200 @@
             lastPrinterNames = [];
             refreshPrinters();
         }
+
+
+        // ── Klipper macros ───────────────────────────────────
+        // Pinned macros are buttons on the card; "All macros…" lists every user
+        // macro with its description and parameters. Staff pin with the star.
+        const macroCache = {};          // printer -> {macros, pinned}
+        let macroDialog = null;         // {printer, view, macro}
+
+        function renderMacroSection(name, p) {
+            if (p.type !== 'klipper' || !p.connected || !canControlPrinter(p)) return '';
+            const pinned = Array.isArray(p.pinned_macros) ? p.pinned_macros : [];
+            const buttons = pinned.map(m =>
+                `<button type="button" class="btn btn-sm pc-macro-btn" data-macro-card="${htmlEscape(m)}" data-macro-printer="${htmlEscape(name)}" title="Run ${htmlEscape(m)}">${htmlEscape(m.replace(/_/g, ' '))}</button>`
+            ).join('');
+            return `<div class="pc-macros">
+                    <div class="pc-macros-head">
+                        <span class="pc-section-label">Macros</span>
+                        <button type="button" class="btn btn-sm" data-macro-all="${htmlEscape(name)}">All macros…</button>
+                    </div>
+                    ${buttons ? `<div class="pc-macro-btns">${buttons}</div>`
+                        : (isAdmin ? '<div class="pc-macro-hint">Pin favourite macros here with ☆ in All macros.</div>' : '')}
+                </div>`;
+        }
+
+        document.addEventListener('click', e => {
+            const pinnedBtn = e.target.closest('[data-macro-card]');
+            if (pinnedBtn) { runPinnedMacro(pinnedBtn.dataset.macroPrinter, pinnedBtn.dataset.macroCard); return; }
+            const allBtn = e.target.closest('[data-macro-all]');
+            if (allBtn) openMacroDialog(allBtn.dataset.macroAll);
+        });
+
+        async function loadMacros(printer, refresh = false) {
+            if (!refresh && macroCache[printer]) return macroCache[printer];
+            const res = await fetch(`${BASE}/api/printer/${encodeURIComponent(printer)}/macros${refresh ? '?refresh=1' : ''}`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || data.ok === false) throw new Error(data.message || data.error || 'Could not load macros');
+            macroCache[printer] = { macros: data.macros || [], pinned: data.pinned || [] };
+            return macroCache[printer];
+        }
+
+        async function runPinnedMacro(printer, macroName) {
+            let info;
+            try { info = await loadMacros(printer); } catch (err) { showToast(`${printer}: ${err.message}`, 'error'); return; }
+            const macro = info.macros.find(m => m.name === macroName);
+            if (!macro) { showToast(`${printer}: ${macroName} is no longer defined on the printer`, 'error'); return; }
+            if (macro.params.length) { openMacroDialog(printer, macroName); return; }
+            await confirmAndRunMacro(printer, macroName, {});
+        }
+
+        async function confirmAndRunMacro(printer, macroName, params) {
+            const p = (window._farmPrinters || {})[printer] || {};
+            const status = String(p.status || '').toUpperCase();
+            if (['RUNNING', 'PAUSED', 'PAUSE_FILAMENT'].includes(status)) {
+                const ok = confirm(`${printer} is ${status === 'RUNNING' ? 'printing' : 'paused mid-print'}.\n\n`
+                    + `Running ${macroName} now could ruin the print if it homes, moves or purges. Run it anyway?`);
+                if (!ok) return false;
+            }
+            const res = await apiPost(`${BASE}/api/printer/${encodeURIComponent(printer)}/macros/run`, { macro: macroName, params });
+            if (res.ok === false) {
+                showToast(`${printer}: ${res.message || 'Macro failed'}`, 'error');
+                return false;
+            }
+            showToast(`${printer}: ${res.message || macroName + ' sent'}`, 'success');
+            return true;
+        }
+
+        async function openMacroDialog(printer, macroName = null) {
+            macroDialog = { printer, view: macroName ? 'params' : 'list', macro: macroName };
+            document.getElementById('macroTitle').textContent = `Macros — ${printer}`;
+            document.getElementById('macroBody').innerHTML = '<p class="macro-empty">Loading macros…</p>';
+            document.getElementById('macroOverlay').style.display = 'flex';
+            try {
+                await loadMacros(printer);
+            } catch (err) {
+                document.getElementById('macroBody').innerHTML = `<p class="macro-empty">${htmlEscape(err.message)}</p>`;
+                return;
+            }
+            renderMacroDialog();
+        }
+
+        function closeMacroDialog() {
+            document.getElementById('macroOverlay').style.display = 'none';
+            macroDialog = null;
+        }
+
+        function renderMacroDialog() {
+            const d = macroDialog;
+            if (!d) return;
+            const info = macroCache[d.printer] || { macros: [], pinned: [] };
+            const body = document.getElementById('macroBody');
+            if (d.view === 'params') {
+                const macro = info.macros.find(m => m.name === d.macro);
+                if (!macro) { d.view = 'list'; renderMacroDialog(); return; }
+                body.innerHTML = `
+                    <form class="macro-form" id="macroParamForm">
+                        <div class="macro-name">${htmlEscape(macro.name)}</div>
+                        ${macro.description ? `<p class="macro-desc">${htmlEscape(macro.description)}</p>` : ''}
+                        ${macro.params.map(p => `
+                            <label class="macro-param">
+                                <span>${htmlEscape(p.name)}</span>
+                                <input type="text" name="${htmlEscape(p.name)}" value="${htmlEscape(p.default)}" placeholder="${p.default ? '' : 'leave blank for the macro default'}" autocomplete="off">
+                            </label>`).join('')}
+                        <p class="macro-note">Values may contain letters, numbers and . _ - + # : / only.</p>
+                        <div class="macro-form-actions">
+                            <button type="button" class="btn" data-macro-back>Back</button>
+                            <button type="submit" class="btn btn-success">Run ${htmlEscape(macro.name)}</button>
+                        </div>
+                    </form>`;
+                body.querySelector('input')?.focus();
+                return;
+            }
+            const query = (document.getElementById('macroSearch')?.value || '').trim().toLowerCase();
+            if (!document.getElementById('macroSearch')) {
+                body.innerHTML = `
+                    <div class="macro-toolbar">
+                        <input type="search" id="macroSearch" placeholder="Search macros…" aria-label="Search macros" autocomplete="off">
+                        <button type="button" class="btn btn-sm" data-macro-refresh title="Reload macros from the printer">Refresh</button>
+                    </div>
+                    <div class="macro-list" id="macroList"></div>`;
+                document.getElementById('macroSearch').addEventListener('input', renderMacroDialog);
+                document.getElementById('macroSearch').focus();
+            }
+            const list = info.macros.filter(m => !query || m.name.toLowerCase().includes(query) || m.description.toLowerCase().includes(query));
+            document.getElementById('macroList').innerHTML = list.length ? list.map(m => {
+                const pinned = info.pinned.includes(m.name);
+                return `<div class="macro-row">
+                    ${isAdmin ? `<button type="button" class="macro-pin${pinned ? ' on' : ''}" data-macro-pin="${htmlEscape(m.name)}" aria-pressed="${pinned}" title="${pinned ? 'Unpin from card' : 'Pin to card'}">${pinned ? '★' : '☆'}</button>` : ''}
+                    <div class="macro-info">
+                        <div class="macro-name">${htmlEscape(m.name)}</div>
+                        ${m.description ? `<div class="macro-desc">${htmlEscape(m.description)}</div>` : ''}
+                        ${m.params.length ? `<div class="macro-params">${m.params.map(p => htmlEscape(p.name)).join(' · ')}</div>` : ''}
+                    </div>
+                    <button type="button" class="btn btn-sm btn-primary" data-macro-run="${htmlEscape(m.name)}">${m.params.length ? 'Run…' : 'Run'}</button>
+                </div>`;
+            }).join('') : `<p class="macro-empty">${info.macros.length ? 'No macros match your search.' : 'This printer has no user macros.'}</p>`;
+        }
+
+        document.getElementById('macroBody').addEventListener('click', async e => {
+            const d = macroDialog;
+            if (!d) return;
+            const info = macroCache[d.printer];
+            const run = e.target.closest('[data-macro-run]');
+            const pin = e.target.closest('[data-macro-pin]');
+            if (run) {
+                const macro = info.macros.find(m => m.name === run.dataset.macroRun);
+                if (macro && macro.params.length) {
+                    d.view = 'params'; d.macro = macro.name;
+                    renderMacroDialog();
+                } else if (macro) {
+                    run.disabled = true;
+                    await confirmAndRunMacro(d.printer, macro.name, {});
+                    run.disabled = false;
+                }
+            } else if (pin) {
+                const name = pin.dataset.macroPin;
+                const next = info.pinned.includes(name) ? info.pinned.filter(m => m !== name) : [...info.pinned, name];
+                if (next.length > 12) { showToast('Pin up to 12 macros per printer', 'error'); return; }
+                const res = await apiPost(`${BASE}/api/printer/${encodeURIComponent(d.printer)}/macros/pinned`, { pinned: next });
+                if (res.ok === false) { showToast(res.message || 'Could not save pinned macros', 'error'); return; }
+                info.pinned = res.pinned || next;
+                const p = (window._farmPrinters || {})[d.printer];
+                if (p) p.pinned_macros = info.pinned;
+                renderMacroDialog();
+                refreshPrinters();
+            } else if (e.target.closest('[data-macro-back]')) {
+                d.view = 'list'; d.macro = null;
+                document.getElementById('macroBody').innerHTML = '';
+                renderMacroDialog();
+            } else if (e.target.closest('[data-macro-refresh]')) {
+                try { await loadMacros(d.printer, true); renderMacroDialog(); }
+                catch (err) { showToast(err.message, 'error'); }
+            }
+        });
+
+        document.getElementById('macroBody').addEventListener('submit', async e => {
+            e.preventDefault();
+            const d = macroDialog;
+            if (!d || d.view !== 'params') return;
+            const params = {};
+            for (const input of e.target.querySelectorAll('input[name]')) {
+                const value = input.value.trim();
+                if (value && !/^[A-Za-z0-9_.+#:\/-]{1,128}$/.test(value)) {
+                    showToast(`${input.name}: only letters, numbers and . _ - + # : / are allowed`, 'error');
+                    input.focus();
+                    return;
+                }
+                if (value) params[input.name] = value;
+            }
+            if (await confirmAndRunMacro(d.printer, d.macro, params)) closeMacroDialog();
+        });
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && macroDialog) closeMacroDialog();
+        });
 
         // ── Happy Hare Modal ─────────────────────────────────
         async function hhFetch(url, opts = {}) {
