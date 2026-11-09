@@ -6,12 +6,17 @@ Thumbnails are extracted from OrcaSlicer gcode (base64 PNG comments) or 3mf arch
 """
 
 import base64
+import json
 import logging
+import math
 import os
 import re
 import sqlite3
+import struct
 import threading
 import zipfile
+from array import array
+from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -20,7 +25,14 @@ from .image_validation import save_normalized_image
 logger = logging.getLogger(__name__)
 
 MAX_GCODE_READ_BYTES = 64 * 1024 * 1024
-MAX_TOOLPATH_MOVES = 200000
+# Upper bound on extrusion segments sent to the 3D viewer. With chord-tolerance
+# arc tessellation a typical school print needs well under 200k.
+MAX_TOOLPATH_MOVES = 1500000
+# Maximum distance between a true arc and its straight-line approximation.
+ARC_CHORD_TOLERANCE_MM = 0.01
+TOOLPATH_BINARY_MAGIC = b"TPF2"
+DEFAULT_LINE_WIDTH_MM = 0.42
+DEFAULT_LAYER_HEIGHT_MM = 0.2
 MAX_THUMBNAIL_BYTES = 10 * 1024 * 1024
 
 
@@ -490,10 +502,14 @@ class FileLibrary:
             return None
 
     @staticmethod
-    def _tessellate_arc(cx, cy, cz, nx, ny, nz, i_off, j_off, clockwise, segments=8):
-        """Expand a G2/G3 arc into a list of (x1,y1,z1,x2,y2,z2) line segments."""
-        import math
-        # Arc centre
+    def _tessellate_arc(cx, cy, cz, nx, ny, nz, i_off, j_off, clockwise, segments=64,
+                        tolerance=ARC_CHORD_TOLERANCE_MM):
+        """Expand a G2/G3 arc into (x1,y1,z1,x2,y2,z2) line segments.
+
+        The segment count keeps every chord within ``tolerance`` mm of the true
+        arc (capped at ``segments``), so small arcs stay cheap and large arcs
+        stay smooth.
+        """
         center_x = cx + i_off
         center_y = cy + j_off
         r = math.sqrt(i_off * i_off + j_off * j_off)
@@ -511,16 +527,16 @@ class FileLibrary:
                 end_angle += 2 * math.pi
 
         sweep = end_angle - start_angle
-        # Adaptive segment count based on arc length
-        arc_len = abs(sweep) * r
-        # Ultra-fine arc segmentation for highest curvature fidelity in the 3D toolpath view.
-        n = max(3, min(segments, int(arc_len / 0.08)))
+        if tolerance >= r:
+            max_step = math.pi / 2
+        else:
+            max_step = 2 * math.acos(1 - tolerance / r)
+        n = max(1, min(int(segments), math.ceil(abs(sweep) / max_step)))
 
         result = []
-        pz = cz
-        px, py = cx, cy
-        for s in range(1, n + 1):
-            t = s / n
+        px, py, pz = cx, cy, cz
+        for step in range(1, n + 1):
+            t = step / n
             a = start_angle + sweep * t
             sx = center_x + r * math.cos(a)
             sy = center_y + r * math.sin(a)
@@ -528,49 +544,93 @@ class FileLibrary:
             result.append((px, py, pz, sx, sy, sz))
             px, py, pz = sx, sy, sz
         # Snap last point to exact endpoint
-        if result:
-            lx1, ly1, lz1, _, _, _ = result[-1]
-            result[-1] = (lx1, ly1, lz1, nx, ny, nz)
+        lx1, ly1, lz1, _, _, _ = result[-1]
+        result[-1] = (lx1, ly1, lz1, nx, ny, nz)
         return result
 
-    def get_toolpath_data(self, file_id: int) -> Optional[dict]:
-        """Return parsed gcode toolpath moves as JSON-friendly data for the 3D viewer."""
+    def _toolpath_source(self, file_id: int):
         conn = self._get_conn()
         row = conn.execute(
-            "SELECT file_path, stored_name, original_name FROM files WHERE id = ?",
+            "SELECT file_path FROM files WHERE id = ?",
             (file_id,),
         ).fetchone()
         conn.close()
-        if not row:
-            return None
+        return row["file_path"] if row else None
 
-        gcode_lines = self._read_gcode_lines(row["file_path"])
+    def _parse_toolpath(self, file_path: str, max_moves: int = MAX_TOOLPATH_MOVES) -> Optional[dict]:
+        """Parse extrusion moves with feature, line width and layer height.
+
+        Returns compact arrays:
+          positions: float32 [x1,y1,z1,x2,y2,z2] per move (G-code coordinates)
+          widths / heights: float32 per move, in mm
+          features: uint8 index per move into feature_names
+        """
+        gcode_lines = self._read_gcode_lines(file_path)
         if not gcode_lines:
             return None
 
-        moves = []
-        move_limit_reached = False
-        cx, cy, cz = 0.0, 0.0, 0.0
+        positions = array("f")
+        widths = array("f")
+        heights = array("f")
+        features = array("B")
+        feat_map = {}
+        count = 0
+        truncated = False
+
+        cx = cy = cz = 0.0
         last_e = 0.0
         absolute_xyz = True
         absolute_e = True
-        current_feature = ""
+        feature_index = None
+        line_width = DEFAULT_LINE_WIDTH_MM
+        layer_height = DEFAULT_LAYER_HEIGHT_MM
+        width_re = re.compile(r";\s*(?:LINE_WIDTH|WIDTH)\s*:\s*([0-9.]+)")
+        height_re = re.compile(r";\s*(?:LAYER_HEIGHT|HEIGHT)\s*:\s*([0-9.]+)")
+        feature_re = re.compile(r";\s*(?:FEATURE|TYPE)\s*:\s*(.+)")
+
+        def add(x1, y1, z1, x2, y2, z2):
+            positions.extend((x1, y1, z1, x2, y2, z2))
+            widths.append(line_width)
+            heights.append(layer_height)
+            features.append(feature_index)
+
         for line in gcode_lines:
             stripped = line.strip()
             if not stripped:
                 continue
-            if stripped.startswith(";"):
-                m = re.match(r";\s*(?:FEATURE|TYPE):\s*(.+)", stripped)
+            if stripped[0] == ";":
+                m = feature_re.match(stripped)
                 if m:
-                    current_feature = m.group(1).strip()
+                    name = m.group(1).strip()
+                    if name not in feat_map:
+                        if len(feat_map) >= 255:
+                            name = "Other"
+                        feat_map.setdefault(name, len(feat_map))
+                    feature_index = feat_map[name]
+                    continue
+                m = width_re.match(stripped)
+                if m:
+                    try:
+                        value = float(m.group(1))
+                        if 0.05 <= value <= 5:
+                            line_width = value
+                    except ValueError:
+                        pass
+                    continue
+                m = height_re.match(stripped)
+                if m:
+                    try:
+                        value = float(m.group(1))
+                        if 0.01 <= value <= 2:
+                            layer_height = value
+                    except ValueError:
+                        pass
                 continue
-            parts = stripped.split(";")[0].split()
+
+            parts = stripped.split(";", 1)[0].split()
             if not parts:
                 continue
-
             cmd = parts[0]
-
-            # Track G-code coordinate and extrusion modes.
             if cmd == "G90":
                 absolute_xyz = True
                 continue
@@ -583,21 +643,20 @@ class FileLibrary:
             if cmd == "M83":
                 absolute_e = False
                 continue
+            if cmd not in ("G0", "G1", "G2", "G3", "G92"):
+                continue
 
             params = {}
-            for p in parts[1:]:
-                if p and p[0] in "XYZEFIJxyzefij":
+            for token in parts[1:]:
+                if token and token[0] in "XYZEIJxyzeij":
                     try:
-                        params[p[0].upper()] = float(p[1:])
+                        params[token[0].upper()] = float(token[1:])
                     except ValueError:
                         pass
 
-            # Reset extruder position in absolute-E mode.
-            if cmd == "G92" and "E" in params:
-                last_e = params["E"]
-                continue
-
-            if cmd not in ("G0", "G1", "G2", "G3"):
+            if cmd == "G92":
+                if "E" in params:
+                    last_e = params["E"]
                 continue
 
             if absolute_xyz:
@@ -616,63 +675,138 @@ class FileLibrary:
                     last_e = params["E"]
                 else:
                     delta_e = params["E"]
-                    last_e += params["E"]
+                    last_e += delta_e
                 extruding = delta_e > 0.00001
 
-            is_move = cmd in ("G1", "G2", "G3")
-            if is_move and extruding and (nx != cx or ny != cy or nz != cz):
-                if current_feature:
-                    if cmd in ("G2", "G3") and ("I" in params or "J" in params):
-                        arc_segs = self._tessellate_arc(
-                            cx, cy, cz, nx, ny, nz,
-                            params.get("I", 0), params.get("J", 0),
-                            clockwise=(cmd == "G2"),
-                            segments=240,
-                        )
-                        for seg in arc_segs:
-                            moves.append((*seg, current_feature))
-                            if len(moves) >= MAX_TOOLPATH_MOVES:
-                                move_limit_reached = True
-                                break
-                    else:
-                        moves.append((cx, cy, cz, nx, ny, nz, current_feature))
-                        move_limit_reached = len(moves) >= MAX_TOOLPATH_MOVES
+            if (
+                cmd != "G0"
+                and extruding
+                and feature_index is not None
+                and (nx != cx or ny != cy or nz != cz)
+            ):
+                if cmd in ("G2", "G3") and ("I" in params or "J" in params):
+                    for seg in self._tessellate_arc(
+                        cx, cy, cz, nx, ny, nz,
+                        params.get("I", 0.0), params.get("J", 0.0),
+                        clockwise=(cmd == "G2"),
+                    ):
+                        add(*seg)
+                        count += 1
+                else:
+                    add(cx, cy, cz, nx, ny, nz)
+                    count += 1
+                if count >= max_moves:
+                    truncated = True
+                    cx, cy, cz = nx, ny, nz
+                    break
             cx, cy, cz = nx, ny, nz
-            if move_limit_reached:
-                break
 
-        if not moves:
+        if not count:
             return None
-
-        min_x = min(min(m[0], m[3]) for m in moves)
-        min_y = min(min(m[1], m[4]) for m in moves)
-        min_z = min(min(m[2], m[5]) for m in moves)
-        max_x = max(max(m[0], m[3]) for m in moves)
-        max_y = max(max(m[1], m[4]) for m in moves)
-        max_z = max(max(m[2], m[5]) for m in moves)
-
-        # Pack as flat arrays for compact transfer: [x1,y1,z1,x2,y2,z2, ...]
-        positions = []
-        features = []
-        feat_map = {}
-        feat_idx = 0
-        for x1, y1, z1, x2, y2, z2, feat in moves:
-            positions.extend([round(x1, 5), round(y1, 5), round(z1, 5),
-                              round(x2, 5), round(y2, 5), round(z2, 5)])
-            if feat not in feat_map:
-                feat_map[feat] = feat_idx
-                feat_idx += 1
-            features.append(feat_map[feat])
+        if truncated:
+            logger.warning("Toolpath preview truncated at %s moves for %s", count, file_path)
+            del positions[count * 6:]
+            del widths[count:]
+            del heights[count:]
+            del features[count:]
 
         return {
             "positions": positions,
+            "widths": widths,
+            "heights": heights,
             "features": features,
-            "feature_names": {v: k for k, v in feat_map.items()},
-            "bounds": {
-                "min": [round(min_x, 2), round(min_y, 2), round(min_z, 2)],
-                "max": [round(max_x, 2), round(max_y, 2), round(max_z, 2)],
-            },
-            "count": len(moves),
+            "feature_names": {index: name for name, index in feat_map.items()},
+            "count": count,
+            "truncated": truncated,
+        }
+
+    @staticmethod
+    def _toolpath_bounds(positions) -> dict:
+        xs = positions[0::3]
+        ys = positions[1::3]
+        zs = positions[2::3]
+        return {
+            "min": [round(min(xs), 2), round(min(ys), 2), round(min(zs), 2)],
+            "max": [round(max(xs), 2), round(max(ys), 2), round(max(zs), 2)],
+        }
+
+    def get_toolpath_binary(self, file_id: int) -> Optional[bytes]:
+        """Return the toolpath in a compact binary format for the 3D viewer.
+
+        Layout (little-endian):
+          4s   magic "TPF2"
+          u32  move count
+          u32  length of UTF-8 JSON header
+          ...  JSON header {"feature_names", "bounds", "truncated"}, padded to 4 bytes
+          f32  positions[count * 6]  (G-code X,Y,Z start then end)
+          f32  widths[count]          (mm)
+          f32  heights[count]         (mm)
+          u8   features[count]
+        """
+        file_path = self._toolpath_source(file_id)
+        if not file_path or not os.path.exists(file_path):
+            return None
+        key = (file_id, file_path, os.path.getmtime(file_path))
+        with self._lock:
+            cache = getattr(self, "_toolpath_cache", None)
+            if cache is None:
+                cache = self._toolpath_cache = OrderedDict()
+            if key in cache:
+                cache.move_to_end(key)
+                return cache[key]
+
+        data = self._parse_toolpath(file_path)
+        if not data:
+            return None
+        header = json.dumps({
+            "feature_names": {str(k): v for k, v in data["feature_names"].items()},
+            "bounds": self._toolpath_bounds(data["positions"]),
+            "truncated": data["truncated"],
+        }).encode("utf-8")
+        header += b" " * (-len(header) % 4)
+        for arr in (data["positions"], data["widths"], data["heights"]):
+            if arr.itemsize != 4:
+                raise RuntimeError("float32 arrays required")
+        import sys
+        if sys.byteorder != "little":
+            for arr in (data["positions"], data["widths"], data["heights"]):
+                arr.byteswap()
+        payload = b"".join((
+            TOOLPATH_BINARY_MAGIC,
+            struct.pack("<II", data["count"], len(header)),
+            header,
+            data["positions"].tobytes(),
+            data["widths"].tobytes(),
+            data["heights"].tobytes(),
+            data["features"].tobytes(),
+        ))
+        with self._lock:
+            cache[key] = payload
+            while len(cache) > 6:
+                cache.popitem(last=False)
+        return payload
+
+    def get_toolpath_data(self, file_id: int) -> Optional[dict]:
+        """Return parsed toolpath moves as JSON-friendly data (legacy format).
+
+        The dashboard uses :meth:`get_toolpath_binary`; this remains for API
+        clients and includes per-move widths and heights.
+        """
+        file_path = self._toolpath_source(file_id)
+        if not file_path:
+            return None
+        data = self._parse_toolpath(file_path)
+        if not data:
+            return None
+        return {
+            "positions": [round(v, 5) for v in data["positions"]],
+            "widths": [round(v, 4) for v in data["widths"]],
+            "heights": [round(v, 4) for v in data["heights"]],
+            "features": list(data["features"]),
+            "feature_names": data["feature_names"],
+            "bounds": self._toolpath_bounds(data["positions"]),
+            "count": data["count"],
+            "truncated": data["truncated"],
         }
 
     def _render_gcode_thumbnail(self, file_path: str, stored_name: str) -> Optional[str]:

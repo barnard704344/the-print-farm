@@ -21,6 +21,11 @@ changes to The Print Farm.
 
 ### Added
 
+- **Solid 3D toolpath preview.** The File Library viewer now draws extrusions
+  as solid, lit beads sized from the slicer's line width and layer height, with
+  OrcaSlicer-style feature colours, a feature legend with show/hide toggles, a
+  layer slider, a printer bed, and Reset/Top view buttons. Touch pinch-zoom is
+  supported.
 - **Build plate check.** A finished or failed print marks the printer's plate
   as needing clearing, and the printer will not accept another job (queue,
   reprint, API, or pool dispatch) until staff or an approved student presses
@@ -48,6 +53,14 @@ changes to The Print Farm.
 
 ### Fixed
 
+- The 3D toolpath viewer no longer cuts prints off partway up. Arcs were split
+  into 0.08 mm pieces, so moderate Bambu prints hit the 200,000-segment limit
+  and later layers were silently dropped (for example, a 14 mm print stopped at
+  5.8 mm). Arcs now use a 0.01 mm chord tolerance, the limit is 1.5 million
+  segments, and truncation is shown in the viewer. Toolpaths are sent in a
+  compact binary format and cached.
+- The viewer no longer throws errors on window resize after it is closed, and
+  orbiting no longer sticks when the mouse is released outside the canvas.
 - Open cameras no longer exhaust the web server. The full-screen camera view
   polls snapshots instead of holding an MJPEG stream open, snapshots answer
   `304 Not Modified` when the frame is unchanged, the MJPEG endpoint is capped

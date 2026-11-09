@@ -1727,6 +1727,15 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
     def library_file_toolpath(file_id):
         if not file_library:
             return jsonify({"error": "Library not available"}), 500
+        if request.args.get("format") == "bin":
+            payload = file_library.get_toolpath_binary(file_id)
+            if not payload:
+                return jsonify({"error": "No toolpath data available"}), 404
+            return Response(
+                payload,
+                mimetype="application/octet-stream",
+                headers={"Cache-Control": "private, max-age=300"},
+            )
         data = file_library.get_toolpath_data(file_id)
         if not data:
             return jsonify({"error": "No toolpath data available"}), 404
