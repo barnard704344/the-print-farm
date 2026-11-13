@@ -8,7 +8,7 @@ changes to The Print Farm.
 ### Added
 
 - **Better printer card layout.**
-  - **Own height:** cards now keep their own height and pack together, so a
+  - **Own height:** cards keep their own height within stable rows, so a
     long card (for example a Klipper toolchanger with macros and fans) no
     longer stretches the cards beside it.
   - **Card size switch:** a **Compact / Standard / Wide** switch in the
@@ -18,6 +18,10 @@ changes to The Print Farm.
     & Lights; AMS units keep the full width.
 
 ### Fixed
+
+- **Printer cards keep a stable layout when offline or cameras are hidden.**
+  Cards stay in their columns as content changes height. Narrow cards put
+  actions below the printer name, and long names wrap instead of being cut off.
 
 - **Printer recovery scans run across network ranges concurrently.** Scanning
   multiple configured printer VLANs sequentially could exceed the web proxy
