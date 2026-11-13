@@ -19,6 +19,10 @@ changes to The Print Farm.
 
 ### Fixed
 
+- **Printer recovery scans run across network ranges concurrently.** Scanning
+  multiple configured printer VLANs sequentially could exceed the web proxy
+  timeout and hide a printer that had moved to a new address.
+
 - **Job History week groups no longer snap shut.** The list refreshes every 5
   seconds and used to rebuild with only "This Week" open, closing any week you
   had opened and unticking selected jobs. Open weeks and ticked jobs now stay

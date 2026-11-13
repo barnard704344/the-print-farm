@@ -170,6 +170,29 @@ class PrinterReconnectTests(unittest.TestCase):
         self.assertEqual(response.get_json()["candidates"], [])
         identity_test.assert_not_called()
 
+    def test_reconnect_scans_subnets_concurrently(self):
+        # Both scanners must start before either can finish. Sequential scans
+        # of the configured VLANs exceeded the reverse proxy request timeout.
+        barrier = threading.Barrier(2, timeout=5)
+
+        def scan_result(prefix, timeout=1.0):
+            barrier.wait()
+            return ["192.168.1.77"] if prefix == "192.168.1" else []
+
+        with (
+            patch("src.web.discover_printers", return_value=[]),
+            patch("src.web.get_local_subnets", return_value=[]),
+            patch("src.web.scan_subnet", side_effect=scan_result),
+            patch("src.web.test_bambu_connection", return_value={"ok": True}),
+        ):
+            response = self._client().post(
+                "/api/discover/reconnect/scan",
+                json={"name": "Workshop P1S", "subnet": "192.168.0.0/23", "timeout": 1},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["candidates"][0]["host"], "192.168.1.77")
+
     def test_reconnect_uses_configured_printer_vlan_when_field_is_blank(self):
         self.config["discovery"] = {"scan_subnets": ["10.136.32.0/21"]}
         with (

@@ -2181,8 +2181,14 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             )
             scanned_subnets = subnets
             scan = scan_subnet if printer_type == "bambulab" else scan_moonraker_port
-            for subnet_prefix in subnets:
-                for host in scan(subnet_prefix, timeout=1.0):
+            # Scan VLAN ranges concurrently so recovery finishes before the
+            # web proxy times out. Each subnet scanner already bounds its ports.
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                scan_results = list(executor.map(
+                    lambda subnet_prefix: scan(subnet_prefix, timeout=1.0), subnets,
+                ))
+            for hosts in scan_results:
+                for host in hosts:
                     if (
                         host in local_ips or host == current_host
                         or host in configured_hosts or host in seen_hosts
