@@ -240,7 +240,9 @@ dashboard shows:
 Other printer fields include `plate_needs_clear`, `plate_finished_status`,
 `plate_finished_at`, `ams_units` (per-unit `id`, `humidity`, `humidity_raw`
 percentage on newer firmware, and `temp`), `wifi_signal`, `hms`,
-`print_error`, `nozzle_diameter` and `nozzle_type`.
+`print_error`, `error_message` (Klipper: why a print was blocked or failed,
+or why Klipper shut down; empty otherwise), `nozzle_diameter` and
+`nozzle_type`.
 
 #### `GET /api/farm/summary`
 

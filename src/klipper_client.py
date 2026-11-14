@@ -72,6 +72,53 @@ def parse_macro_params(gcode: str) -> list:
 # Default polling interval for status updates (seconds)
 POLL_INTERVAL = 2.0
 
+# How many G-code console lines to read when looking for the error behind a
+# cancelled or failed print.
+GCODE_STORE_COUNT = 200
+
+# "Error evaluating 'gcode_macro FOO:gcode': gcode.CommandError: real message"
+_MACRO_ERROR_PREFIX_RE = re.compile(
+    r"^Error evaluating '[^']*':\s*(?:[\w.]*CommandError:\s*)?"
+)
+_CANCEL_COMMAND_RE = re.compile(r"^\s*(CANCEL_PRINT|SDCARD_RESET_FILE)\b", re.IGNORECASE)
+_PRINT_START_COMMAND_RE = re.compile(r"^\s*SDCARD_PRINT_FILE\b", re.IGNORECASE)
+
+
+def clean_klipper_error(message: str) -> str:
+    """Turn a raw Klipper error line into a short message for people."""
+    text = str(message or "").strip()
+    if text.startswith("!!"):
+        text = text[2:].strip()
+    text = _MACRO_ERROR_PREFIX_RE.sub("", text)
+    text = text.splitlines()[0].strip() if text else ""
+    return text[:300]
+
+
+def find_print_error(entries: list) -> str:
+    """Return the error that ended the most recent print, or "".
+
+    *entries* is Moonraker's ``gcode_store`` list (oldest first). Only errors
+    raised after the last print start count, and an error followed by a
+    CANCEL_PRINT/SDCARD_RESET_FILE command was not what ended the print (a
+    person cancelled it afterwards).
+    """
+    start = 0
+    for idx, entry in enumerate(entries or []):
+        msg = str(entry.get("message", ""))
+        if entry.get("type") == "command" and _PRINT_START_COMMAND_RE.match(msg):
+            start = idx
+        elif entry.get("type") == "response" and msg.startswith("File opened:"):
+            start = idx
+
+    error = ""
+    for entry in (entries or [])[start:]:
+        msg = str(entry.get("message", ""))
+        if entry.get("type") == "command" and _CANCEL_COMMAND_RE.match(msg):
+            error = ""
+        elif entry.get("type") == "response" and msg.startswith("!!"):
+            error = clean_klipper_error(msg)
+    return error
+
 
 def _hex_color(val: str) -> str:
     """Normalise a bare hex color (e.g. 'ff0000') to '#ff0000'."""
@@ -154,6 +201,12 @@ class KlipperClient:
         self._layer_cache: dict = {}
         self._macro_cache: list = []
         self._macro_cache_at = 0.0
+
+        # Error behind the current cancelled/error print state, looked up once
+        # per (state, filename, duration) so the console log isn't re-read
+        # every poll.
+        self._print_error_key = None
+        self._print_error = ""
 
         # Obico integration
         self._obico = None
@@ -569,6 +622,7 @@ class KlipperClient:
     def _fetch_status(self):
         """Query Moonraker for current printer state and update self._state."""
         params = {
+            "webhooks": "state,state_message",
             "heater_bed": "temperature,target",
             "print_stats": "state,filename,total_duration,print_duration,filament_used,message,info",
             "display_status": "progress,message",
@@ -625,12 +679,28 @@ class KlipperClient:
         if _info_total_layers == 0 and _ps_filename:
             _meta_total_layers = self._get_cached_layer_count(_ps_filename)
 
+        # Work out whether the printer is in an error state, and why. Klipper
+        # reports a print blocked by a macro (e.g. a safety check in
+        # PRINT_START) as "cancelled" with an empty message; the reason is only
+        # in the console log.
+        webhooks = result.get("webhooks", {})
+        klippy_state = webhooks.get("state", "ready")
+        klipper_state = ps_pre.get("state", "standby")
+        error_message = ""
+        if klippy_state in ("shutdown", "error"):
+            error_message = (clean_klipper_error(webhooks.get("state_message", ""))
+                             or f"Klipper {klippy_state}")
+        elif klipper_state in ("cancelled", "error"):
+            error_message = self._lookup_print_error(ps_pre)
+
         with self._state_lock:
             # Print stats
             ps = result.get("print_stats", {})
-            klipper_state = ps.get("state", "standby")
-            self._state.status = self._map_status(klipper_state)
+            self._state.status = (
+                PrintStatus.FAILED if error_message else self._map_status(klipper_state)
+            )
             self._state.gcode_state = klipper_state
+            self._state.error_message = error_message
             raw_filename = ps.get("filename", "")
             # Strip UUID prefix (32 hex chars + underscore) added during upload
             if len(raw_filename) > 33 and raw_filename[32] == "_" and all(c in "0123456789abcdef" for c in raw_filename[:32]):
@@ -865,6 +935,43 @@ class KlipperClient:
             logger.info(f"[{self.name}] Status: {prev_status.value} -> {new_status.value}")
             if self._on_state_change:
                 self._on_state_change(self.name, self._state)
+
+    def _lookup_print_error(self, print_stats: dict) -> str:
+        """Error that ended the current cancelled/error print, cached per print."""
+        key = (
+            print_stats.get("state"),
+            print_stats.get("filename"),
+            print_stats.get("total_duration"),
+        )
+        if key == self._print_error_key:
+            return self._print_error
+
+        error = ""
+        if print_stats.get("state") == "error":
+            error = clean_klipper_error(print_stats.get("message", ""))
+        try:
+            resp = self._session.get(
+                f"{self._base_url}/server/gcode_store",
+                params={"count": GCODE_STORE_COUNT},
+                timeout=5,
+            )
+            if resp.status_code == 200:
+                entries = resp.json().get("result", {}).get("gcode_store", [])
+                error = find_print_error(entries) or error
+            else:
+                logger.debug(f"[{self.name}] gcode_store returned {resp.status_code}")
+        except Exception as e:
+            # Don't cache a failed lookup; try again next poll.
+            logger.debug(f"[{self.name}] Could not read gcode_store: {e}")
+            return error
+        if print_stats.get("state") == "error" and not error:
+            error = "Klipper reported a print error"
+
+        if error and error != self._print_error:
+            logger.warning(f"[{self.name}] Print error: {error}")
+        self._print_error_key = key
+        self._print_error = error
+        return error
 
     def _get_cached_layer_count(self, filename: str) -> int:
         """Return total layer count for *filename* from Moonraker file metadata.

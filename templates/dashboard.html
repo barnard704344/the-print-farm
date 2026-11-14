@@ -3729,6 +3729,8 @@
         .pc-chip-ok { background: var(--success-dim); color: var(--success); }
         .pc-chip-warn { background: var(--warning-dim); color: var(--warning); }
         .pc-chip-bad { background: var(--danger-dim); color: var(--danger); }
+        .pc-job-error { display: flex; gap: 6px; align-items: flex-start; margin: 4px 0; padding: 6px 8px; border-radius: 6px; background: var(--danger-dim); color: var(--danger); font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+        .pc-job-error svg { flex: none; margin-top: 1px; }
         .pc-chip-staff { background: var(--info-dim); color: var(--info); }
         .pc-chip-klipper { background: rgba(255,102,0,0.15); color: #ff6600; }
         .pc-chip-on { background: var(--warning-dim); color: var(--warning); }
@@ -5178,6 +5180,9 @@
             const chips = [];
             const isBambu = (p.type || 'bambulab') === 'bambulab';
             if (p.type === 'klipper') chips.push(`<span class="pc-chip pc-chip-klipper">Klipper</span>`);
+            if (p.connected && p.type === 'klipper' && p.error_message) {
+                chips.push(`<span class="pc-chip pc-chip-bad" title="${htmlEscape(p.error_message)}">${iconMarkup('alert')}Error</span>`);
+            }
             if (p.connected && isBambu) {
                 const m = String(p.wifi_signal || '').match(/-?\d+/);
                 if (m) {
@@ -5260,6 +5265,7 @@
             return `
                 <div class="pc-job-label">${htmlEscape(label)}</div>
                 <div class="pc-job-name" title="${htmlEscape(p.subtask_name || title)}">${htmlEscape(title)}</div>
+                ${connected && p.error_message ? `<div class="pc-job-error" title="${htmlEscape(p.error_message)}">${iconMarkup('alert')}${htmlEscape(p.error_message)}</div>` : ''}
                 ${ready && p.subtask_name ? `<div class="pc-job-last" title="${htmlEscape(p.subtask_name)}">Last: ${htmlEscape(prettyJobName(p.subtask_name))}</div>` : ''}
                 <div class="pc-job-progress">
                     <div class="progress-bar-container"><div class="progress-bar ${barClass}" style="width:${barWidth}%"></div></div>
@@ -6064,6 +6070,7 @@
                         : `Unavailable${p.obico.error ? ` — ${p.obico.error}` : ''}`) : ''],
                 ], true),
                 detailSection('Errors', [
+                    ['Printer Message', p.error_message || 'None'],
                     ['Print Error', p.print_error && p.print_error !== 0 ? `0x${Number(p.print_error).toString(16).toUpperCase()}` : 'None'],
                     ['HMS', hms],
                 ], true),

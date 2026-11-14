@@ -251,6 +251,7 @@ class FarmManager:
                 "wifi_signal": s.wifi_signal,
                 "chamber_light": s.chamber_light,
                 "print_error": s.print_error,
+                "error_message": getattr(s, "error_message", "") or "",
                 "hms": s.hms or [],
                 "has_ams": s.has_ams,
                 "ams_serial": getattr(client, 'ams_serial', ''),

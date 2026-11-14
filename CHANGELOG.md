@@ -27,6 +27,19 @@ changes to The Print Farm.
   multiple configured printer VLANs sequentially could exceed the web proxy
   timeout and hide a printer that had moved to a new address.
 
+- **Klipper errors now reach the farm.** When a macro blocked a print (for
+  example a print-area safety check in `PRINT_START`), Klipper only reported
+  the print as "cancelled" with no message, so the farm showed the printer as
+  idle, sent no notification, and left the job stuck in "printing" forever.
+  - The farm now reads the reason from Klipper's console, marks the printer
+    **Failed**, fails the job, and includes the reason in the notification.
+  - A Klipper shutdown (MCU error, heater fault) also shows as **Failed** with
+    Klipper's message.
+  - Klipper printer cards show an **Error** chip and the error text, and the
+    printer Details panel lists it under **Printer Message**. The printer
+    state API has a new `error_message` field.
+  - A job cancelled at the printer (Mainsail, KlipperScreen, `CANCEL_PRINT`)
+    is now marked cancelled instead of staying in "printing".
 - **Job History week groups no longer snap shut.** The list refreshes every 5
   seconds and used to rebuild with only "This Week" open, closing any week you
   had opened and unticking selected jobs. Open weeks and ticked jobs now stay

@@ -252,6 +252,7 @@ class PrintState:
     obico: dict = field(default_factory=dict)
     # Errors
     print_error: int = 0
+    error_message: str = ""  # human-readable printer error (Klipper)
     hms: list = field(default_factory=list)
     raw_data: dict = field(default_factory=dict)
 

@@ -482,6 +482,8 @@ def cmd_run(args, config: dict):
     def _get_error_reason(state):
         """Extract a human-readable error reason from printer state."""
         parts = []
+        if getattr(state, "error_message", ""):
+            parts.append(state.error_message)
         if state.print_error and state.print_error != 0:
             parts.append(f"error code 0x{state.print_error:08X}")
         if state.hms:
@@ -592,6 +594,20 @@ def cmd_run(args, config: dict):
                             notifier.notify(
                                 "print_failed", subj,
                                 f"Job #{job_key} failed on {pname}.\nFile: {fname}\nReason: {reason or 'Unknown'}",
+                            )
+                        elif (
+                            state.status == PrintStatus.IDLE
+                            and state.gcode_state == "cancelled"
+                            and farm.get_printer_type(pname) == "klipper"
+                        ):
+                            # Cancelled at the printer (Mainsail, KlipperScreen,
+                            # CANCEL_PRINT) with no error behind it.
+                            queue.cancel_job(job_key)
+                            logger.info(f"Job #{job_key} was cancelled on {pname}")
+                            notifier.notify(
+                                "print_failed",
+                                f"Print Cancelled — {fname}",
+                                f"Job #{job_key} was cancelled on {pname}.\nFile: {fname}",
                             )
                         elif (
                             state.status == PrintStatus.IDLE
