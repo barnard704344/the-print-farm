@@ -696,8 +696,12 @@ class KlipperClient:
         with self._state_lock:
             # Print stats
             ps = result.get("print_stats", {})
+            # A Klipper shutdown can't take jobs, so it is FAILED. A print that
+            # was blocked/cancelled stays IDLE (nothing is on the plate and the
+            # next job must be sendable); error_message carries the reason.
             self._state.status = (
-                PrintStatus.FAILED if error_message else self._map_status(klipper_state)
+                PrintStatus.FAILED if klippy_state in ("shutdown", "error")
+                else self._map_status(klipper_state)
             )
             self._state.gcode_state = klipper_state
             self._state.error_message = error_message

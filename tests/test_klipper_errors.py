@@ -79,11 +79,12 @@ def print_stats(state, filename="ESP32-2432S028CaseUSB-C.gcode", message=""):
 
 
 class FetchStatusTests(unittest.TestCase):
-    def test_blocked_print_is_failed_with_reason(self):
+    def test_blocked_print_reports_reason_but_stays_ready(self):
+        # Nothing was printed, so the printer must still accept the next job.
         client = make_client({"webhooks": {"state": "ready"},
                               "print_stats": print_stats("cancelled")}, BLOCKED_LOG)
         client._fetch_status()
-        self.assertEqual(client.state.status, PrintStatus.FAILED)
+        self.assertEqual(client.state.status, PrintStatus.IDLE)
         self.assertTrue(client.state.error_message.startswith("PRINT BLOCKED"))
 
     def test_console_log_read_once_per_print(self):

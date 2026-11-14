@@ -600,6 +600,19 @@ def cmd_run(args, config: dict):
                             and state.gcode_state == "cancelled"
                             and farm.get_printer_type(pname) == "klipper"
                         ):
+                            if state.error_message:
+                                # Blocked by a macro (e.g. a print-area safety
+                                # check) before or while starting.
+                                queue.mark_failed(job_key)
+                                reason = state.error_message
+                                logger.warning(f"Job #{job_key} failed on {pname}: {reason}")
+                                notifier.notify(
+                                    "print_failed",
+                                    f"Print Failed — {fname} ({reason})",
+                                    f"Job #{job_key} failed on {pname}.\nFile: {fname}\nReason: {reason}",
+                                )
+                                _job_prev_status[job_key] = state.status
+                                continue
                             # Cancelled at the printer (Mainsail, KlipperScreen,
                             # CANCEL_PRINT) with no error behind it.
                             queue.cancel_job(job_key)
