@@ -3889,7 +3889,8 @@
         .pc-title { min-width: 0; flex: 1 1 180px; display: flex; flex-direction: column; gap: 2px; }
         .pc-title .printer-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
         .pc-title .printer-display-name { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
-        .pc-title .conn-badge, .pc-title .printer-rename-btn { flex-shrink: 0; }
+        .pc-title .conn-badge, .pc-title .printer-rename-btn, .pc-title .pc-title-chip { flex-shrink: 0; }
+        .pc-title .pc-title-chip { padding-block: 0; line-height: 17px; }
         .printer-card .printer-header-actions { flex-wrap: wrap; max-width: 100%; }
         .pc-subline { font-size: 12px; color: var(--text-muted); padding-left: 14px; }
         .pc-subline:empty { display: none; }
@@ -5447,7 +5448,6 @@
 
         function renderPrinterChips(name, p) {
             const chips = [];
-            if (p.type === 'klipper') chips.push(`<span class="pc-chip pc-chip-klipper">Klipper</span>`);
             if (p.staff_only) chips.push(`<span class="pc-chip pc-chip-staff" title="Only staff can use this printer">${iconMarkup('lock')}Staff only</span>`);
             if (isAdmin && p.plate_clear_required === false) chips.push(`<span class="pc-chip pc-chip-warn" title="Jobs are sent without anyone confirming the build plate is clear. Change this in Details.">${iconMarkup('alert')}Plate check off</span>`);
             return chips.join('');
@@ -5652,6 +5652,7 @@
                         <div class="pc-title">
                             <span class="printer-name">
                                 <span class="conn-badge ${connClass}"></span><span class="printer-display-name">${safeName}</span>
+                                ${isKlipper ? '<span class="pc-chip pc-chip-klipper pc-title-chip">Klipper</span>' : ''}
                                 ${isAdmin ? `<button class="printer-rename-btn" onclick="renamePrinter(${nameArg})" title="Rename printer">&#9998;</button>` : ''}
                             </span>
                             <div class="pc-subline" data-field="subline">${subline}</div>
