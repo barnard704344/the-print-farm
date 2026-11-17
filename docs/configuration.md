@@ -1,9 +1,22 @@
 # Configuration
 
+## Settings Navigation
+
+The admin Settings page is split into four remembered categories:
+
+- **Access** — Login, Active Directory Configuration, and Student Print Access.
+- **Printers & Network** — Printer Pool and Network Discovery.
+- **Integrations** — Obico, Spoolman, and Notifications.
+- **System** — Display Preferences and Software Update.
+
+The last selected category is stored in the browser. The sections below use
+the full navigation path so they match the dashboard.
+
 ## Login and Single-User Mode
 
 Login is on by default. A small farm with a single operator can turn it off
-in **Settings → Login** by ticking **Disable login (single-user mode)**, or in
+in **Settings → Access → Login** by ticking **Disable login (single-user
+mode)**, or in
 the config:
 
 ```yaml
@@ -25,7 +38,8 @@ so you can't lock yourself out.
 
 ## Display Preferences
 
-Control how dates and times are shown across the dashboard. Configure from **Settings → Display Preferences**.
+Control how dates and times are shown across the dashboard. Configure from
+**Settings → System → Display Preferences**.
 
 - **Timezone** — Select any IANA timezone (e.g. `Australia/Sydney`, `Europe/London`, `America/New_York`). Leave blank to auto-detect from each viewer's browser. The selected timezone is persisted server-side so all users see the same zone by default.
 - **Locale** — Controls date format. Currently fixed to `en-AU` (DD/MM/YYYY). Configurable via the API if needed.
@@ -42,11 +56,11 @@ ui:
   failed_printer_timeout_minutes: 5
 ```
 
-Or configure from **Settings → Display Preferences** in the dashboard.
+Or configure from **Settings → System → Display Preferences** in the dashboard.
 
 ## Software Updates
 
-Settings tab provides:
+**Settings → System → Software Update** provides:
 
 - Check for Updates
 - Apply Update and Restart
@@ -89,8 +103,8 @@ The live configuration is stored at `/etc/the-print-farm/config.yaml` with mode
 
 Add Printer and offline-printer Reconnect scans use networks attached directly
 to the server by default. Configure routed printer VLANs under **Settings →
-Network Discovery** when the printers are on another network. The equivalent
-YAML is:
+Printers & Network → Network Discovery** when the printers are on another
+network. The equivalent YAML is:
 
 ```yaml
 discovery:
@@ -134,7 +148,7 @@ Setup generates a new, distinct `admin_api_key`.
 
 Auto-dispatch jobs from the generic OrcaSlicer port to idle printers:
 
-- **Configurable pool** — Choose which printers participate in auto-dispatch from Settings → Printer Pool
+- **Configurable pool** — Choose which printers participate in auto-dispatch from **Settings → Printers & Network → Printer Pool**
 - **Toggle on/off** — Enable or disable pool dispatch without removing the printer list
 - **Generic port only** — Only affects jobs submitted without a printer target; per-printer port jobs are unaffected
 - **Hot-reloadable** — Pool config changes take effect immediately, no restart required
@@ -148,7 +162,7 @@ pool:
     - P1S-1
 ```
 
-Or configure from Settings → Printer Pool in the dashboard.
+Or configure from **Settings → Printers & Network → Printer Pool** in the dashboard.
 
 ## Spoolman
 
@@ -158,7 +172,7 @@ Optional integration with [Spoolman](https://github.com/Donkie/Spoolman) filamen
 - **Auto-deduction** — Filament usage is automatically deducted from matched spools when print jobs complete
 - **Gate linking** — Assign Spoolman spools to Happy Hare MMU gates for per-gate filament tracking
 - **AMS linking** — Assign a Spoolman spool to each BambuLab AMS tray
-- **Settings UI** — Configure the Spoolman URL and test connectivity from the dashboard Settings tab
+- **Settings UI** — Configure the Spoolman URL and test connectivity from **Settings → Integrations → Spoolman Filament Tracking**
 - **Graceful fallback** — All Spoolman features are optional; the system works normally without it
 
 ```yaml
@@ -166,21 +180,24 @@ spoolman:
   url: http://localhost:7912
 ```
 
-Or configure from Settings in the dashboard. Saving a blank URL disables the
+Or configure from **Settings → Integrations → Spoolman Filament Tracking** in
+the dashboard. Saving a blank URL disables the
 integration and removes optional spool assignment controls after restart; AMS,
 MMU, and generic filament controls continue to work.
 
 ## Obico
 
 Optional failure-detection and remote-monitoring integration for Klipper
-printers. Configure each printer from **Settings → Obico AI Failure Detection**
-with the self-hosted server URL, Obico printer ID, username, and password.
+printers. Configure each printer from **Settings → Integrations → Obico AI
+Failure Detection** with the self-hosted server URL, Obico printer ID,
+username, and password.
 
 The connection test verifies authentication and fetches the selected printer,
 so an invalid ID or unavailable endpoint is reported before saving. A masked
 saved password is reused only when the server and username are unchanged.
-Restart after saving to rebuild the per-printer client. Connection state and
-diagnostic errors appear in Printer Details.
+Saving or disabling Obico updates the live printer client immediately; no
+service restart is required. Connection state and diagnostic errors appear in
+Printer Details.
 
 ## Camera Display Rotation
 
@@ -246,7 +263,9 @@ creating a private pre-migration configuration backup.
 Email and Discord alerts for print events:
 
 - **Email (SMTP)** — Configurable SMTP host, port, TLS, authentication, and recipient list
-- **Discord webhook** — Sends rich embed messages to any Discord channel
+- **Discord webhook** — Sends rich embed messages to any Discord channel; the
+  full configured URL is visible to admins in **Settings → Integrations →
+  Notifications**
 - **Four events** — Job submitted, print completed, print paused, and print failed — each independently toggleable
 - **Error context** — Failed and paused notifications include the reason (error code, HMS messages, filament runout) in the subject line
 - **Smart deduplication** — Pause notifications only fire on state transition (RUNNING → PAUSED), not on every poll cycle

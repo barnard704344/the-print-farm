@@ -26,6 +26,10 @@ Notable dashboard routes:
 
 - Printer control: temperatures, Bambu filament load/unload (refused while a
   print is running), plate check, and job thumbnails
+- Discovery networks: view and save effective/configured VLAN ranges
+  (`/api/discovery/config`)
+- Integration settings: Obico (`/api/obico/...`) and email/Discord
+  notifications (`/api/notifications/...`)
 - Klipper macros: list, run and pin (`/api/printer/<name>/macros…`)
 - File library: folder tree, bulk move/delete, and printing to a chosen printer
 - Login mode: `/api/auth/config` for single-user mode

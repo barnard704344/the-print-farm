@@ -23,8 +23,9 @@ The setup script will:
 7. Configure the systemd service, Apache reverse proxy, and OrcaSlicer vhosts
 8. Validate Apache and the application health before reporting success
 
-A farm run by one person can turn login off afterwards in **Settings → Login**
-(single-user mode). See [Configuration](configuration.md#login-and-single-user-mode).
+A farm run by one person can turn login off afterwards in **Settings → Access
+→ Login** (single-user mode). See
+[Configuration](configuration.md#login-and-single-user-mode).
 
 The repository's `config/config.yaml` is a symlink to the private runtime
 configuration after setup. Installations below a non-traversable directory such
@@ -45,8 +46,8 @@ already present. A restart is refused when live printer or queue activity is
 detected. `--force-restart` is reserved for recovery after checking every
 printer manually.
 
-After the initial setup, authenticated staff can use **Settings → Software
-Update**. The update button requires a clean Git worktree, fetches from GitHub,
+After the initial setup, authenticated staff can use **Settings → System →
+Software Update**. The update button requires a clean Git worktree, fetches from GitHub,
 applies only a fast-forward update, reconciles dependencies/deployment files,
 and restarts only after every printer and active job is confirmed safe.
 Deployment reconciliation runs in a transient privileged systemd unit, and the

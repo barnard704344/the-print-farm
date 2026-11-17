@@ -4,7 +4,7 @@
 # Copy this file to config.yaml and edit to match your setup.
 #
 # Supports both BambuLab and Klipper printers.
-# Printers can also be added from the dashboard Settings tab.
+# Printers can also be added from the dashboard's Add Printer flow.
 # ============================================================
 
 printers: []
@@ -63,6 +63,13 @@ queue:
   db_path: ./data/farm.db
   auto_assign: false
 
+# ── Printer Pool (optional) ──────────────────────────────
+# Auto-dispatch jobs from the generic OrcaSlicer queue to these printers.
+# Manage from Settings → Printers & Network → Printer Pool.
+pool:
+  enabled: false
+  printers: []
+
 # ── Local Users ──────────────────────────────────────────
 # Works with or without Active Directory.
 # When AD is also enabled, local users are checked first.
@@ -100,12 +107,36 @@ active_directory:
 
 # ── Spoolman (optional) ──────────────────────────────────
 # Set the URL of your Spoolman instance for filament tracking.
-# Leave commented out to disable. Can also be set from the dashboard; restart
-# after changing it so the optional client and UI state are rebuilt.
-#spoolman:
-#  url: http://localhost:7912
+# Leave blank to disable. Manage from Settings → Integrations → Spoolman
+# Filament Tracking; restart after changing it so the optional client and UI
+# state are rebuilt.
+spoolman:
+  url: ''
+
+# ── Notifications (optional) ─────────────────────────────
+# Manage from Settings → Integrations → Notifications. Changes apply live.
+notifications:
+  enabled: false
+  events:
+    job_submitted: true
+    print_completed: true
+    print_paused: true
+    print_failed: true
+  email:
+    enabled: false
+    smtp_host: ''
+    smtp_port: 587
+    use_tls: true
+    username: ''
+    password: ''
+    from_address: ''
+    to_addresses: []
+  discord:
+    enabled: false
+    webhook_url: ''
 
 # ── Display and printer readiness ────────────────────────
+# Manage from Settings → System → Display Preferences.
 ui:
   timezone: ''
   locale: en-AU

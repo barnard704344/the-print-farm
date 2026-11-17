@@ -11,7 +11,8 @@ Printers can be discovered automatically or added manually:
 
 ### From the Dashboard
 
-Click **Add Printer** in the Settings tab and choose BambuLab or Klipper.
+Open the **Printers** tab, click **Add Printer**, and choose BambuLab or
+Klipper.
 
 ### In config.yaml
 
@@ -52,7 +53,8 @@ field. Routed networks from `/21` through `/24` are supported, including
 Printer network scan supports the same field.
 
 Frequently used routed VLANs can be scanned by default. Open **Settings →
-Network Discovery** and enter one range per line, or edit the YAML directly:
+Printers & Network → Network Discovery** and enter one range per line, or edit
+the YAML directly:
 
 ```yaml
 discovery:
@@ -84,7 +86,7 @@ a new staff-approved job even if its firmware still reports `FAILED`.
 - Set `ui.failed_printer_timeout_minutes` to `0` to keep failures blocked until
   the printer itself changes state.
 
-Configure the timeout under **Settings → Display Preferences**.
+Configure the timeout under **Settings → System → Display Preferences**.
 
 ### BambuLab Firmware And Developer Mode
 
@@ -134,8 +136,8 @@ are shown separately. Hover a name to see the full file name.
 The Print Farm can display failure-detection and monitoring information from a
 self-hosted [Obico](https://www.obico.io/) server for each Klipper printer.
 
-In **Settings → Obico AI Failure Detection**, select the Klipper printer and
-provide:
+In **Settings → Integrations → Obico AI Failure Detection**, select the
+Klipper printer and provide:
 
 - the Obico server URL;
 - the Obico printer ID shown by that server;
@@ -145,10 +147,10 @@ Use **Test Connection** before saving. The test validates both authentication
 and the configured printer endpoint; an incorrect printer ID is reported rather
 than appearing as a successful but disconnected integration. Saved passwords
 remain masked and can be reused by the test while the server and username stay
-unchanged. Restart The Print Farm after saving so the per-printer Obico client
-is rebuilt. Connected state, monitoring state, and any failure likelihood then
-appear on the printer card and in Printer Details. When unavailable, Printer
-Details shows the reason returned by the integration client.
+unchanged. Saving applies the settings to the live Klipper client immediately.
+Connected state, monitoring state, and any failure likelihood then appear on
+the printer card and in Printer Details. When unavailable, Printer Details
+shows the reason returned by the integration client.
 
 ## Happy Hare MMU Integration
 

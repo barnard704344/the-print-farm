@@ -20,6 +20,7 @@ Complete reference for all REST API endpoints, reviewed for `v1.0.15`.
 - [Student Print Access](#student-print-access)
 - [Obico Config](#obico-config)
 - [UI Preferences](#ui-preferences)
+- [Notification Config](#notification-config)
 - [Software Update](#software-update)
 - [OctoPrint-Compatible API](#octoprint-compatible-api)
 - [API v1 Reference](#api-v1-reference)
@@ -592,6 +593,33 @@ local storage.
 
 Admin only. Used by the Settings UI to find and add printers.
 
+#### `GET /api/discovery/config`
+
+Returns the routed VLANs saved for automatic discovery, the networks attached
+directly to the server, and their combined labelled display list.
+
+```json
+{
+  "scan_subnets": ["192.168.60.0/24"],
+  "local_subnets": ["192.168.1.0/24"],
+  "effective_subnets": [
+    {"network": "192.168.1.0/24", "source": "direct"},
+    {"network": "192.168.60.0/24", "source": "configured"}
+  ]
+}
+```
+
+#### `POST /api/discovery/config`
+
+Saves the routed VLAN ranges used by Add Printer and Reconnect. Values are
+canonicalised, duplicates removed, and only IPv4 `/21` through `/24` ranges
+are accepted. The configured ranges may cover no more than 32 `/24` networks
+in total. Changes apply immediately.
+
+```json
+{"scan_subnets": ["192.168.60.0/24", "10.136.32.0/21"]}
+```
+
 #### `POST /api/discover/scan`
 
 Scan network for printers.
@@ -827,7 +855,8 @@ Admin only. Per-printer Obico failure detection config.
 }
 ```
 
-The password returned by `GET` is masked. `POST /api/obico/test` accepts the
+The password returned by `GET` is masked. Saving or disabling the integration
+updates the live Klipper client immediately. `POST /api/obico/test` accepts the
 same fields plus `printer_name`; when the password is the mask, the saved secret
 is reused only if the server and username are unchanged. The test returns a
 non-success response when authentication fails, the printer ID does not exist,
@@ -884,11 +913,56 @@ effect immediately. No job is ever resent automatically.
 
 ---
 
+## Notification Config
+
+Admin only. These routes back **Settings → Integrations → Notifications** and
+apply changes immediately.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/notifications/config` | Read email, Discord, and event settings |
+| POST | `/api/notifications/config` | Save notification settings |
+| POST | `/api/notifications/test/email` | Send a test email using saved settings |
+| POST | `/api/notifications/test/discord` | Send a test Discord message using saved settings |
+
+The GET response omits the SMTP password. It returns the complete Discord
+webhook URL to the authenticated admin Settings page, together with
+`webhook_configured`. POST preserves an existing SMTP password when the
+submitted password is blank.
+
+```json
+{
+  "enabled": true,
+  "events": {
+    "job_submitted": true,
+    "print_completed": true,
+    "print_paused": true,
+    "print_failed": true
+  },
+  "email": {
+    "enabled": false,
+    "smtp_host": "",
+    "smtp_port": 587,
+    "use_tls": true,
+    "username": "",
+    "password": "",
+    "from_address": "",
+    "to_addresses": []
+  },
+  "discord": {
+    "enabled": true,
+    "webhook_url": "https://discord.com/api/webhooks/..."
+  }
+}
+```
+
+---
+
 ## Software Update
 
 Authenticated staff session only. The OrcaSlicer/API integration key cannot
-invoke deployment updates. These endpoints are used by the Settings tab update
-controls.
+invoke deployment updates. These endpoints are used by **Settings → System →
+Software Update**.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|

@@ -46,7 +46,7 @@ cd the-print-farm
 sudo bash setup.sh
 ```
 
-Existing native installations can use **Settings → Software Update** when every
+Existing native installations can use **Settings → System → Software Update** when every
 configured printer and active job is in a safe state. Docker installations
 should pull and recreate the container instead. See [Getting
 Started](docs/getting-started.md) and [Docker](docs/docker.md).

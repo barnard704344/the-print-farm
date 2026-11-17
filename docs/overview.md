@@ -136,7 +136,7 @@ A separate **ban list** is also available. This is useful for keeping a record o
 
 Student access is managed from:
 
-**Settings → Student Print Access**
+**Settings → Access → Student Print Access**
 
 Add one username or display name per line.
 
