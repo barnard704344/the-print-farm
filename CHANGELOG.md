@@ -25,6 +25,9 @@ changes to The Print Farm.
   Access, Printers & Network, Integrations, and System tabs. The last selected
   category is remembered in the browser.
 
+- **Standard filament colours.** The tray editor offers named colour swatches
+  alongside the colour picker and hex field, keeping all three in sync.
+
 - **OrcaSlicer upload attribution.** Connection Details now supplies a personal
   upload key. Copy it into Orca to record your username on jobs and library
   uploads. Existing shared keys keep working without user attribution.
@@ -40,6 +43,13 @@ changes to The Print Farm.
     & Lights; AMS units keep the full width.
 
 ### Fixed
+
+- **Clearer Orca connection copy buttons.** **Copy Hostname** and **Copy API Key**
+  sit below their values and align within each row. The Personal API Key column
+  shortens long keys visually; copying still includes the complete key. Narrow
+  screens can scroll the table horizontally.
+- **Copy buttons work over HTTP.** If the browser Clipboard API is unavailable,
+  copying falls back to the selected-text method.
 
 - **Obico settings now stay visible and apply immediately.** The Settings page
   restores the selected Klipper printer and its saved Enabled checkbox instead

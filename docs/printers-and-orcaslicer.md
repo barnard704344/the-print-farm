@@ -263,6 +263,19 @@ The print farm exposes OctoPrint-compatible endpoints so OrcaSlicer can send pri
 
 Each printer gets its own dedicated port for OrcaSlicer connections. The port is auto-assigned when a printer is added (starting at 5001) and displayed on the printer card in the dashboard.
 
+### Copying Connection Details
+
+In **OrcaSlicer Setup → Connection Details**, each row has two labelled buttons:
+
+- **Copy Hostname** copies the address into Orca’s **Hostname, IP or URL** field.
+  Per-printer rows include the dedicated port; General Queue uses the server hostname.
+- **Copy API Key** copies your complete personal key into Orca’s **API Key** field.
+  The key is shortened visually in the table; use the button to copy the full value.
+
+The buttons sit beneath their values and align across the row. On narrow screens,
+scroll the table horizontally. Copying also works on HTTP installations through
+an automatic fallback when the browser Clipboard API is unavailable.
+
 ### Per-Printer Setup (Recommended)
 
 Each printer has its own OrcaSlicer port. Jobs uploaded this way are assigned to that specific printer and appear in the job queue. Send them to the machine manually from the dashboard.
