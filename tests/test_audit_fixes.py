@@ -46,7 +46,8 @@ class AuditFixTests(unittest.TestCase):
         for client in (self._client("alice"), self._client("teacher", role="staff")):
             response = client.get("/api/orca/api-key")
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.get_json()["api_key"], "orca-upload-key")
+            self.assertTrue(response.get_json()["api_key"])
+            self.assertNotEqual(response.get_json()["api_key"], "orca-upload-key")
 
     # check_filament previously had no authentication at all (#6)
     def test_check_filament_requires_login(self):

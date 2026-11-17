@@ -34,9 +34,11 @@ Notable dashboard routes:
 - File library: folder tree, bulk move/delete, and printing to a chosen printer
 - Login mode: `/api/auth/config` for single-user mode
 
-OrcaSlicer uses a different upload-only key stored as `web.orca_api_key`.
-Logged-in students and staff can copy it from **OrcaSlicer Setup → Connection
-Details**. It cannot access `/api/v1` or browser administration routes.
+OrcaSlicer uses a personal upload-only key copied from **OrcaSlicer Setup →
+Connection Details** by logged-in approved students and staff. Uploads are
+attributed to the key owner. The legacy shared `web.orca_api_key` is still
+accepted without attribution. Neither key type can access `/api/v1` or browser
+administration routes.
 
 ### Quick Examples
 

@@ -2506,7 +2506,7 @@
                             <div class="step-num">4</div>
                             <div class="step-text">
                                 <strong>Enter Hostname &amp; API Key</strong><br>
-                                Copy the <strong>Hostname</strong> and <strong>API Key</strong> from the table below for the printer you want to target.
+                                Copy the <strong>Hostname</strong> and your personal <strong>API Key</strong> from the table below for the printer you want to target. Jobs sent with this key are recorded under your account. On shared computers, replace the key when a different user sends a job.
                             </div>
                         </div>
                         <div class="step">
@@ -3375,7 +3375,31 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Filament Color</label>
+                    <label id="trayStandardColorLabel">Standard Colour</label>
+                    <details id="trayConfigStandardColor" class="standard-colour-picker">
+                        <summary aria-labelledby="trayStandardColorLabel trayStandardColorName"><span id="trayStandardColorSwatch" class="standard-colour-swatch" aria-hidden="true"></span><span id="trayStandardColorName">Custom colour</span></summary>
+                        <div class="standard-colour-options" role="group" aria-labelledby="trayStandardColorLabel">
+                            <button type="button" data-color="#FFFFFF" aria-pressed="false"><span class="standard-colour-swatch" style="background:#FFFFFF;" aria-hidden="true"></span>White</button>
+                            <button type="button" data-color="#000000" aria-pressed="false"><span class="standard-colour-swatch" style="background:#000000;" aria-hidden="true"></span>Black</button>
+                            <button type="button" data-color="#808080" aria-pressed="false"><span class="standard-colour-swatch" style="background:#808080;" aria-hidden="true"></span>Grey</button>
+                            <button type="button" data-color="#C0C0C0" aria-pressed="false"><span class="standard-colour-swatch" style="background:#C0C0C0;" aria-hidden="true"></span>Silver</button>
+                            <button type="button" data-color="#FF0000" aria-pressed="false"><span class="standard-colour-swatch" style="background:#FF0000;" aria-hidden="true"></span>Red</button>
+                            <button type="button" data-color="#FF8000" aria-pressed="false"><span class="standard-colour-swatch" style="background:#FF8000;" aria-hidden="true"></span>Orange</button>
+                            <button type="button" data-color="#FFFF00" aria-pressed="false"><span class="standard-colour-swatch" style="background:#FFFF00;" aria-hidden="true"></span>Yellow</button>
+                            <button type="button" data-color="#00FF00" aria-pressed="false"><span class="standard-colour-swatch" style="background:#00FF00;" aria-hidden="true"></span>Lime</button>
+                            <button type="button" data-color="#008000" aria-pressed="false"><span class="standard-colour-swatch" style="background:#008000;" aria-hidden="true"></span>Green</button>
+                            <button type="button" data-color="#00FFFF" aria-pressed="false"><span class="standard-colour-swatch" style="background:#00FFFF;" aria-hidden="true"></span>Cyan</button>
+                            <button type="button" data-color="#0000FF" aria-pressed="false"><span class="standard-colour-swatch" style="background:#0000FF;" aria-hidden="true"></span>Blue</button>
+                            <button type="button" data-color="#000080" aria-pressed="false"><span class="standard-colour-swatch" style="background:#000080;" aria-hidden="true"></span>Navy</button>
+                            <button type="button" data-color="#800080" aria-pressed="false"><span class="standard-colour-swatch" style="background:#800080;" aria-hidden="true"></span>Purple</button>
+                            <button type="button" data-color="#FF00FF" aria-pressed="false"><span class="standard-colour-swatch" style="background:#FF00FF;" aria-hidden="true"></span>Magenta</button>
+                            <button type="button" data-color="#FFC0CB" aria-pressed="false"><span class="standard-colour-swatch" style="background:#FFC0CB;" aria-hidden="true"></span>Pink</button>
+                            <button type="button" data-color="#A52A2A" aria-pressed="false"><span class="standard-colour-swatch" style="background:#A52A2A;" aria-hidden="true"></span>Brown</button>
+                            <button type="button" data-color="#F5F5DC" aria-pressed="false"><span class="standard-colour-swatch" style="background:#F5F5DC;" aria-hidden="true"></span>Beige</button>
+                            <button type="button" data-color="#FFD700" aria-pressed="false"><span class="standard-colour-swatch" style="background:#FFD700;" aria-hidden="true"></span>Gold</button>
+                        </div>
+                    </details>
+                    <label for="trayConfigColor">Colour Picker / Hex</label>
                     <div class="color-row">
                         <input type="color" id="trayConfigColor" value="#FFFFFF">
                         <input type="text" id="trayConfigColorHex" class="color-hex" placeholder="#FFFFFF" maxlength="7">
@@ -3598,6 +3622,29 @@
             border-radius: 6px; background: none; cursor: pointer; padding: 2px;
         }
         .color-row .color-hex { flex: 1; }
+        .standard-colour-picker { margin-bottom: 10px; }
+        .standard-colour-picker summary,
+        .standard-colour-options button {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px;
+            background: var(--bg); color: var(--text); font: inherit; font-size: 14px;
+            cursor: pointer;
+        }
+        .standard-colour-picker summary::after { content: '▾'; margin-left: auto; }
+        .standard-colour-picker summary::-webkit-details-marker { display: none; }
+        .standard-colour-swatch {
+            display: inline-block; width: 18px; height: 18px; flex-shrink: 0;
+            border-radius: 4px; border: 1px solid #888;
+        }
+        .standard-colour-options {
+            display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 6px; padding: 8px 0; max-height: 220px; overflow-y: auto;
+        }
+        .standard-colour-options button:hover,
+        .standard-colour-options button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-dim); }
+        .standard-colour-picker summary:focus-visible,
+        .standard-colour-options button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 
         .ams-pop-load-btn {
             margin-top: 2px; padding: 3px 12px; font-size: 11px; border-radius: 5px; cursor: pointer;
@@ -4962,15 +5009,15 @@
         async function populateOrcaPrinterTable() {
             try {
                 const requestedAuthState = isAuthenticated;
-                const sharedApiKey = await fetchOrcaApiKey();
+                const personalApiKey = await fetchOrcaApiKey();
                 const res = await fetch(BASE + '/api/farm/status');
                 const data = await res.json();
                 const tbody = document.getElementById('orca-printer-table');
                 if (!tbody) return;
                 if (requestedAuthState !== isAuthenticated) return;
-                const apiKeyCell = sharedApiKey
-                    ? `<code style="user-select:all;">${escapeHtml(sharedApiKey)}</code>
-                       <button class="btn" style="font-size:10px;margin-left:6px;" onclick="copyText(${jsArg(sharedApiKey)})">Copy</button>`
+                const apiKeyCell = personalApiKey
+                    ? `<code style="display:inline-block;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;user-select:all;">${escapeHtml(personalApiKey)}</code>
+                       <button class="btn" style="font-size:10px;margin-left:6px;" onclick="copyText(${jsArg(personalApiKey)})">Copy</button>`
                     : `<span style="font-size:11px;color:var(--text-muted);">${isAuthenticated ? 'Orca key not configured' : 'Login required'}</span>`;
                 let rows = '';
                 // General queue row
@@ -6552,6 +6599,8 @@
             const safeColor = currentColor && currentColor.startsWith('#') && currentColor.length >= 7 ? currentColor.substring(0, 7) : '#FFFFFF';
             document.getElementById('trayConfigColor').value = safeColor;
             document.getElementById('trayConfigColorHex').value = safeColor;
+            syncTrayStandardColor(safeColor);
+            document.getElementById('trayConfigStandardColor').open = false;
 
             // Set temps
             document.getElementById('trayConfigTempMin').value = parseInt(tempMin) || 190;
@@ -6623,6 +6672,7 @@
                     const safeHex = hex.length >= 7 ? hex.substring(0, 7) : hex;
                     document.getElementById('trayConfigColor').value = safeHex;
                     document.getElementById('trayConfigColorHex').value = safeHex;
+                    syncTrayStandardColor(safeHex);
                 }
             }
         }
@@ -6681,13 +6731,36 @@
             document.getElementById('trayConfigOverlay').style.display = 'none';
         }
 
-        // Sync color picker ↔ hex input
+        function syncTrayStandardColor(color) {
+            let name = 'Custom colour';
+            document.querySelectorAll('#trayConfigStandardColor button[data-color]').forEach(button => {
+                const selected = button.dataset.color === color.toUpperCase();
+                button.setAttribute('aria-pressed', String(selected));
+                if (selected) name = button.textContent.trim();
+            });
+            document.getElementById('trayStandardColorName').textContent = name;
+            document.getElementById('trayStandardColorSwatch').style.background = color;
+        }
+
+        // Keep standard colours, the picker and hex input in sync.
+        document.querySelectorAll('#trayConfigStandardColor button[data-color]').forEach(button => {
+            button.addEventListener('click', function() {
+                const color = this.dataset.color;
+                document.getElementById('trayConfigColor').value = color;
+                document.getElementById('trayConfigColorHex').value = color;
+                syncTrayStandardColor(color);
+                document.getElementById('trayConfigStandardColor').open = false;
+                document.querySelector('#trayConfigStandardColor summary').focus();
+            });
+        });
         document.getElementById('trayConfigColor').addEventListener('input', function() {
             document.getElementById('trayConfigColorHex').value = this.value;
+            syncTrayStandardColor(this.value);
         });
         document.getElementById('trayConfigColorHex').addEventListener('input', function() {
             if (/^#[0-9a-fA-F]{6}$/.test(this.value)) {
                 document.getElementById('trayConfigColor').value = this.value;
+                syncTrayStandardColor(this.value);
             }
         });
         // Auto-fill temp range when type changes

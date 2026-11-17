@@ -21,7 +21,8 @@ from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import wraps
 
-from flask import Flask, Response, jsonify, render_template, request, send_from_directory, session
+from itsdangerous import BadSignature, URLSafeSerializer
+from flask import Flask, Response, g, jsonify, render_template, request, send_from_directory, session
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
@@ -118,6 +119,9 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         PERMANENT_SESSION_LIFETIME=12 * 60 * 60,
     )
     app.secret_key = _load_or_create_secret_key(app_config)
+    orca_credentials = URLSafeSerializer(
+        app.secret_key, salt="orca-upload-user-v1:" + orca_upload_key,
+    )
     config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
     login_attempts = defaultdict(deque)
     login_attempts_lock = threading.Lock()
@@ -717,17 +721,21 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
     @app.route("/api/orca/api-key")
     @authenticated_session_required
     def get_orca_api_key():
-        """Return the upload-only Orca key to staff and approved students.
-
-        Anyone holding this key can submit jobs, so unapproved or banned
-        students must not receive it.
-        """
+        """Return a signed, upload-only credential identifying this user."""
         if not has_print_access():
             return _print_access_denied_response()
+        username = session.get("username", "")
+        configured = bool(orca_upload_key and username)
+        key = orca_credentials.dumps({
+            "username": username,
+            "display_name": session.get("display_name", ""),
+            "role": "staff" if is_admin() else "student",
+        }) if configured else ""
         response = jsonify({
             "ok": True,
-            "api_key": orca_upload_key,
-            "configured": bool(orca_upload_key),
+            "api_key": key,
+            "configured": configured,
+            "username": username,
         })
         response.headers["Cache-Control"] = "no-store"
         return response
@@ -3413,13 +3421,35 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
     # ── OctoPrint-Compatible API (for OrcaSlicer) ─────────
 
     def _check_octoprint_api_key():
-        """Validate the restricted Orca upload credential."""
+        """Accept personal credentials and the legacy shared upload key."""
+        g.orca_username = ""
         key = request.headers.get("X-Api-Key", "")
-        return bool(
-            orca_upload_key
-            and key
-            and secrets.compare_digest(orca_upload_key, key)
-        )
+        if not orca_upload_key or not key:
+            return False
+        if secrets.compare_digest(orca_upload_key, key):
+            return True
+        try:
+            identity = orca_credentials.loads(key)
+        except BadSignature:
+            return False
+        if not isinstance(identity, dict):
+            return False
+        username = identity.get("username")
+        role = identity.get("role")
+        if not isinstance(username, str) or not username or role not in ("student", "staff"):
+            return False
+        if role == "student":
+            names = {
+                _normalise_access_name(username),
+                _normalise_access_name(identity.get("display_name", "")),
+            } - {""}
+            access = _get_student_access_config()
+            if names.intersection(_access_entries(access.get("banlist", []))):
+                return False
+            if not names.intersection(_access_entries(access.get("allowlist", []))):
+                return False
+        g.orca_username = username
+        return True
 
     def octoprint_api_key_required(f):
         @wraps(f)
@@ -3532,6 +3562,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             copies=1,
             priority=10 if print_flag else 0,
             notes="Uploaded from OrcaSlicer",
+            submitted_by=g.orca_username,
             print_time_seconds=meta.get("print_time_seconds"),
         )
 
@@ -3565,7 +3596,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
                     stored_name=unique_name,
                     file_path=file_path,
                     file_size=os.path.getsize(file_path),
-                    uploaded_by="OrcaSlicer",
+                    uploaded_by=g.orca_username or "OrcaSlicer",
                     metadata=meta,
                 )
             except Exception as e:

@@ -134,9 +134,11 @@ web:
   admin_api_key: generated-hidden-administrator-key
 ```
 
-- `orca_api_key` is shown in **OrcaSlicer Setup → Connection Details** to
-  logged-in students and staff. It authorises only OctoPrint-compatible
-  connection checks and uploads.
+- `orca_api_key` remains the legacy shared upload key. **OrcaSlicer Setup →
+  Connection Details** now shows a personal key for the logged-in staff member
+  or approved student, recording their username on uploads. Both types authorise
+  only OctoPrint-compatible connection checks and uploads. Rotating this setting
+  or the Flask secret invalidates all personal Orca keys.
 - `admin_api_key` is never displayed in the dashboard. It is reserved for
   trusted server integrations and privileged API endpoints.
 

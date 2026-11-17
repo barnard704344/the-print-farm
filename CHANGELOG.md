@@ -25,6 +25,10 @@ changes to The Print Farm.
   Access, Printers & Network, Integrations, and System tabs. The last selected
   category is remembered in the browser.
 
+- **OrcaSlicer upload attribution.** Connection Details now supplies a personal
+  upload key. Copy it into Orca to record your username on jobs and library
+  uploads. Existing shared keys keep working without user attribution.
+
 - **Better printer card layout.**
   - **Own height:** cards keep their own height within stable rows, so a
     long card (for example a Klipper toolchanger with macros and fans) no

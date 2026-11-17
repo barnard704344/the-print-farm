@@ -249,14 +249,16 @@ class SecurityTests(unittest.TestCase):
             session.update(role="student", username="alice", display_name="Alice")
         response = client.get("/api/orca/api-key")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json()["api_key"], "student-orca-upload-key")
+        self.assertTrue(response.get_json()["api_key"])
+        self.assertNotEqual(response.get_json()["api_key"], "student-orca-upload-key")
         self.assertEqual(response.headers["Cache-Control"], "no-store")
 
         with client.session_transaction() as session:
             session.update(role="staff", username="teacher", display_name="Teacher")
         response = client.get("/api/orca/api-key")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json()["api_key"], "student-orca-upload-key")
+        self.assertTrue(response.get_json()["api_key"])
+        self.assertNotEqual(response.get_json()["api_key"], "student-orca-upload-key")
         self.assertEqual(response.headers["Cache-Control"], "no-store")
 
     def test_orca_key_only_authorises_octoprint_compatibility_routes(self):

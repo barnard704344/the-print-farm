@@ -48,8 +48,8 @@ updates and other staff-session-only browser operations do not accept it.
 
 ### Orca Upload Key
 
-OrcaSlicer uses the separate `web.orca_api_key`. Logged-in students and staff
-can copy it from **OrcaSlicer Setup → Connection Details**. It authorises only
+OrcaSlicer uses personal upload keys. Logged-in approved students and staff
+can copy their key from **OrcaSlicer Setup → Connection Details**. It authorises only
 the OctoPrint-compatible connection and upload endpoints and cannot access
 printer controls, settings, job administration, or `/api/v1`.
 
@@ -133,16 +133,18 @@ Clears session. Returns `{"ok": true}`.
 
 #### `GET /api/orca/api-key`
 
-Returns the upload-only OrcaSlicer key to an authenticated student or staff
-browser session. Administrator-key authentication and anonymous requests are
+Returns a personal upload-only OrcaSlicer key to an authenticated approved
+student or staff browser session. The key identifies its owner on uploads,
+independently of browser sessions. Administrator-key authentication and anonymous requests are
 not accepted. The response uses `Cache-Control: no-store`.
 
 **Response:**
 ```json
 {
   "ok": true,
-  "api_key": "configured-orca-upload-key",
-  "configured": true
+  "api_key": "signed-personal-orca-upload-key",
+  "configured": true,
+  "username": "alice"
 }
 ```
 
@@ -1023,8 +1025,11 @@ is reachable. The general queue is served through narrowly matched
 OctoPrint-compatible routes on the main port-80 VirtualHost, without claiming
 unrelated `/api` routes.
 
-All endpoints in this section require the upload-only Orca key in the
-`X-Api-Key` header. The hidden administrator key is not accepted.
+All endpoints in this section require a personal upload-only Orca key (or the
+legacy shared `web.orca_api_key`) in the `X-Api-Key` header. The hidden
+administrator key is not accepted. Logged-in approved users obtain their personal
+key from `/api/orca/api-key`; uploads record the key owner in `submitted_by` and
+the file library’s `uploaded_by`. Shared-key uploads have no user attribution.
 
 ### Generic Endpoints
 

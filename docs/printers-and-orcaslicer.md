@@ -271,8 +271,9 @@ Each printer has its own OrcaSlicer port. Jobs uploaded this way are assigned to
 2. Set **Host Type** to `Octo/Klipper`
 3. Set **Hostname, IP or URL** to `<server-ip>:<port>` (e.g. `192.168.1.180:5001`)
 4. While logged in as a student or staff member, copy the **API Key** from
-   **OrcaSlicer Setup → Connection Details**. It is the upload-only
-   `web.orca_api_key`, not the hidden administrator credential
+   **OrcaSlicer Setup → Connection Details**. This is your personal upload-only
+   key; jobs and library uploads sent with it are recorded under your username.
+   Replace any previously saved shared key in Orca to enable attribution
 5. Click **Test** — you should see the connection succeed
 
 | Printer | Hostname | Port |
@@ -291,11 +292,20 @@ To send jobs to the shared queue (any available printer), use port 80 (default H
   and staff in **OrcaSlicer Setup → Connection Details**
 
 Jobs enter the queue unassigned and can be sent to any printer from the dashboard.
+
+Orca does not share the dashboard browser session. Attribution follows the personal
+API key saved in Orca, even after logging out of the dashboard. On shared computers,
+each user must replace the saved key with their own before sending. Personal keys
+survive service restarts; rotating the Flask secret or `web.orca_api_key` invalidates
+them. Student approval and bans are checked on every personal-key request.
+The BambuLab LAN-mode integration below still uses shared printer credentials and
+cannot identify individual users.
 Use this General Queue connection when a school firewall blocks the dedicated
 per-printer ports.
 
 Upgrades preserve the former shared key as the Orca upload key, so existing
-OrcaSlicer clients continue working without any configuration changes. That key
+OrcaSlicer clients continue working without any configuration changes, with no
+user attribution. That key
 cannot access printer controls or administrative APIs.
 
 ### How It Works
