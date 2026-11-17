@@ -29,6 +29,15 @@ Camera visibility and rotation are also saved per printer in the browser.
 
 ![Dark dashboard with vertically stacked cards on a phone-sized screen](images/dashboard-mobile-dark.jpg)
 
+## Idle Printer Pictures
+
+Idle cards now show locally bundled printer pictures for recognised Bambu and
+Voron models. Unknown Klipper models retain the generic icon. This view uses
+sample printers; see [Printer Pictures](printers-and-orcaslicer.md#printer-pictures)
+for model overrides and the supported models.
+
+![P1S, Voron, and generic Klipper idle thumbnail examples](images/printer-model-thumbnails.png)
+
 ## OrcaSlicer Connection Details
 
 **Copy Hostname** and **Copy API Key** sit beneath the values they copy. The

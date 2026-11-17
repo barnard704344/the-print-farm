@@ -5,6 +5,14 @@ changes to The Print Farm.
 
 ## Unreleased
 
+### Added
+
+- **Model pictures on idle printer cards.** Recognised Bambu and Voron printers
+  show their picture in the job panel. Active print previews take priority and
+  fall back to the printer picture when unavailable. Configure `model` for custom
+  printer names; unknown types retain the generic icon. Images are bundled locally
+  with source attribution and the upstream licence.
+
 ## v1.0.16 - 2026-11-17 - Personal Orca keys and clearer dashboards
 
 ### Added

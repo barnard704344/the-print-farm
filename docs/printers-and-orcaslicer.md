@@ -7,6 +7,38 @@ Printers can be discovered automatically or added manually:
 - **BambuLab** — Auto-detected via UDP broadcast on the local network. The printer serial and access code are still required in config.
 - **Klipper** — Auto-detected by scanning for Moonraker on common ports. A printer at a known IP can also be added directly.
 
+## Printer Pictures
+
+When no print is active, the job-panel thumbnail shows a picture of the printer.
+An active print’s available model preview takes priority. If its preview cannot
+be loaded, the printer picture remains visible; unknown printers keep the generic
+printer icon. Pictures are bundled locally and require no external image service.
+
+The farm recognises Bambu P1S, P1P, X1, X1 Carbon/X1C, X1E, A1 and A1 mini names,
+and Voron, Voron 2.4, Trident, Zero/V0 and Switchwire names for Klipper printers.
+A plain **Voron** uses a representative V2.4 picture. To choose the picture when
+the printer has a custom name, add an explicit `model` to its configuration:
+
+```yaml
+printers:
+  - name: Workshop printer
+    type: klipper
+    model: voron-trident
+    host: 192.168.1.100
+    moonraker_port: 7125
+```
+
+Supported model values are `p1s`, `p1p`, `x1`, `x1c`, `x1e`, `a1`, `a1-mini`,
+`voron`, `voron-2.4`, `voron-trident`, `voron-0`, and `voron-switchwire`.
+An explicit unknown model keeps the generic icon rather than guessing from the
+name. This setting only controls the card picture; it does not change printer
+communication or capabilities. Restart the service after editing configuration.
+
+![Idle cards with P1S and Voron pictures and a generic unknown Klipper](images/printer-model-thumbnails.png)
+
+Image sources and the upstream licence are recorded in
+[static/printers/SOURCES.md](../static/printers/SOURCES.md).
+
 ## File Library
 
 The **File Library** workspace supports grid and list layouts, file-type

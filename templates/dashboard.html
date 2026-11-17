@@ -3922,6 +3922,7 @@
         }
         .pc-thumb .pc-thumb-icon { width: 26px; height: 26px; opacity: 0.45; }
         .pc-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: var(--bg); }
+        .pc-thumb .pc-printer-picture { padding: 4px; background: #f4f5f6; }
         .pc-job-info { flex: 1; min-width: 0; }
         .pc-job-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
         .pc-job-name { font-size: 13px; font-weight: 500; margin: 1px 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -5469,11 +5470,19 @@
             return (isAuthenticated && p.connected && active && p.subtask_name) ? String(p.subtask_name) : '';
         }
 
-        function renderJobThumb(name, key) {
-            const img = key
-                ? `<img src="${BASE}/api/printer/${encodeURIComponent(name)}/thumbnail?k=${encodeURIComponent(key)}" alt="" loading="lazy" onerror="this.remove()">`
+        function printerThumbKey(p) {
+            return JSON.stringify([jobThumbKey(p), p.printer_image || '', p.printer_model_name || '']);
+        }
+
+        function renderJobThumb(name, p) {
+            const key = jobThumbKey(p);
+            const picture = p.printer_image
+                ? `<img class="pc-printer-picture" src="${BASE}/static/${p.printer_image.split('/').map(encodeURIComponent).join('/')}" alt="${htmlEscape(p.printer_model_name || 'Printer')}" title="${htmlEscape(p.printer_model_name || 'Printer')}" onerror="this.remove()">`
                 : '';
-            return `${iconMarkup('printers', 'pc-thumb-icon')}${img}`;
+            const job = key
+                ? `<img class="pc-print-preview" src="${BASE}/api/printer/${encodeURIComponent(name)}/thumbnail?k=${encodeURIComponent(key)}" alt="Print preview" loading="lazy" onerror="this.remove()">`
+                : '';
+            return `${iconMarkup('printers', 'pc-thumb-icon')}${picture}${job}`;
         }
 
         const SPEED_LEVELS = { 1: 'Silent', 2: 'Standard', 3: 'Sport', 4: 'Ludicrous' };
@@ -5580,7 +5589,7 @@
             const safeName = escapeHtml(name);
             const nameArg = jsArg(name);
             const safeType = escapeHtml(pType);
-            const thumbKey = jobThumbKey(p);
+            const thumbKey = printerThumbKey(p);
             const subline = renderPrinterSubline(name, p);
             const showControls = canControlPrinter(p) || myActivePrinters.has(name);
 
@@ -5605,7 +5614,7 @@
                     <div data-field="plate">${renderPlateBanner(name, p)}</div>
                     ${p.orca_port ? `<div class="printer-orca-port">OrcaSlicer: <span>${escapeHtml(location.hostname)}:${clampNumber(p.orca_port, 1, 65535)}</span></div>` : ''}
                     <div class="pc-job">
-                        <div class="pc-thumb" data-field="thumb" data-key="${htmlEscape(thumbKey)}">${renderJobThumb(name, thumbKey)}</div>
+                        <div class="pc-thumb" data-field="thumb" data-key="${htmlEscape(thumbKey)}">${renderJobThumb(name, p)}</div>
                         <div class="pc-job-info" data-field="job-info">${renderJobInfo(name, p)}</div>
                     </div>
                     <div class="camera-section" id="cam-${safeName}">
@@ -6104,10 +6113,10 @@
 
             // Job panel: only reload the thumbnail when the job changes
             const thumbEl = card.querySelector('[data-field="thumb"]');
-            const thumbKey = jobThumbKey(p);
+            const thumbKey = printerThumbKey(p);
             if (thumbEl && thumbEl.dataset.key !== thumbKey) {
                 thumbEl.dataset.key = thumbKey;
-                thumbEl.innerHTML = renderJobThumb(name, thumbKey);
+                thumbEl.innerHTML = renderJobThumb(name, p);
             }
             setHtmlIfChanged(card.querySelector('[data-field="job-info"]'), renderJobInfo(name, p));
 

@@ -11,6 +11,7 @@ printers: []
 # ── BambuLab Printer ──
 #  - name: P1S-1
 #    type: bambulab             # optional — defaults to bambulab
+#    model: p1s                 # optional card picture override; otherwise inferred from name
 #    host: 192.168.1.100
 #    access_code: '12345678'
 #    serial: 01P00C000000000
@@ -28,6 +29,7 @@ printers: []
 # ── Klipper Printer (via Moonraker) ──
 #  - name: Voron-01
 #    type: klipper
+#    model: voron-2.4           # optional card picture override; use for non-descriptive names
 #    host: 192.168.1.200
 #    moonraker_port: 7125       # default Moonraker port
 #    api_key: ''                # optional — Moonraker API key

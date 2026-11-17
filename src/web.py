@@ -28,6 +28,7 @@ from werkzeug.utils import secure_filename
 
 from .config_store import load_config as load_yaml_config, save_config as save_yaml_config
 from .discovery import discover_printers, scan_subnet, get_local_subnets, test_bambu_connection, test_klipper_connection, scan_moonraker_port
+from .printer_models import printer_model_details
 from .job_names import printer_file_name
 from .gcode_to_3mf import wrap_gcode_as_3mf, parse_gcode_filaments, parse_gcode_model_name
 from .ldap_auth import authenticate_user, test_ad_connection, lookup_user
@@ -921,6 +922,8 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         staff = is_admin()
         for name in states:
             states[name]["staff_only"] = _is_staff_only_printer(name)
+            printer_config = _printer_config(name) or {"type": states[name].get("type", "bambulab")}
+            states[name].update(printer_model_details(name, printer_config))
             states[name]["orca_port"] = _get_printer_orca_port(name)
             states[name]["pinned_macros"] = _pinned_macros(name)
             cfg = _get_printer_config_fields(name)

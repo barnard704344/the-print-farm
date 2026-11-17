@@ -69,3 +69,10 @@ Includes:
 - File library and toolpath endpoints
 - Software update endpoints
 - API v1 reference and OpenAPI details
+
+### Printer picture metadata
+
+`GET /api/farm/status` includes `printer_model`, `printer_model_name`, and
+`printer_image` in each printer state. `printer_image` is a bundled static path
+(such as `printers/bambu-p1s.png`) or an empty string for unknown models. These
+are display fields and contain no connection credentials.
