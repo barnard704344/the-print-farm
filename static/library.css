@@ -77,6 +77,8 @@
 .lib-more { margin-left:0; }
 .lib-more-menu { top:auto; bottom:calc(100% + 5px); }
 .lib-more-menu .btn { justify-content:flex-start!important; }
+.lib-tree-more { margin-left:auto; }
+#tab-library .lib-tree-more .library-folder-actions { position:absolute; right:0; top:100%; z-index:30; opacity:1; padding:6px; background:var(--surface); border:1px solid var(--border); border-radius:6px; box-shadow:var(--shadow); }
 #tab-library .lib-row-actions { align-items:center; }
 #tab-library .library-list { overflow:visible; }
 #tab-library .lib-row-actions .lib-print-primary { flex:0 0 auto; display:inline-flex; align-items:center; gap:4px; }

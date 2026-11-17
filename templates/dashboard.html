@@ -8007,6 +8007,7 @@
                         <button type="button" class="lib-tree-name" data-lib-action="open-folder" data-id="${folder.id}"${active ? ' aria-current="page"' : ''}>
                             <span aria-hidden="true">📁</span> ${htmlEscape(folder.name)}
                         </button>
+                        ${libraryCanManage() ? `<details class="lib-more lib-tree-more"><summary aria-label="Actions for ${htmlEscape(folder.name)}">•••</summary>${libraryFolderActions(folder)}</details>` : ''}
                     </div>
                     ${kids.length && open ? kids.map(k => node(k, depth + 1)).join('') : ''}`;
             };
@@ -8090,10 +8091,9 @@
             const pagination = document.getElementById('libraryPagination');
             pagination.hidden = page.pages <= 1;
             pagination.innerHTML = `<button type="button" class="btn" onclick="changeLibraryPage(-1)" ${page.current === 1 ? 'disabled' : ''}>Previous</button><span>Page ${page.current} of ${page.pages}</span><button type="button" class="btn" onclick="changeLibraryPage(1)" ${page.current === page.pages ? 'disabled' : ''}>Next</button>`;
-            const folders = [...libraryFolders].sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true }));
             grid.className = (libraryView === 'list' ? 'library-list' : 'library-grid') + (librarySelected.size ? ' lib-has-selection' : '');
-            if (!folders.length && !files.length) {
-                grid.innerHTML = `<div class="library-empty">${searching || document.getElementById('libraryType').value !== 'all' ? 'No files match your filters. Try another file type or search.' : 'This folder is empty. Create a folder to organise your print files.'}</div>`;
+            if (!files.length) {
+                grid.innerHTML = `<div class="library-empty">${searching || document.getElementById('libraryType').value !== 'all' || document.getElementById('libraryMaterial').value ? 'No files match your filters. Try another material, file type or search.' : 'No files in this folder. Browse folders using the sidebar.'}</div>`;
                 return;
             }
             const drag = libraryCanManage();
@@ -8102,14 +8102,6 @@
                     <div class="lib-list-head" aria-hidden="true">
                         <span></span><span></span><span>Name</span><span>Filament</span><span>Print time</span><span>Size</span><span>Added</span><span></span>
                     </div>
-                    ${folders.map(f => `
-                        <div class="lib-row lib-row-folder" data-drop-folder="${f.id}" ${drag ? `draggable="true" data-drag-folder="${f.id}"` : ''}>
-                            <span></span>
-                            <span class="lib-row-icon" aria-hidden="true">📁</span>
-                            <button type="button" class="lib-row-name lib-link" data-lib-action="open-folder" data-id="${f.id}">${htmlEscape(f.name)}</button>
-                            <span></span><span></span><span></span><span></span>
-                            <span class="lib-row-actions">${libraryFolderActions(f)}</span>
-                        </div>`).join('')}
                     ${files.map(f => `
                         <div class="lib-row${librarySelected.has(f.id) ? ' selected' : ''}" data-file-id="${Number(f.id)}" ${drag ? `draggable="true" data-drag-file="${Number(f.id)}"` : ''}>
                             ${libraryCheckbox(f) || '<span></span>'}
@@ -8128,15 +8120,7 @@
                         </div>`).join('')}`;
                 return;
             }
-            const folderCards = folders.map(f => `
-                    <div class="library-card folder-card" data-lib-action="open-folder" data-id="${f.id}" data-drop-folder="${f.id}" title="Open folder"
-                        ${drag ? `draggable="true" data-drag-folder="${f.id}"` : ''}>
-                        <div class="folder-icon" aria-hidden="true">📁</div>
-                        <div class="library-folder-main"><div class="folder-name">${htmlEscape(f.name)}</div></div>
-                        ${libraryFolderActions(f)}
-                    </div>`).join('');
-            grid.innerHTML = (folderCards ? `<div class="lib-folder-grid">${folderCards}</div>` : '')
-                + files.map(f => `
+            grid.innerHTML = files.map(f => `
                     <div class="library-card lib-file${librarySelected.has(f.id) ? ' selected' : ''}" data-file-id="${Number(f.id)}" ${drag ? `draggable="true" data-drag-file="${Number(f.id)}"` : ''}>
                         ${libraryCheckbox(f)}
                         <span class="lib-format-badge">${LibraryBrowser.fileType(f).toUpperCase()}</span>
