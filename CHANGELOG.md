@@ -7,6 +7,10 @@ changes to The Print Farm.
 
 ### Added
 
+- **Preview-led File Library cards.** Larger model previews, material and format
+  badges, consistent print statistics, and a prominent Print action replace
+  the flat card layout. Added material filtering and keyboard-accessible previews.
+
 - **Cleaner File Library workspace.** Added file-type filters, file counts,
   48-file pages, compact secondary action menus, and a persistent selection
   toolbar. Search cancels stale requests and failed loads offer a retry.

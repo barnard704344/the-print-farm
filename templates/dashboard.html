@@ -2414,7 +2414,7 @@
         <!-- File Library Tab -->
         <div class="tab-content" id="tab-library">
             <div class="lib-heading">
-                <div><h1>File Library</h1><p>Your print-ready files, organised in one place.</p></div>
+                <div><span class="lib-eyebrow">PRINT FARM / ARCHIVE</span><h1>File Library</h1><p>Browse models. Find a plate. Start your next print.</p></div>
                 <button type="button" class="btn" onclick="refreshLibrary()">Refresh</button>
             </div>
             <div class="lib-layout">
@@ -2436,6 +2436,7 @@
                                 <option value="3mf">3MF projects</option>
                                 <option value="gcode">G-code</option>
                             </select>
+                            <select id="libraryMaterial" class="lib-filter" aria-label="Filter material" onchange="libraryPage = 1; renderLibrary()"><option value="">All materials</option></select>
                             <label class="lib-sort">
                                 <span>Sort</span>
                                 <select id="librarySort" onchange="setLibrarySort(this.value)" aria-label="Sort files by">
@@ -7905,6 +7906,11 @@
                     return;
                 }
                 libraryFiles = list.files || [];
+                const materialSelect = document.getElementById('libraryMaterial');
+                const material = materialSelect.value;
+                const materials = [...new Set(libraryFiles.map(f => f.filament_type).filter(Boolean))].sort();
+                materialSelect.innerHTML = '<option value="">All materials</option>' + materials.map(value => `<option value="${htmlEscape(value)}">${htmlEscape(value)}</option>`).join('');
+                materialSelect.value = materials.includes(material) ? material : '';
                 libraryFolders = query ? [] : (list.folders || []);
                 const present = new Set(libraryFiles.map(f => f.id));
                 for (const id of [...librarySelected]) if (!present.has(id)) librarySelected.delete(id);
@@ -7939,7 +7945,9 @@
         function sortedLibraryFiles() {
             const key = LIBRARY_SORTS[librarySort] || LIBRARY_SORTS.created_at;
             const dir = librarySortDir === 'asc' ? 1 : -1;
-            return [...LibraryBrowser.filter(libraryFiles, document.getElementById('libraryType').value)].sort((a, b) => {
+            const material = document.getElementById('libraryMaterial').value;
+            return [...LibraryBrowser.filter(libraryFiles, document.getElementById('libraryType').value)]
+                .filter(file => !material || file.filament_type === material).sort((a, b) => {
                 const va = key(a), vb = key(b);
                 if (va < vb) return -1 * dir;
                 if (va > vb) return 1 * dir;
@@ -8035,12 +8043,10 @@
 
         // ── Listing ──
         function libraryFileMeta(file) {
-            const meta = [];
-            if (file.filament_type) meta.push(file.filament_type);
-            if (file.print_time_seconds) meta.push(formatDuration(file.print_time_seconds));
-            if (file.file_size) meta.push(formatFileSize(file.file_size));
-            if (file.print_count) meta.push(`Printed ${file.print_count}×`);
-            return meta;
+            return `<div class="lib-spec"><span>Print time</span><strong>${file.print_time_seconds ? htmlEscape(formatDuration(file.print_time_seconds)) : '—'}</strong></div>
+                <div class="lib-spec"><span>Filament</span><strong>${file.filament_weight_g ? htmlEscape(Number(file.filament_weight_g).toFixed(1)) + ' g' : '—'}</strong></div>
+                <div class="lib-spec"><span>Layers</span><strong>${file.layer_count ? htmlEscape(String(file.layer_count)) : '—'}</strong></div>
+                <div class="lib-spec"><span>Printed</span><strong>${Number(file.print_count) || 0} times</strong></div>`;
         }
 
         function libraryFileLocation(file) {
@@ -8051,8 +8057,8 @@
         function libraryFileActions(file, compact) {
             const id = Number(file.id);
             const cls = compact ? 'btn btn-sm lib-row-btn' : 'btn btn-sm';
-            return (printAllowed ? `<button type="button" class="${cls}" data-lib-action="print" data-id="${id}">Print</button>` : '')
-                + `<button type="button" class="${cls}" data-lib-action="toolpath" data-id="${id}" title="Interactive 3D toolpath view">Toolpath</button>`
+            return (printAllowed ? `<button type="button" class="${cls} lib-print-primary" data-lib-action="print" data-id="${id}">${iconMarkup('printers')} Print</button>` : '')
+                + `<button type="button" class="${cls} lib-preview-action" data-lib-action="toolpath" data-id="${id}" title="Interactive 3D toolpath view">${iconMarkup('layers')}<span class="lib-action-label">Preview</span></button>`
                 + (libraryCanManage()
                     ? `<details class="lib-more"><summary aria-label="More actions">•••</summary><div class="lib-more-menu"><button type="button" class="${cls}" data-lib-action="move-file" data-id="${id}">Move to folder</button>
                        <button type="button" class="${cls} btn-danger" data-lib-action="delete-file" data-id="${id}">Delete file</button></div></details>`
@@ -8133,15 +8139,19 @@
                 + files.map(f => `
                     <div class="library-card lib-file${librarySelected.has(f.id) ? ' selected' : ''}" data-file-id="${Number(f.id)}" ${drag ? `draggable="true" data-drag-file="${Number(f.id)}"` : ''}>
                         ${libraryCheckbox(f)}
-                        <div class="library-card-thumb" data-lib-action="toolpath" data-id="${Number(f.id)}" title="Click for interactive 3D toolpath view">
-                            ${f.thumbnail_path ? `<img src="${BASE}/api/library/files/${Number(f.id)}/thumbnail" alt="" loading="lazy">` : '<div class="no-thumb">📄</div>'}
-                        </div>
+                        <span class="lib-format-badge">${LibraryBrowser.fileType(f).toUpperCase()}</span>
+                        <button type="button" class="library-card-thumb" data-lib-action="toolpath" data-id="${Number(f.id)}" aria-label="Preview ${htmlEscape(prettyJobName(f.original_name))}">
+                            ${f.thumbnail_path ? `<img src="${BASE}/api/library/files/${Number(f.id)}/thumbnail" alt="" loading="lazy">` : `<span class="lib-preview-placeholder">${iconMarkup('layers')}<span>Preview toolpath</span></span>`}
+                            <span class="lib-preview-overlay">Explore toolpath ↗</span>
+                        </button>
                         <div class="library-card-info">
                             <div class="library-card-name" title="${htmlEscape(f.original_name)}">${htmlEscape(prettyJobName(f.original_name))}</div>
+                            <div class="lib-card-tags"><span>${htmlEscape(f.filament_type || 'Material unspecified')}</span><span>${f.file_size ? htmlEscape(formatFileSize(f.file_size)) : '—'}</span></div>
                             ${searching ? `<div class="lib-row-loc">📁 ${htmlEscape(libraryFileLocation(f))}</div>` : ''}
-                            <div class="library-card-meta">${libraryFileMeta(f).map(m => `<span>${htmlEscape(m)}</span>`).join('')}</div>
+                            <div class="library-card-meta">${libraryFileMeta(f)}</div>
                         </div>
                         <div class="library-card-actions">${libraryFileActions(f, false)}</div>
+                        <div class="lib-card-footnote"><span>${f.created_at ? htmlEscape(new Date(f.created_at).toLocaleDateString()) : 'Recently added'}</span><span>${htmlEscape(f.uploaded_by || 'Library')}</span></div>
                     </div>`).join('');
         }
 
