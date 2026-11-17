@@ -57,6 +57,7 @@ web:
   admin_api_key: CHANGE_ME      # hidden server/integration key; never share with users
   admin_password: ''            # legacy single-password mode (ignored when local_users set)
   auth_enabled: true            # false = single-user mode: no login, every visitor has full staff access
+  public_origin: ""            # e.g. https://printfarm.example.com when TLS terminates at a proxy
   max_upload_mb: 1024
   session_cookie_secure: false   # set true after enabling HTTPS on Apache
 

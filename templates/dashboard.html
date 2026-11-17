@@ -4946,7 +4946,7 @@
                 const res = await fetch(BASE + '/api/update/check');
                 const data = await res.json();
                 if (!data.ok) {
-                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(data.message)}</span>`;
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(data.message || data.error || `Update request failed (HTTP ${res.status})`)}</span>`;
                     return;
                 }
                 if (data.current_commit) {
@@ -4984,7 +4984,7 @@
                     resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; Update applied — service is restarting. Page will reload shortly…</span>';
                     setTimeout(() => location.reload(), 8000);
                 } else {
-                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(data.message)}</span>`;
+                    resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(data.message || data.error || `Update request failed (HTTP ${res.status})`)}</span>`;
                     applyBtn.disabled = false;
                 }
             } catch (e) {

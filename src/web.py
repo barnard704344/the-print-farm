@@ -20,6 +20,7 @@ import uuid
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import wraps
+from urllib.parse import urlsplit
 
 from itsdangerous import BadSignature, URLSafeSerializer
 from flask import Flask, Response, g, jsonify, render_template, request, send_from_directory, session
@@ -110,6 +111,20 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         static_folder=os.path.join(os.path.dirname(__file__), "..", "static"),
     )
     web_config = app_config.get("web", {})
+    # An explicit browser-facing origin supports TLS termination upstream
+    # without trusting client-supplied X-Forwarded-* headers.
+    public_origin = str(web_config.get("public_origin") or "").strip().rstrip("/")
+    public_origin_parts = urlsplit(public_origin)
+    if public_origin and (
+        public_origin_parts.scheme not in {"http", "https"}
+        or not public_origin_parts.hostname
+        or public_origin_parts.username is not None
+        or public_origin_parts.password is not None
+        or public_origin_parts.path
+        or public_origin_parts.query
+        or public_origin_parts.fragment
+    ):
+        raise ValueError("web.public_origin must be an http(s) origin without a path")
     orca_upload_key = str(web_config.get("orca_api_key") or "")
     max_upload_mb = max(1, min(int(web_config.get("max_upload_mb", 1024)), 4096))
     app.config["MAX_CONTENT_LENGTH"] = max_upload_mb * 1024 * 1024
@@ -553,12 +568,16 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         if _check_admin_api_key():
             return None
         if request.headers.get("Sec-Fetch-Site", "").lower() == "cross-site":
-            return jsonify({"ok": False, "error": "Cross-site request rejected"}), 403
+            return jsonify({"ok": False, "error": "Cross-site request rejected", "message": "Cross-site request rejected"}), 403
         origin = request.headers.get("Origin")
         if origin:
-            expected = request.host_url.rstrip("/")
-            if origin.rstrip("/") != expected:
-                return jsonify({"ok": False, "error": "Request origin rejected"}), 403
+            expected = {request.host_url.rstrip("/")}
+            # Only use the configured external origin for its own host. Keep
+            # direct LAN access working and reject unrelated browser origins.
+            if public_origin and public_origin_parts.netloc.lower() == request.host.lower():
+                expected.add(public_origin)
+            if origin.rstrip("/") not in expected:
+                return jsonify({"ok": False, "error": "Request origin rejected", "message": "Request origin rejected"}), 403
         return None
 
     def login_required(f):

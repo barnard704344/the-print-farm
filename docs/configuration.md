@@ -69,6 +69,27 @@ ui:
 
 Or configure from **Settings → System → Display Preferences** in the dashboard.
 
+## HTTPS Reverse Proxies
+
+When an upstream proxy terminates HTTPS and forwards HTTP to Apache, configure
+its exact browser-facing origin in the private runtime configuration
+(`/etc/the-print-farm/config.yaml` on native installations), then restart the
+service while printers are idle:
+
+```yaml
+web:
+  public_origin: "https://printfarm.example.com"
+```
+
+Use only the scheme, hostname and optional port, without a path. The proxy must
+preserve the browser-facing `Host` header. This lets same-origin actions such as
+software updates pass the CSRF check despite TLS termination upstream. Other
+origins and explicitly cross-site requests remain blocked; forwarded headers
+alone do not grant trust. Direct HTTP access on the LAN continues to work.
+
+A working **Check for Updates** followed by `Request origin rejected` on
+**Apply Update and Restart** usually indicates this HTTPS/HTTP origin mismatch.
+
 ## Software Updates
 
 **Settings → System → Software Update** provides:

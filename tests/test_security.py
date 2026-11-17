@@ -170,6 +170,63 @@ class SecurityTests(unittest.TestCase):
         )
         return app
 
+    def _origin_client(self, public_origin="https://printfarm.example.com"):
+        self.config["web"]["public_origin"] = public_origin
+        self.config["web"]["auth_enabled"] = False
+        app = create_app(self.farm, self.queue, config=self.config)
+        app.config["TESTING"] = True
+        return app.test_client()
+
+    def test_https_proxy_origin_allows_update_and_preserves_staff_check(self):
+        client = self._origin_client()
+        with patch("src.web.subprocess.run") as run:
+            run.return_value.returncode = 0
+            run.return_value.stdout = "Already up to date"
+            run.return_value.stderr = ""
+            # Avoid applying or scheduling a restart in this regression test.
+            with patch("src.web.threading.Thread"):
+                response = client.post("/api/update/apply", base_url="http://printfarm.example.com",
+                    headers={"Origin": "https://printfarm.example.com", "Sec-Fetch-Site": "same-origin"})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["ok"])
+        self.config["web"]["auth_enabled"] = True
+        client = create_app(self.farm, self.queue, config=self.config).test_client()
+        response = client.post("/api/update/apply", base_url="http://printfarm.example.com",
+            headers={"Origin": "https://printfarm.example.com"})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["message"], "Staff login required")
+
+    def test_origin_checks_reject_untrusted_and_cross_site_requests(self):
+        client = self._origin_client()
+        cases = [
+            ("http://printfarm.example.com", "https://evil.example", {}),
+            ("http://192.168.1.180", "https://printfarm.example.com", {}),
+            ("http://printfarm.example.com", "https://printfarm.example.com", {"Sec-Fetch-Site": "cross-site"}),
+            ("http://printfarm.example.com", "https://evil.example", {"X-Forwarded-Proto": "https", "X-Forwarded-Host": "evil.example"}),
+        ]
+        with patch("src.web.subprocess.run") as run:
+            for base, origin, headers in cases:
+                with self.subTest(base=base, origin=origin, headers=headers):
+                    response = client.post("/api/update/apply", base_url=base,
+                        headers={"Origin": origin, **headers})
+                    self.assertEqual(response.status_code, 403)
+                    self.assertTrue(response.get_json()["message"])
+            run.assert_not_called()
+
+    def test_direct_http_origin_and_default_https_rejection(self):
+        client = self._origin_client("")
+        response = client.post("/origin-test-missing", base_url="http://printfarm.example.com",
+            headers={"Origin": "http://printfarm.example.com"})
+        self.assertEqual(response.status_code, 404)
+        response = client.post("/origin-test-missing", base_url="http://printfarm.example.com",
+            headers={"Origin": "https://printfarm.example.com"})
+        self.assertEqual(response.status_code, 403)
+
+    def test_public_origin_rejects_urls_with_paths_or_credentials(self):
+        for origin in ["https://printfarm.example.com/path", "https://user@printfarm.example.com", "//printfarm.example.com"]:
+            with self.subTest(origin=origin), self.assertRaises(ValueError):
+                self._origin_client(origin)
+
     def test_api_fails_closed_without_key_or_session(self):
         client = self._api_app(api_key="").test_client()
         response = client.get("/api/v1/server")
