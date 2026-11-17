@@ -5,6 +5,13 @@ primarily for schools using BambuLab and Klipper printers. It is equally usable
 at home, in makerspaces, and in other small print farms. Operators remain
 responsible for approving and dispatching prints.
 
+## Dashboard Preview
+
+![Dark dashboard with sample printer states](images/dashboard-dark.jpg)
+
+See [Dashboard Screenshots](screenshots.md) for light mode, mobile layouts,
+and the personal Orca connection controls. The screenshots use sample data.
+
 ## BambuLab Support
 
 Supported BambuLab families include:
@@ -77,7 +84,10 @@ No Klipper plugin or extra component is required beyond a standard Moonraker ins
 - **Printer discovery** — Auto-detect BambuLab (UDP broadcast) and Klipper (Moonraker port scan)
 - **Authentication** — Local users, Active Directory/LDAP, student/staff
   roles, and an optional single-user mode with no login for one-person farms
-- **OrcaSlicer integration** — Slice and print directly from OrcaSlicer via virtual printers (OctoPrint-compatible) — no batch files needed
+- **OrcaSlicer integration** — Send sliced jobs through OctoPrint-compatible
+  connections using a personal upload key, recording the key owner on jobs
+  and library uploads. Existing shared-key and Bambu LAN-mode connections
+  remain available without individual attribution
 - **AMS support** — Live RFID/tag data when available plus manual type, colour, temperature, and Spoolman assignment for generic or overridden filament
 - **Filament load/unload** — Bambu Lab load and unload use the same commands
   as Bambu Studio and are refused while a print is running

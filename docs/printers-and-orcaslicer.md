@@ -276,6 +276,10 @@ The buttons sit beneath their values and align across the row. On narrow screens
 scroll the table horizontally. Copying also works on HTTP installations through
 an automatic fallback when the browser Clipboard API is unavailable.
 
+![Connection details showing the hostname and personal API key copy controls](images/orca-connection-details.jpg)
+
+*Example connection details; the displayed key is a non-functional placeholder.*
+
 ### Per-Printer Setup (Recommended)
 
 Each printer has its own OrcaSlicer port. Jobs uploaded this way are assigned to that specific printer and appear in the job queue. Send them to the machine manually from the dashboard.

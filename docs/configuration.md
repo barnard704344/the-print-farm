@@ -36,6 +36,17 @@ password, or Active Directory), the Settings card asks for a username and a
 password of at least 12 characters and creates a local staff account first,
 so you can't lock yourself out.
 
+## Dashboard Theme
+
+Use the moon/sun button in the header to switch between dark and light mode.
+The choice is saved in the current browser. Without a saved choice, the dashboard
+uses the device’s preferred colour scheme.
+
+Dark mode uses brighter secondary text, softer status colours, subtle action
+button fills, and readable disabled labels. Compare both themes in
+[Dashboard Screenshots](screenshots.md). Theme selection is separate from the
+server-side display preferences below.
+
 ## Display Preferences
 
 Control how dates and times are shown across the dashboard. Configure from

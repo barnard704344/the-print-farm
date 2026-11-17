@@ -7,6 +7,10 @@ changes to The Print Farm.
 
 ### Added
 
+- **Dashboard screenshot guide.** Added desktop dark/light, mobile, and Orca
+  connection screenshots with sample identities and credentials, plus theme
+  selection and screenshot refresh instructions.
+
 - **Preview-led File Library cards.** Larger model previews, material and format
   badges, consistent print statistics, and a prominent Print action replace
   the flat card layout. Added material filtering and keyboard-accessible previews.

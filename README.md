@@ -15,6 +15,7 @@ This README acts as a documentation index. Detailed information is split across 
 ## Documentation Menu
 
 - [Overview](docs/overview.md)
+- [Dashboard Screenshots](docs/screenshots.md)
 - [Getting Started](docs/getting-started.md)
 - [Docker](docs/docker.md)
 - [Printers and OrcaSlicer](docs/printers-and-orcaslicer.md)
