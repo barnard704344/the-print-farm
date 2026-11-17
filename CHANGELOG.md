@@ -7,6 +7,10 @@ changes to The Print Farm.
 
 ### Fixed
 
+- **Cleaner printer headers.** Nozzle size/material, OrcaSlicer hostname, and
+  Wi-Fi signal strength live in Details instead of taking up card space. The
+  chamber-light control now shares the status-button row and still updates live.
+
 - **Printer pictures blend into dark cards.** Removed the light picture backdrop
   in dark mode, keeping the transparent model images on the thumbnail’s dark surface.
 

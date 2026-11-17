@@ -67,8 +67,8 @@ No Klipper plugin or extra component is required beyond a standard Moonraker ins
 ## Core Features
 
 - **Multi-printer support** — BambuLab (P1S, X1C, A1) via MQTT/FTPS (LAN mode) and Klipper via Moonraker HTTP API
-- **Real-time dashboard** — Printer cards with a combined print/health status button and chips for Wi-Fi,
-  chamber light, and staff-only access, a now-printing panel (job thumbnail,
+- **Real-time dashboard** — Printer cards with a combined print/health status button, an aligned chamber-light
+  control, and staff-only badges, a now-printing panel (job thumbnail,
   progress, time remaining, finish time, layers), click-to-set temperature
   tiles, per-unit AMS blocks with remaining-filament bars, and camera feeds.
   Printers that can take a job show **Ready to print**

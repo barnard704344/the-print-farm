@@ -9,7 +9,8 @@ Printers can be discovered automatically or added manually:
 
 ## Printer Status Button
 
-The card’s status button combines print state and printer health. Signed-in
+The card’s status button combines print state and printer health. The Bambu
+chamber-light control sits beside it on the same row. Signed-in
 viewers can click it to open **Printer Details**, including HMS codes, print
 errors, and Klipper messages. Hovering shows a summary. The separate **OK** health
 chip has been removed.
@@ -26,6 +27,9 @@ chip has been removed.
 | Offline | Disconnected; current health is unavailable |
 
 The button opens details; clearing the plate remains a separate, explicit action.
+Nozzle size/material and Wi-Fi signal strength appear under **Identity** in
+Details; the **OrcaSlicer Hostname** appears under **Connection**. These technical
+fields are omitted from the printer card.
 Unknown states are labelled **Status unknown**. Read-only anonymous views show the
 same status text without a button.
 

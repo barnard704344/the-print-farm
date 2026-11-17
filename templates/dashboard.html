@@ -3904,6 +3904,7 @@
             background: var(--surface-soft); color: var(--text-muted);
         }
         .pc-chip .ui-icon { width: 12px; height: 12px; }
+        .printer-header-actions [data-field="light"] .pc-chip { min-height: 26px; }
         .pc-chip-ok { background: var(--success-dim); color: var(--success); }
         .pc-chip-warn { background: var(--warning-dim); color: var(--warning); }
         .pc-chip-bad { background: var(--danger-dim); color: var(--danger); }
@@ -3915,8 +3916,6 @@
         .pc-chip-btn { cursor: pointer; border-color: var(--line-soft); }
         .pc-chip-btn:hover { border-color: currentColor; }
 
-        .printer-orca-port { margin: -4px 0 10px; font-size: 11px; color: var(--text-muted); }
-        .printer-orca-port span { color: var(--accent); user-select: all; cursor: text; }
 
         /* Now-printing panel */
         .pc-job {
@@ -5428,29 +5427,22 @@
 
         function renderPrinterSubline(name, p) {
             const parts = [];
-            if (p.nozzle_diameter) parts.push(`<span title="Nozzle diameter">${htmlEscape(p.nozzle_diameter)}mm</span>`);
-            if (p.nozzle_type) parts.push(htmlEscape(prettyNozzleType(p.nozzle_type)));
             if (isKlipperToolchanger(p)) parts.push(`${klipperToolchangerTools(p).length} tools`);
             if (isAdmin && p.host) parts.push(`<span class="pc-host">${htmlEscape(p.host)}</span>`);
             return parts.join(' · ');
         }
 
+        function renderPrinterLight(name, p) {
+            if (!p.connected || (p.type || 'bambulab') !== 'bambulab') return '';
+            const lightLabel = p.chamber_light ? 'Light on' : 'Light off';
+            return canControlPrinter(p)
+                ? `<button type="button" class="pc-chip pc-chip-btn${p.chamber_light ? ' pc-chip-on' : ''}" onclick="printerCmd(${jsArg(name)},'light')" title="Toggle chamber light">${iconMarkup('bulb')}${lightLabel}</button>`
+                : `<span class="pc-chip${p.chamber_light ? ' pc-chip-on' : ''}">${iconMarkup('bulb')}${lightLabel}</span>`;
+        }
+
         function renderPrinterChips(name, p) {
             const chips = [];
-            const isBambu = (p.type || 'bambulab') === 'bambulab';
             if (p.type === 'klipper') chips.push(`<span class="pc-chip pc-chip-klipper">Klipper</span>`);
-            if (p.connected && isBambu) {
-                const m = String(p.wifi_signal || '').match(/-?\d+/);
-                if (m) {
-                    const dbm = Number(m[0]);
-                    const tone = dbm >= -60 ? 'ok' : dbm >= -75 ? 'warn' : 'bad';
-                    chips.push(`<span class="pc-chip pc-chip-${tone}" title="Wi-Fi signal strength">${iconMarkup('wifi')}${dbm} dBm</span>`);
-                }
-                const lightLabel = p.chamber_light ? 'Light on' : 'Light off';
-                chips.push(canControlPrinter(p)
-                    ? `<button type="button" class="pc-chip pc-chip-btn${p.chamber_light ? ' pc-chip-on' : ''}" onclick="printerCmd(${jsArg(name)},'light')" title="Toggle chamber light">${iconMarkup('bulb')}${lightLabel}</button>`
-                    : `<span class="pc-chip${p.chamber_light ? ' pc-chip-on' : ''}">${iconMarkup('bulb')}${lightLabel}</span>`);
-            }
             if (p.staff_only) chips.push(`<span class="pc-chip pc-chip-staff" title="Only staff can use this printer">${iconMarkup('lock')}Staff only</span>`);
             if (isAdmin && p.plate_clear_required === false) chips.push(`<span class="pc-chip pc-chip-warn" title="Jobs are sent without anyone confirming the build plate is clear. Change this in Details.">${iconMarkup('alert')}Plate check off</span>`);
             return chips.join('');
@@ -5626,6 +5618,7 @@
             const safeType = escapeHtml(pType);
             const thumbKey = printerThumbKey(p);
             const subline = renderPrinterSubline(name, p);
+            const lightControl = renderPrinterLight(name, p);
             const showControls = canControlPrinter(p) || myActivePrinters.has(name);
 
             return `
@@ -5640,6 +5633,7 @@
                         </div>
                         <div class="printer-header-actions">
                             ${renderPrinterStatus(name, p)}
+                            <span data-field="light"${lightControl ? '' : ' hidden'}>${lightControl}</span>
                             ${isAuthenticated ? `<button class="btn printer-card-action" onclick="openPrinterDetails(${nameArg})" title="View printer details">${iconMarkup('details')} Details</button>` : ''}
                             ${isAdmin ? `<button class="btn printer-card-action" data-field="reconnect" onclick="openReconnect(${nameArg})" title="Scan for this printer at a new IP address"${connected ? ' style="display:none"' : ''}>Reconnect</button>` : ''}
                             ${isAdmin ? `<button class="printer-remove-btn" onclick="removePrinter(${nameArg})" title="Remove printer">&times;</button>` : ''}
@@ -5647,7 +5641,6 @@
                     </div>
                     <div class="pc-chips" data-field="chips">${renderPrinterChips(name, p)}</div>
                     <div data-field="plate">${renderPlateBanner(name, p)}</div>
-                    ${p.orca_port ? `<div class="printer-orca-port">OrcaSlicer: <span>${escapeHtml(location.hostname)}:${clampNumber(p.orca_port, 1, 65535)}</span></div>` : ''}
                     <div class="pc-job">
                         <div class="pc-thumb" data-field="thumb" data-key="${htmlEscape(thumbKey)}">${renderJobThumb(name, p)}</div>
                         <div class="pc-job-info" data-field="job-info">${renderJobInfo(name, p)}</div>
@@ -6149,6 +6142,12 @@
 
             setHtmlIfChanged(card.querySelector('[data-field="subline"]'), renderPrinterSubline(name, p));
             setHtmlIfChanged(card.querySelector('[data-field="chips"]'), renderPrinterChips(name, p));
+            const lightEl = card.querySelector('[data-field="light"]');
+            const lightControl = renderPrinterLight(name, p);
+            if (lightEl) {
+                lightEl.hidden = !lightControl;
+                setHtmlIfChanged(lightEl, lightControl);
+            }
 
             // Job panel: only reload the thumbnail when the job changes
             const thumbEl = card.querySelector('[data-field="thumb"]');
@@ -6319,7 +6318,7 @@
                     ['Connected', p.connected],
                     ['Type', p.type],
                     ['IP / Host', p.host],
-                    ['OrcaSlicer Port', p.orca_port ? `${location.hostname}:${p.orca_port}` : ''],
+                    ['OrcaSlicer Hostname', p.orca_port ? `${location.hostname}:${p.orca_port}` : ''],
                     ['Virtual IP', p.virtual_ip],
                     ['Staff Only', p.staff_only],
                 ]),
@@ -6327,7 +6326,7 @@
                     ['Serial Number', p.serial],
                     ['Access Code', p.access_code],
                     ['AMS Serial', p.ams_serial],
-                    ['Nozzle', [p.nozzle_diameter, p.nozzle_type].filter(Boolean).join(' ')],
+                    ['Nozzle', [p.nozzle_diameter ? `${p.nozzle_diameter}mm` : '', prettyNozzleType(p.nozzle_type)].filter(Boolean).join(' · ')],
                     ['Wi-Fi Signal', p.wifi_signal],
                     ['Chamber Light', p.chamber_light],
                 ]),

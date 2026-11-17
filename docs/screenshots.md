@@ -34,6 +34,8 @@ Camera visibility and rotation are also saved per printer in the browser.
 The print state and health indicator now share one button, with actionable text
 such as **Finished · clear plate**. Reported alerts appear alongside the state.
 Click the button to open printer details; the separate **OK** chip is removed.
+The light control shares the status row. Nozzle details, the Orca address, and
+Wi-Fi strength are available in Details instead of appearing on each card.
 
 ![Combined print and health status examples](images/printer-status.png)
 
