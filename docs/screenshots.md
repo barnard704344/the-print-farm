@@ -42,7 +42,7 @@ Wi-Fi strength are available in Details instead of appearing on each card.
 ## Idle Printer Pictures
 
 Idle cards now show locally bundled printer pictures for recognised Bambu and
-Voron models. Unknown Klipper models retain the generic icon. This view uses
+Voron models. A detected AMS appears above the Bambu printer picture. Unknown Klipper models retain the generic icon. This view uses
 sample printers; see [Printer Pictures](printers-and-orcaslicer.md#printer-pictures)
 for model overrides and the supported models.
 

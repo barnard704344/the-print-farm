@@ -42,6 +42,12 @@ An active print’s available model preview takes priority. If its preview canno
 be loaded, the printer picture remains visible; unknown printers keep the generic
 printer icon. Pictures are bundled locally and require no external image service.
 
+When a Bambu printer reports `has_ams`, its thumbnail also shows a representative
+AMS accessory above the printer. This follows the reported hardware state, not
+the printer’s name, and updates during normal polling. Klipper MMUs do not trigger
+an AMS picture. Per-unit AMS blocks remain the source for individual slots,
+filament, and unit details.
+
 The farm recognises Bambu P1S, P1P, X1, X1 Carbon/X1C, X1E, A1 and A1 mini names,
 and Voron, Voron 2.4, Trident, Zero/V0 and Switchwire names for Klipper printers.
 A plain **Voron** uses a representative V2.4 picture. To choose the picture when

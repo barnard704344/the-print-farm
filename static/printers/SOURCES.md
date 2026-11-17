@@ -1,6 +1,6 @@
 # Printer Image Sources
 
-Printer profile cover images from [OrcaSlicer](https://github.com/SoftFever/OrcaSlicer),
+Printer profile cover and AMS accessory images from [OrcaSlicer](https://github.com/SoftFever/OrcaSlicer),
 pinned to commit `32f6db87e828373a83c5ea5c4b2f12f9b0fe50c2`. Images are distributed under the upstream
 [GNU Affero General Public License v3](ORCASLICER-LICENSE.txt); original printer
 names and trademarks belong to their respective owners. Images are bundled
@@ -19,3 +19,4 @@ unchanged. A generic Voron uses the V2.4 family image.
 | voron-trident.png | [Voron/Voron Trident 300_cover.png](https://raw.githubusercontent.com/SoftFever/OrcaSlicer/32f6db87e828373a83c5ea5c4b2f12f9b0fe50c2/resources/profiles/Voron/Voron%20Trident%20300_cover.png) |
 | voron-0.png | [Voron/Voron 0.1_cover.png](https://raw.githubusercontent.com/SoftFever/OrcaSlicer/32f6db87e828373a83c5ea5c4b2f12f9b0fe50c2/resources/profiles/Voron/Voron%200.1_cover.png) |
 | voron-switchwire.png | [Voron/Voron Switchwire 250_cover.png](https://raw.githubusercontent.com/SoftFever/OrcaSlicer/32f6db87e828373a83c5ea5c4b2f12f9b0fe50c2/resources/profiles/Voron/Voron%20Switchwire%20250_cover.png) |
+| bambu-ams.png | [AMS accessory render](https://raw.githubusercontent.com/SoftFever/OrcaSlicer/32f6db87e828373a83c5ea5c4b2f12f9b0fe50c2/resources/images/monitor_upgrade_ams_png.png) |

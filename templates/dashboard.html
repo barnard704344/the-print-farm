@@ -3930,8 +3930,13 @@
         }
         .pc-thumb .pc-thumb-icon { width: 26px; height: 26px; opacity: 0.45; }
         .pc-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: var(--bg); }
+        .pc-printer-assembly { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: #f4f5f6; }
         .pc-thumb .pc-printer-picture { padding: 4px; background: #f4f5f6; }
+        :root:not([data-theme="light"]) .pc-printer-assembly,
         :root:not([data-theme="light"]) .pc-thumb .pc-printer-picture { background: var(--bg); }
+        .pc-printer-assembly.has-ams .pc-printer-picture { top: 22px; height: 42px; padding: 0 4px 3px; }
+        .pc-printer-assembly.has-ams .pc-thumb-icon { transform: translateY(10px); }
+        .pc-thumb .pc-ams-picture { top: 0; left: 7px; width: 50px; height: 28px; background: transparent; }
         .pc-job-info { flex: 1; min-width: 0; }
         .pc-job-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
         .pc-job-name { font-size: 13px; font-weight: 500; margin: 1px 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -5462,19 +5467,32 @@
             return (isAuthenticated && p.connected && active && p.subtask_name) ? String(p.subtask_name) : '';
         }
 
+        function printerHasAms(p) {
+            return (p.type || 'bambulab') === 'bambulab' && p.has_ams === true;
+        }
+
         function printerThumbKey(p) {
-            return JSON.stringify([jobThumbKey(p), p.printer_image || '', p.printer_model_name || '']);
+            return JSON.stringify([jobThumbKey(p), p.printer_image || '', p.printer_model_name || '', printerHasAms(p)]);
         }
 
         function renderJobThumb(name, p) {
             const key = jobThumbKey(p);
-            const picture = p.printer_image
-                ? `<img class="pc-printer-picture" src="${BASE}/static/${p.printer_image.split('/').map(encodeURIComponent).join('/')}" alt="${htmlEscape(p.printer_model_name || 'Printer')}" title="${htmlEscape(p.printer_model_name || 'Printer')}" onerror="this.remove()">`
+            const hasAms = printerHasAms(p);
+            const label = (p.printer_model_name || 'Printer') + (hasAms ? ' with AMS' : '');
+            const printer = p.printer_image
+                ? `<img class="pc-printer-picture" src="${BASE}/static/${p.printer_image.split('/').map(encodeURIComponent).join('/')}" alt="${htmlEscape(label)}" title="${htmlEscape(label)}" onerror="this.remove()">`
                 : '';
+            const ams = hasAms
+                ? `<img class="pc-ams-picture" src="${BASE}/static/printers/bambu-ams.png" alt="AMS accessory" title="AMS detected" onerror="this.parentElement.classList.remove('has-ams');this.remove()">`
+                : '';
+            const fallback = iconMarkup('printers', 'pc-thumb-icon');
+            const picture = printer || ams
+                ? `<div class="pc-printer-assembly${hasAms ? ' has-ams' : ''}">${fallback}${printer}${ams}</div>`
+                : fallback;
             const job = key
                 ? `<img class="pc-print-preview" src="${BASE}/api/printer/${encodeURIComponent(name)}/thumbnail?k=${encodeURIComponent(key)}" alt="Print preview" loading="lazy" onerror="this.remove()">`
                 : '';
-            return `${iconMarkup('printers', 'pc-thumb-icon')}${picture}${job}`;
+            return `${picture}${job}`;
         }
 
         const SPEED_LEVELS = { 1: 'Silent', 2: 'Standard', 3: 'Sport', 4: 'Ludicrous' };
