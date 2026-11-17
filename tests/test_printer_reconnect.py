@@ -212,6 +212,70 @@ class PrinterReconnectTests(unittest.TestCase):
         self.assertIn("10.72.28", scanned)
         self.assertEqual(subnet_scan.call_count, 10)
 
+    def test_discovery_settings_returns_saved_vlan_ranges(self):
+        self.config["discovery"] = {
+            "scan_subnets": ["192.168.60.0/24", "10.136.32.0/21"],
+        }
+
+        with patch("src.web.subprocess.run") as run:
+            run.return_value.stdout = (
+                "1: lo inet 127.0.0.1/8 scope host lo\n"
+                "2: eth0 inet 192.168.1.180/24 scope global eth0\n"
+                "3: macvlan inet 192.168.1.135/24 scope global macvlan\n"
+            )
+            response = self._client().get("/api/discovery/config")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["scan_subnets"], [
+            "192.168.60.0/24",
+            "10.136.32.0/21",
+        ])
+        self.assertEqual(data["local_subnets"], ["192.168.1.0/24"])
+        self.assertEqual(data["effective_subnets"], [
+            {"network": "192.168.1.0/24", "source": "direct"},
+            {"network": "192.168.60.0/24", "source": "configured"},
+            {"network": "10.136.32.0/21", "source": "configured"},
+        ])
+
+    def test_discovery_settings_saves_canonical_ranges_and_preserves_config(self):
+        with patch.dict(os.environ, {"FARM_CONFIG": self.config_path}):
+            response = self._client().post(
+                "/api/discovery/config",
+                json={"scan_subnets": [
+                    "192.168.60.99/24",
+                    "10.136.33.4/21",
+                    "192.168.60.0/24",
+                ]},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["scan_subnets"], [
+            "192.168.60.0/24",
+            "10.136.32.0/21",
+        ])
+        with open(self.config_path, encoding="utf-8") as handle:
+            saved = yaml.safe_load(handle)
+        self.assertEqual(saved["web"], self.config["web"])
+        self.assertEqual(saved["printers"], self.config["printers"])
+        self.assertEqual(saved["discovery"]["scan_subnets"], [
+            "192.168.60.0/24",
+            "10.136.32.0/21",
+        ])
+
+    def test_discovery_settings_rejects_oversized_range(self):
+        with patch.dict(os.environ, {"FARM_CONFIG": self.config_path}):
+            response = self._client().post(
+                "/api/discovery/config",
+                json={"scan_subnets": ["192.168.0.0/20"]},
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("/21 to /24", response.get_json()["message"])
+        with open(self.config_path, encoding="utf-8") as handle:
+            saved = yaml.safe_load(handle)
+        self.assertNotIn("discovery", saved)
+
     def test_dashboard_keeps_reconnect_control_for_offline_transitions(self):
         response = self._client().get("/")
 
@@ -221,6 +285,17 @@ class PrinterReconnectTests(unittest.TestCase):
             b"reconnectEl.style.display = connected ? 'none' : ''",
             response.data,
         )
+
+    def test_dashboard_has_discovery_vlan_settings(self):
+        response = self._client().get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'id="discoveryScanSubnets"', response.data)
+        self.assertIn(b'id="discoveryEffectiveSubnets"', response.data)
+        self.assertIn(b"Directly attached", response.data)
+        self.assertIn(b"Configured VLAN", response.data)
+        self.assertIn(b"loadDiscoveryConfig()", response.data)
+        self.assertIn(b"saveDiscoveryConfig()", response.data)
 
     def test_reconnect_changes_only_host_and_replaces_live_client(self):
         new_client = FakeClient("192.168.1.77")

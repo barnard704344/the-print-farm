@@ -7,6 +7,16 @@ changes to The Print Farm.
 
 ### Added
 
+- **Discovery VLAN ranges in Settings.** Admins can now view and edit the
+  routed IPv4 `/21` through `/24` networks used automatically by Add Printer
+  and Reconnect scans. The page shows the complete effective scan list and
+  labels directly attached networks separately from configured VLANs. Changes
+  apply immediately without restarting the farm.
+
+- **Settings category tabs.** The long Settings page is now separated into
+  Access, Printers & Network, Integrations, and System tabs. The last selected
+  category is remembered in the browser.
+
 - **Better printer card layout.**
   - **Own height:** cards keep their own height within stable rows, so a
     long card (for example a Klipper toolchanger with macros and fans) no
@@ -18,6 +28,15 @@ changes to The Print Farm.
     & Lights; AMS units keep the full width.
 
 ### Fixed
+
+- **Obico settings now stay visible and apply immediately.** The Settings page
+  restores the selected Klipper printer and its saved Enabled checkbox instead
+  of resetting the form. Saving or disabling Obico updates the live printer
+  client without requiring a service restart.
+
+- **Configured Discord webhooks are visible in Settings.** The admin-only
+  webhook field now shows the saved URL and a Configured indicator instead of
+  appearing blank. Saving the form preserves the configured value.
 
 - **Printer cards keep a stable layout when offline or cameras are hidden.**
   Cards stay in their columns as content changes height. Narrow cards put

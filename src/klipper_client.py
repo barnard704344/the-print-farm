@@ -210,14 +210,7 @@ class KlipperClient:
 
         # Obico integration
         self._obico = None
-        if obico_config and obico_config.get("server"):
-            from .obico_client import ObicoClient
-            self._obico = ObicoClient(
-                server_url=obico_config["server"],
-                username=obico_config.get("username", ""),
-                password=obico_config.get("password", ""),
-                printer_id=int(obico_config.get("printer_id", 0)),
-            )
+        self.configure_obico(obico_config)
 
     @property
     def state(self) -> PrintState:
@@ -226,6 +219,22 @@ class KlipperClient:
 
     def on_state_change(self, callback: Callable[[str, PrintState], None]):
         self._on_state_change = callback
+
+    def configure_obico(self, config: dict = None):
+        """Apply Obico settings without restarting the printer client."""
+        obico = None
+        if config and config.get("server"):
+            from .obico_client import ObicoClient
+            obico = ObicoClient(
+                server_url=config["server"],
+                username=config.get("username", ""),
+                password=config.get("password", ""),
+                printer_id=int(config.get("printer_id", 0)),
+            )
+        self._obico = obico
+        if obico is None:
+            with self._state_lock:
+                self._state.obico = {}
 
     def connect(self, timeout: float = 10.0) -> bool:
         """Test connection to Moonraker and start status polling."""

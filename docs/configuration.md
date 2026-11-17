@@ -88,8 +88,9 @@ The live configuration is stored at `/etc/the-print-farm/config.yaml` with mode
 ## Printer Discovery Networks
 
 Add Printer and offline-printer Reconnect scans use networks attached directly
-to the server by default. Configure routed printer VLANs when the printers are
-on another network:
+to the server by default. Configure routed printer VLANs under **Settings →
+Network Discovery** when the printers are on another network. The equivalent
+YAML is:
 
 ```yaml
 discovery:
@@ -100,6 +101,9 @@ discovery:
 IPv4 networks from `/21` through `/24` are accepted. Reconnect also scans the
 `/24` containing the printer's saved address. Staff can temporarily override
 the configured defaults with the **Subnet to scan** field in either workflow.
+The Settings page lists both the directly attached networks detected on the
+farm server and every configured VLAN, so the complete automatic scan scope is
+visible in one place.
 
 On BambuLab networks with multiple printers, the reconnect scan excludes IPs
 already assigned to another configured printer. Other port-scan candidates are

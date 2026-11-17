@@ -2576,8 +2576,15 @@
         </div>
 
         <!-- Settings Tab (Admin only) -->
-        <div class="tab-content" id="tab-settings">
-            <div class="setup-section" style="max-width:700px;">
+        <div class="tab-content" id="tab-settings" data-settings-section="access">
+            <nav class="settings-subtabs" aria-label="Settings categories">
+                <button class="settings-subtab active" data-settings-section="access" onclick="setSettingsSection('access', this)" aria-selected="true">Access</button>
+                <button class="settings-subtab" data-settings-section="printers" onclick="setSettingsSection('printers', this)" aria-selected="false">Printers &amp; Network</button>
+                <button class="settings-subtab" data-settings-section="integrations" onclick="setSettingsSection('integrations', this)" aria-selected="false">Integrations</button>
+                <button class="settings-subtab" data-settings-section="system" onclick="setSettingsSection('system', this)" aria-selected="false">System</button>
+            </nav>
+
+            <div class="setup-section settings-panel" data-settings-panel="access" data-settings-first style="max-width:700px;">
                 <h3 style="margin-bottom:16px;">Login</h3>
                 <p style="color:var(--text-muted); font-size:13px; margin-bottom:16px;">
                     For a small farm with a single operator you can turn login off. Everyone who can open the dashboard
@@ -2606,7 +2613,7 @@
                 <div id="authConfigResult" style="font-size:13px; margin-top:6px;"></div>
             </div>
 
-            <div class="setup-section" style="max-width:700px; margin-top:32px;">
+            <div class="setup-section settings-panel" data-settings-panel="access" style="max-width:700px; margin-top:32px;">
                 <h3 style="margin-bottom:16px;">Active Directory Configuration</h3>
                 <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
                     Configure LDAP/Active Directory authentication. When enabled, users log in with their AD credentials.
@@ -2678,7 +2685,7 @@
                 </div>
             </div>
 
-            <div class="setup-section" style="max-width:700px; margin-top:32px;">
+            <div class="setup-section settings-panel" data-settings-panel="access" style="max-width:700px; margin-top:32px;">
                 <h3 style="margin-bottom:16px;">Student Print Access</h3>
                 <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
                     Students can sign in, but only approved students can upload jobs, send jobs to printers, or print from the library.
@@ -2701,7 +2708,7 @@
             </div>
 
             <!-- Obico AI Configuration -->
-            <div class="setup-section" style="max-width:700px; margin-top:32px;">
+            <div class="setup-section settings-panel" data-settings-panel="integrations" data-settings-first style="max-width:700px; margin-top:32px;">
                 <h3 style="margin-bottom:16px;">Obico AI Failure Detection</h3>
                 <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
                     Connect a self-hosted Obico server to enable AI-based print failure detection for Klipper printers.
@@ -2751,7 +2758,7 @@
             </div>
 
             <!-- Spoolman Filament Management -->
-            <div class="setup-section" style="max-width:700px; margin-top:32px;">
+            <div class="setup-section settings-panel" data-settings-panel="integrations" style="max-width:700px; margin-top:32px;">
                 <h3 style="margin-bottom:16px;">Spoolman Filament Tracking</h3>
                 <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
                     Connect to a <a href="https://github.com/Donkie/Spoolman" target="_blank" style="color:var(--accent);">Spoolman</a> instance
@@ -2785,7 +2792,7 @@
             </div>
 
             <!-- Printer Pool Auto-Dispatch -->
-            <div class="setup-section" style="max-width:700px; margin-top:32px;">
+            <div class="setup-section settings-panel" data-settings-panel="printers" data-settings-first style="max-width:700px; margin-top:32px;">
                 <h3 style="margin-bottom:16px;">Printer Pool</h3>
                 <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
                     When enabled, jobs submitted through the <strong>generic OrcaSlicer port</strong> (without a specific printer target)
@@ -2806,7 +2813,7 @@
             </div>
 
             <!-- Notifications -->
-            <div class="setup-section" style="max-width:700px; margin-top:32px;">
+            <div class="setup-section settings-panel" data-settings-panel="integrations" style="max-width:700px; margin-top:32px;">
                 <h3 style="margin-bottom:16px;">Notifications</h3>
                 <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
                     Get notified when prints complete or fail via email and/or Discord.
@@ -2898,7 +2905,8 @@
                             </label>
                             <div>
                                 <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Webhook URL</label>
-                                <input type="text" id="notifDiscordWebhook" placeholder="https://discord.com/api/webhooks/..." class="ad-input">
+                                <input type="text" id="notifDiscordWebhook" placeholder="https://discord.com/api/webhooks/..." class="ad-input" autocomplete="off">
+                                <div id="notifDiscordConfigured" style="font-size:11px; color:var(--text-muted); margin-top:4px;">Not configured</div>
                             </div>
                         </div>
                     </div>
@@ -2912,8 +2920,33 @@
                 </div>
             </div>
 
-            <!-- Software Update -->
-            <div class="setup-section" style="max-width:700px; margin-top:32px;">
+            <div class="setup-section settings-panel" data-settings-panel="printers" style="max-width:700px; margin-top:32px;">
+                <h3 style="margin-bottom:16px;">Network Discovery</h3>
+                <p style="color:var(--text-muted); font-size:13px; margin-bottom:16px;">
+                    Add routed printer VLANs that should be searched automatically by Add Printer and Reconnect.
+                    Directly attached networks are always included.
+                </p>
+                <div style="margin-bottom:16px;">
+                    <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">Networks included in automatic scans</div>
+                    <div id="discoveryEffectiveSubnets" style="display:flex; flex-direction:column; gap:6px;">
+                        <span style="font-size:12px; color:var(--text-muted);">Loading networks...</span>
+                    </div>
+                </div>
+                <div>
+                    <label for="discoveryScanSubnets" style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Configured VLAN ranges (one per line)</label>
+                    <textarea id="discoveryScanSubnets" class="ad-input" rows="5" placeholder="192.168.60.0/24&#10;10.136.32.0/21" style="resize:vertical; min-height:110px; font-family:monospace;"></textarea>
+                    <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">
+                        IPv4 ranges from /21 to /24 are supported. Up to 32 /24 networks may be covered in total.
+                    </div>
+                </div>
+                <div style="display:flex; gap:8px; margin-top:12px;">
+                    <button class="btn btn-success" onclick="saveDiscoveryConfig()">Save VLAN Ranges</button>
+                </div>
+                <div id="discoveryConfigResult" style="font-size:13px; margin-top:6px;"></div>
+            </div>
+
+            <!-- Display Preferences -->
+            <div class="setup-section settings-panel" data-settings-panel="system" data-settings-first style="max-width:700px; margin-top:32px;">
                 <h3 style="margin-bottom:16px;">Display Preferences</h3>
                 <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
                     Controls how dates and times are shown across the dashboard.
@@ -2938,7 +2971,7 @@
                 </div>
             </div>
 
-            <div class="setup-section" style="max-width:700px; margin-top:32px;">
+            <div class="setup-section settings-panel" data-settings-panel="system" style="max-width:700px; margin-top:32px;">
                 <h3 style="margin-bottom:16px;">Software Update</h3>
                 <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
                     Check for updates from the Git repository and apply them.
@@ -3443,6 +3476,30 @@
             color: var(--accent); margin-bottom: 12px; padding-bottom: 6px;
             border-bottom: 1px solid var(--border);
         }
+        .settings-subtabs {
+            display: flex; gap: 6px; max-width: 700px; margin-bottom: 24px;
+            padding: 5px; overflow-x: auto; border: 1px solid var(--border);
+            border-radius: 9px; background: var(--card);
+        }
+        .settings-subtab {
+            flex: 1 0 auto; min-height: 36px; padding: 7px 12px;
+            border: 0; border-radius: 6px; background: transparent;
+            color: var(--text-muted); font: inherit; font-size: 12px;
+            font-weight: 600; cursor: pointer;
+        }
+        .settings-subtab:hover { color: var(--text); background: var(--bg); }
+        .settings-subtab.active {
+            color: var(--accent); background: var(--bg);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+        }
+        #tab-settings .settings-panel { display: none; }
+        #tab-settings[data-settings-section="access"] .settings-panel[data-settings-panel="access"],
+        #tab-settings[data-settings-section="printers"] .settings-panel[data-settings-panel="printers"],
+        #tab-settings[data-settings-section="integrations"] .settings-panel[data-settings-panel="integrations"],
+        #tab-settings[data-settings-section="system"] .settings-panel[data-settings-panel="system"] {
+            display: block;
+        }
+        #tab-settings .settings-panel[data-settings-first] { margin-top: 0 !important; }
         .setup-details {
             background: var(--bg); border: 1px solid var(--border);
             border-radius: 8px; padding: 16px;
@@ -4293,19 +4350,28 @@
         // ── Obico Configuration ──────────────────────────────
         async function populateObicoPrinterDropdown() {
             const select = document.getElementById('obicoTargetPrinter');
+            const previousSelection = select.value;
             select.innerHTML = '<option value="">— Select a Klipper printer —</option>';
             try {
                 const res = await fetch(BASE + '/api/farm/status');
                 if (!res.ok) return;
                 const data = await res.json();
+                const klipperNames = [];
                 for (const [name, p] of Object.entries(data.printers || {})) {
                     if (p.type === 'klipper') {
+                        klipperNames.push(name);
                         const opt = document.createElement('option');
                         opt.value = name;
                         opt.textContent = name;
                         select.appendChild(opt);
                     }
                 }
+                if (previousSelection && klipperNames.includes(previousSelection)) {
+                    select.value = previousSelection;
+                } else if (klipperNames.length === 1) {
+                    select.value = klipperNames[0];
+                }
+                await loadObicoForPrinter();
             } catch (e) {}
         }
 
@@ -4347,7 +4413,8 @@
                 });
                 const data = await res.json();
                 if (data.ok) {
-                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; Obico configuration saved. Restart service to apply.</span>';
+                    document.getElementById('obicoEnabled').checked = Boolean(data.enabled);
+                    resultEl.innerHTML = '<span style="color:var(--accent);">&#10003; Obico configuration saved.</span>';
                 } else {
                     resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(data.message)}</span>`;
                 }
@@ -4482,6 +4549,52 @@
             }
         }
 
+        // ── Network Discovery Settings ──────────────────────
+        async function loadDiscoveryConfig() {
+            const resultEl = document.getElementById('discoveryConfigResult');
+            try {
+                const res = await fetch(BASE + '/api/discovery/config');
+                const data = await res.json();
+                if (!res.ok) throw new Error(apiErrorMessage(data, 'Could not load VLAN ranges'));
+                document.getElementById('discoveryScanSubnets').value = (data.scan_subnets || []).join('\n');
+                const effectiveEl = document.getElementById('discoveryEffectiveSubnets');
+                const networks = data.effective_subnets || [];
+                effectiveEl.innerHTML = networks.length ? networks.map(item => {
+                    const label = item.source === 'direct' ? 'Directly attached' : 'Configured VLAN';
+                    return `<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 10px; border:1px solid var(--border); border-radius:6px; background:var(--card);">
+                        <code>${escapeHtml(item.network)}</code>
+                        <span style="font-size:11px; color:var(--text-muted);">${label}</span>
+                    </div>`;
+                }).join('') : '<span style="font-size:12px; color:var(--text-muted);">No networks detected.</span>';
+                resultEl.textContent = '';
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:var(--danger);">${escapeHtml(e.message)}</span>`;
+            }
+        }
+
+        async function saveDiscoveryConfig() {
+            const resultEl = document.getElementById('discoveryConfigResult');
+            const scanSubnets = document.getElementById('discoveryScanSubnets').value
+                .split(/\r?\n/)
+                .map(value => value.trim())
+                .filter(Boolean);
+            resultEl.innerHTML = '<span style="color:var(--text-muted);">Saving...</span>';
+            try {
+                const res = await fetch(BASE + '/api/discovery/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ scan_subnets: scanSubnets }),
+                });
+                const data = await res.json();
+                if (!res.ok || !data.ok) throw new Error(apiErrorMessage(data, 'Could not save VLAN ranges'));
+                document.getElementById('discoveryScanSubnets').value = (data.scan_subnets || []).join('\n');
+                await loadDiscoveryConfig();
+                resultEl.innerHTML = `<span style="color:var(--accent);">&#10003; ${escapeHtml(data.message)}</span>`;
+            } catch (e) {
+                resultEl.innerHTML = `<span style="color:var(--danger);">&#10007; ${escapeHtml(e.message)}</span>`;
+            }
+        }
+
         // ── Printer Pool Settings ────────────────────────────
         async function loadPoolConfig() {
             try {
@@ -4607,6 +4720,9 @@
                 const discord = data.discord || {};
                 document.getElementById('notifDiscordEnabled').checked = discord.enabled || false;
                 document.getElementById('notifDiscordWebhook').value = discord.webhook_url || '';
+                const discordConfigured = document.getElementById('notifDiscordConfigured');
+                discordConfigured.textContent = discord.webhook_configured ? 'Configured' : 'Not configured';
+                discordConfigured.style.color = discord.webhook_configured ? 'var(--accent)' : 'var(--text-muted)';
             } catch (e) {}
         }
 
@@ -4897,6 +5013,26 @@
             });
         }
 
+        // ── Settings category tabs ───────────────────────────
+        function setSettingsSection(section) {
+            const settings = document.getElementById('tab-settings');
+            const allowed = ['access', 'printers', 'integrations', 'system'];
+            const selected = allowed.includes(section) ? section : 'access';
+            settings.dataset.settingsSection = selected;
+            settings.querySelectorAll('.settings-subtab').forEach(button => {
+                const active = button.dataset.settingsSection === selected;
+                button.classList.toggle('active', active);
+                button.setAttribute('aria-selected', active ? 'true' : 'false');
+            });
+            try { localStorage.setItem('farm-settings-section', selected); } catch (e) {}
+        }
+
+        try {
+            setSettingsSection(localStorage.getItem('farm-settings-section') || 'access');
+        } catch (e) {
+            setSettingsSection('access');
+        }
+
         // ── Tabs ─────────────────────────────────────────────
         document.querySelectorAll('.tab').forEach(tab => {
             tab.addEventListener('click', () => {
@@ -4904,7 +5040,7 @@
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 tab.classList.add('active');
                 document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
-                if (tab.dataset.tab === 'settings') { loadAuthConfig(); loadADConfig(); loadStudentAccessConfig(); populateObicoPrinterDropdown(); loadSpoolmanConfig(); loadPoolConfig(); loadNotificationConfig(); loadUiConfig(); }
+                if (tab.dataset.tab === 'settings') { loadAuthConfig(); loadADConfig(); loadStudentAccessConfig(); populateObicoPrinterDropdown(); loadSpoolmanConfig(); loadPoolConfig(); loadNotificationConfig(); loadDiscoveryConfig(); loadUiConfig(); }
                 if (tab.dataset.tab === 'library') {
                     const hash = libraryHashFor(libraryCurrentFolder);
                     if (location.hash !== hash) history.replaceState(null, '', location.pathname + location.search + hash);

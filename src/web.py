@@ -287,6 +287,27 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             pass
         return addresses
 
+    def _local_ipv4_networks():
+        """Return canonical non-loopback IPv4 networks attached to this host."""
+        networks = []
+        try:
+            result = subprocess.run(
+                ["ip", "-o", "-4", "addr", "show"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            for value in re.findall(r"\binet\s+([0-9.]+/[0-9]+)", result.stdout):
+                interface = ipaddress.ip_interface(value)
+                if interface.ip.is_loopback:
+                    continue
+                network = str(interface.network)
+                if network not in networks:
+                    networks.append(network)
+        except Exception:
+            pass
+        return networks
+
     def _filter_discovery_results(printers):
         """Hide configured printers and this host's virtual Bambu endpoints."""
         configured_serials = {
@@ -350,6 +371,38 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             except ValueError as exc:
                 logger.warning("Ignoring invalid discovery.scan_subnets entry %r: %s", value, exc)
         return list(dict.fromkeys(prefixes))
+
+    def _normalise_scan_subnets(values):
+        """Validate and canonicalise saved discovery networks."""
+        if not isinstance(values, list):
+            raise ValueError("VLAN ranges must be a list")
+        networks = []
+        expanded_count = 0
+        for value in values:
+            value = str(value or "").strip()
+            if not value:
+                continue
+            candidate = value if "/" in value else (
+                value + ".0/24" if value.count(".") == 2 else value + "/24"
+            )
+            try:
+                network = ipaddress.ip_network(candidate, strict=False)
+            except ValueError as exc:
+                raise ValueError(f"Invalid VLAN range '{value}': {exc}") from exc
+            if network.version != 4 or not 21 <= network.prefixlen <= 24:
+                raise ValueError(
+                    f"VLAN range '{value}' must be an IPv4 /21 to /24"
+                )
+            canonical = str(network)
+            if canonical in networks:
+                continue
+            expanded_count += 1 << (24 - network.prefixlen)
+            if expanded_count > 32:
+                raise ValueError(
+                    "Configured VLAN ranges may cover at most 32 /24 networks"
+                )
+            networks.append(canonical)
+        return networks
 
     def _run_privileged_helper(*args, timeout=90):
         """Run one validated deployment operation through the fixed helper."""
@@ -2067,6 +2120,58 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
 
     # ── Discovery API ─────────────────────────────────────
 
+    @app.route(prefix + "/api/discovery/config", methods=["GET"])
+    @app.route("/api/discovery/config", methods=["GET"])
+    @admin_required
+    def discovery_get_config():
+        """Return the routed VLAN ranges included in automatic scans."""
+        values = (app_config.get("discovery") or {}).get("scan_subnets") or []
+        if isinstance(values, str):
+            values = [values]
+        local_networks = _local_ipv4_networks()
+        effective_networks = [
+            *({"network": network, "source": "direct"} for network in local_networks),
+            *(
+                {"network": network, "source": "configured"}
+                for network in values if network not in local_networks
+            ),
+        ]
+        return jsonify({
+            "scan_subnets": values,
+            "local_subnets": local_networks,
+            "effective_subnets": effective_networks,
+        })
+
+    @app.route(prefix + "/api/discovery/config", methods=["POST"])
+    @app.route("/api/discovery/config", methods=["POST"])
+    @admin_required
+    def discovery_save_config():
+        """Validate and save the routed VLAN ranges used by discovery."""
+        data = request.get_json(silent=True) or {}
+        try:
+            networks = _normalise_scan_subnets(data.get("scan_subnets", []))
+        except ValueError as exc:
+            return jsonify({"ok": False, "message": str(exc)}), 400
+
+        config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
+        try:
+            file_config = load_yaml_config(config_path)
+            discovery = file_config.get("discovery") or {}
+            if not isinstance(discovery, dict):
+                discovery = {}
+            discovery["scan_subnets"] = networks
+            file_config["discovery"] = discovery
+            save_yaml_config(config_path, file_config)
+            app_config["discovery"] = discovery
+            return jsonify({
+                "ok": True,
+                "scan_subnets": networks,
+                "message": "Discovery VLAN ranges saved",
+            })
+        except Exception as exc:
+            logger.error("Failed to save discovery config: %s", exc)
+            return jsonify({"ok": False, "message": str(exc)}), 500
+
     @app.route(prefix + "/api/discover/scan", methods=["POST"])
     @app.route("/api/discover/scan", methods=["POST"])
     @admin_required
@@ -2880,6 +2985,21 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
     def obico_save_config(name):
         """Save Obico configuration for a specific printer."""
         data = request.get_json(silent=True) or {}
+        enabled = bool(data.get("enabled"))
+        if enabled:
+            missing = [
+                label for label, value in (
+                    ("server", str(data.get("server", "")).strip()),
+                    ("printer ID", data.get("printer_id")),
+                    ("username", str(data.get("username", "")).strip()),
+                    ("password", str(data.get("password", "")).strip()),
+                ) if not value
+            ]
+            if missing:
+                return jsonify({
+                    "ok": False,
+                    "message": "Obico requires " + ", ".join(missing),
+                }), 400
         config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
         try:
             file_config = load_yaml_config(config_path)
@@ -2889,7 +3009,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             for p in file_config.get("printers", []):
                 if p.get("name") == name and p.get("type") == "klipper":
                     printer_found = True
-                    if data.get("enabled"):
+                    if enabled:
                         obico = p.get("obico", {})
                         obico["server"] = data.get("server", "").strip()
                         obico["printer_id"] = int(data.get("printer_id", 0))
@@ -2910,7 +3030,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             # Update live config
             for p in app_config.get("printers", []):
                 if p.get("name") == name:
-                    if data.get("enabled"):
+                    if enabled:
                         p["obico"] = next(
                             (pr.get("obico", {}) for pr in file_config["printers"] if pr.get("name") == name), {}
                         )
@@ -2918,7 +3038,16 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
                         p.pop("obico", None)
                     break
 
-            return jsonify({"ok": True, "message": "Obico configuration saved"})
+            saved_obico = _get_obico_config_for_printer(name) if enabled else None
+            printer = farm_manager.get_printer(name)
+            if printer and hasattr(printer, "configure_obico"):
+                printer.configure_obico(saved_obico)
+
+            return jsonify({
+                "ok": True,
+                "enabled": enabled,
+                "message": "Obico configuration saved",
+            })
         except Exception as e:
             logger.error(f"Failed to save Obico config: {e}")
             return jsonify({"ok": False, "message": str(e)}), 500
@@ -3564,7 +3693,11 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
     @admin_required
     def notifications_get_config():
         n = app_config.get("notifications", {})
-        discord = {k: v for k, v in n.get("discord", {}).items() if k != "webhook_url"}
+        saved_discord = n.get("discord", {})
+        discord = {k: v for k, v in saved_discord.items() if k != "webhook_url"}
+        webhook_configured = bool(saved_discord.get("webhook_url"))
+        discord["webhook_configured"] = webhook_configured
+        discord["webhook_url"] = saved_discord.get("webhook_url", "")
         return jsonify({
             "enabled": n.get("enabled", False),
             "events": n.get("events", {}),
@@ -3604,8 +3737,9 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             discord_data = data.get("discord", {})
             discord = n.get("discord", {})
             discord["enabled"] = bool(discord_data.get("enabled", False))
-            if discord_data.get("webhook_url"):
-                discord["webhook_url"] = discord_data["webhook_url"]
+            webhook_url = str(discord_data.get("webhook_url", "")).strip()
+            if webhook_url and webhook_url != "********":
+                discord["webhook_url"] = webhook_url
             n["discord"] = discord
 
             file_config["notifications"] = n

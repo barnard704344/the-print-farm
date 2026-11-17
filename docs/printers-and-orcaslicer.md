@@ -51,7 +51,8 @@ field. Routed networks from `/21` through `/24` are supported, including
 `10.136.32.0/21`; larger ranges are rejected to keep scans bounded. The Add
 Printer network scan supports the same field.
 
-Frequently used routed VLANs can be scanned by default:
+Frequently used routed VLANs can be scanned by default. Open **Settings →
+Network Discovery** and enter one range per line, or edit the YAML directly:
 
 ```yaml
 discovery:
