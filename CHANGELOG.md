@@ -5,6 +5,11 @@ changes to The Print Farm.
 
 ## Unreleased
 
+### Fixed
+
+- **Printer pictures blend into dark cards.** Removed the light picture backdrop
+  in dark mode, keeping the transparent model images on the thumbnail’s dark surface.
+
 ### Added
 
 - **Model pictures on idle printer cards.** Recognised Bambu and Voron printers
