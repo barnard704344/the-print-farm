@@ -29,6 +29,14 @@ Camera visibility and rotation are also saved per printer in the browser.
 
 ![Dark dashboard with vertically stacked cards on a phone-sized screen](images/dashboard-mobile-dark.jpg)
 
+## Combined Status Button
+
+The print state and health indicator now share one button, with actionable text
+such as **Finished · clear plate**. Reported alerts appear alongside the state.
+Click the button to open printer details; the separate **OK** chip is removed.
+
+![Combined print and health status examples](images/printer-status.png)
+
 ## Idle Printer Pictures
 
 Idle cards now show locally bundled printer pictures for recognised Bambu and

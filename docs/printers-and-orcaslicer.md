@@ -7,6 +7,30 @@ Printers can be discovered automatically or added manually:
 - **BambuLab** — Auto-detected via UDP broadcast on the local network. The printer serial and access code are still required in config.
 - **Klipper** — Auto-detected by scanning for Moonraker on common ports. A printer at a known IP can also be added directly.
 
+## Printer Status Button
+
+The card’s status button combines print state and printer health. Signed-in
+viewers can click it to open **Printer Details**, including HMS codes, print
+errors, and Klipper messages. Hovering shows a summary. The separate **OK** health
+chip has been removed.
+
+| Button | Meaning |
+|---|---|
+| Ready to print | Idle or cleared, with no reported alerts |
+| Printing | A print is running |
+| Finished · clear plate | Remove the print, then press **Plate cleared** |
+| Paused / Paused · check filament | A paused job needs attention |
+| Print failed | The printer reports a failed print |
+| Printing · 1 alert (or another state plus alerts) | Print state plus reported HMS/print errors; highlighted in red |
+| Needs attention · 1 alert | Idle, but reports a health alert; review it before sending a job |
+| Offline | Disconnected; current health is unavailable |
+
+The button opens details; clearing the plate remains a separate, explicit action.
+Unknown states are labelled **Status unknown**. Read-only anonymous views show the
+same status text without a button.
+
+![Combined status buttons for a finished printer, an alert, and a ready printer](images/printer-status.png)
+
 ## Printer Pictures
 
 When no print is active, the job-panel thumbnail shows a picture of the printer.

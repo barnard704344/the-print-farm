@@ -67,11 +67,11 @@ No Klipper plugin or extra component is required beyond a standard Moonraker ins
 ## Core Features
 
 - **Multi-printer support** — BambuLab (P1S, X1C, A1) via MQTT/FTPS (LAN mode) and Klipper via Moonraker HTTP API
-- **Real-time dashboard** — Printer cards with status chips (Wi-Fi, HMS
-  alerts, chamber light, staff-only), a now-printing panel (job thumbnail,
+- **Real-time dashboard** — Printer cards with a combined print/health status button and chips for Wi-Fi,
+  chamber light, and staff-only access, a now-printing panel (job thumbnail,
   progress, time remaining, finish time, layers), click-to-set temperature
   tiles, per-unit AMS blocks with remaining-filament bars, and camera feeds.
-  Printers that can take a job show **READY**
+  Printers that can take a job show **Ready to print**
 - **Readable job names** — Printers and the dashboard show short names such as
   "cade pip2" instead of stored file names with random prefixes and
   OrcaSlicer's `_PLA_9m8s` suffix
@@ -110,9 +110,9 @@ No Klipper plugin or extra component is required beyond a standard Moonraker ins
 
 ## Build Plate Check and Camera Wall
 
-After a print finishes or fails, the printer card shows an amber **FINISH**
+After a print finishes or fails, the printer card shows an amber **Finished · clear plate**
 and waits until someone presses **Plate cleared**, so a new job never starts
-on top of an old one. Once cleared, the card shows a green **READY**.
+on top of an old one. Once cleared, the card shows a green **Ready to print**.
 The **Camera Wall** shows every printer camera in one grid for a classroom
 screen. See [Configuration](configuration.md#build-plate-check).
 

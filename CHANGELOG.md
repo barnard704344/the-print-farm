@@ -12,6 +12,12 @@ changes to The Print Farm.
 
 ### Added
 
+- **One meaningful printer status button.** Print state and health alerts now
+  share a button: Ready to print, Printing, Finished · clear plate, Paused, or
+  Print failed, with alert counts and details when needed. Clicking opens printer
+  details. Removed the separate OK/error health chip; disconnected printers show
+  Offline instead of stale health information.
+
 - **Model pictures on idle printer cards.** Recognised Bambu and Voron printers
   show their picture in the job panel. Active print previews take priority and
   fall back to the printer picture when unavailable. Configure `model` for custom
