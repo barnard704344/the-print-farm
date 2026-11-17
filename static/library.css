@@ -1,0 +1,35 @@
+/* Library workspace: quiet surfaces, clear hierarchy, responsive controls. */
+.lib-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:24px; }
+.lib-heading h1 { font-size:24px; letter-spacing:-.6px; margin:0 0 5px; }
+.lib-heading p, .lib-results { color:var(--text-muted); font-size:12px; }
+#tab-library .lib-sidebar { position:sticky; top:20px; border-radius:12px; padding:14px; }
+#tab-library .lib-main { min-width:0; }
+#tab-library .library-toolbar { padding:12px; border:1px solid var(--border); border-radius:12px; background:var(--surface); }
+#tab-library .library-toolbar-actions { flex-wrap:wrap; }
+.lib-filter { padding:8px 10px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text); }
+.lib-results { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:14px 0; }
+#tab-library .library-card { box-shadow:none; border:1px solid var(--border); border-radius:12px; overflow:visible; }
+#tab-library .library-card:hover { transform:none; border-color:var(--accent); box-shadow:0 4px 18px rgba(0,0,0,.08); }
+#tab-library .library-card-thumb { border-radius:11px 11px 0 0; height:160px; background:var(--surface-soft); }
+#tab-library .library-card-info { padding:14px; }
+#tab-library .library-card-name { font-size:14px; line-height:1.5; }
+#tab-library .library-card-meta { line-height:1.8; }
+#tab-library .library-card-actions { padding:0 14px 14px; align-items:center; }
+#tab-library .lib-check { opacity:1; }
+.lib-more { position:relative; margin-left:auto; }
+.lib-more summary { cursor:pointer; list-style:none; padding:5px 10px; border-radius:6px; color:var(--text-muted); }
+.lib-more summary::-webkit-details-marker { display:none; }
+.lib-more summary:hover { background:var(--surface-soft); }
+.lib-more-menu { position:absolute; right:0; top:100%; z-index:20; min-width:140px; display:flex; flex-direction:column; gap:4px; padding:8px; border:1px solid var(--border); border-radius:9px; background:var(--surface); box-shadow:var(--shadow); }
+.lib-more-menu .btn { text-align:left; }
+.lib-pagination { display:flex; justify-content:center; align-items:center; gap:16px; padding:24px 0; font-size:12px; color:var(--text-muted); }
+.lib-pagination[hidden] { display:none; }
+#libraryGrid[aria-busy="true"] { opacity:.55; pointer-events:none; }
+#tab-library .lib-selection-bar { position:sticky; top:8px; z-index:10; box-shadow:0 4px 14px rgba(0,0,0,.06); }
+@media(max-width:768px) {
+    .lib-heading { align-items:flex-start; }
+    #tab-library .lib-sidebar { position:static; }
+    #tab-library .library-toolbar-actions { width:100%; }
+    #tab-library .library-card-thumb { height:130px; }
+    .lib-results { align-items:flex-start; }
+}

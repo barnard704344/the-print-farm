@@ -2209,6 +2209,8 @@
         #viewerCanvas { width: 100%; height: 100%; display: block; }
     </style>
     <script src="{{ prefix }}/static/three.min.js"></script>
+    <script src="{{ prefix }}/static/library.js"></script>
+    <link rel="stylesheet" href="{{ prefix }}/static/library.css">
 </head>
 <script>
     // Apply theme before paint to prevent flash
@@ -2411,6 +2413,10 @@
 
         <!-- File Library Tab -->
         <div class="tab-content" id="tab-library">
+            <div class="lib-heading">
+                <div><h1>File Library</h1><p>Your print-ready files, organised in one place.</p></div>
+                <button type="button" class="btn" onclick="refreshLibrary()">Refresh</button>
+            </div>
             <div class="lib-layout">
                 <aside class="lib-sidebar" aria-label="Library folders">
                     <div class="lib-sidebar-head">
@@ -2425,6 +2431,11 @@
                     <div class="library-toolbar">
                         <input type="search" id="librarySearch" placeholder="Search all files…" aria-label="Search all files" oninput="debounceLibrarySearch()">
                         <div class="library-toolbar-actions">
+                            <select id="libraryType" class="lib-filter" aria-label="Filter file type" onchange="libraryPage = 1; renderLibrary()">
+                                <option value="all">All file types</option>
+                                <option value="3mf">3MF projects</option>
+                                <option value="gcode">G-code</option>
+                            </select>
                             <label class="lib-sort">
                                 <span>Sort</span>
                                 <select id="librarySort" onchange="setLibrarySort(this.value)" aria-label="Sort files by">
@@ -2444,10 +2455,12 @@
                             <button class="btn admin-only" onclick="showNewFolderDialog()">New Folder</button>
                         </div>
                     </div>
+                    <div class="lib-results" id="libraryResults" role="status" aria-live="polite"></div>
                     <div class="lib-selection-bar" id="librarySelectionBar" hidden></div>
                     <div class="library-grid" id="libraryGrid">
                         <div class="library-empty">Loading...</div>
                     </div>
+                    <div class="lib-pagination" id="libraryPagination" hidden></div>
                 </section>
             </div>
         </div>
@@ -7764,6 +7777,8 @@
         let libraryFiles = [];             // files currently listed (folder or search)
         let librarySearchTimer = null;
         let libraryLoaded = false;
+        let libraryPage = 1;
+        let libraryRequest = null;
         let libraryFolderModalState = null;
         let libraryMovePicker = null;      // {disabled:Set, currentId, onConfirm, target}
         let libraryPrintState = null;      // {fileIds:[...]}
@@ -7782,6 +7797,8 @@
         function librarySearchQuery() { return document.getElementById('librarySearch').value.trim(); }
 
         function debounceLibrarySearch() {
+            libraryRequest?.abort();
+            libraryPage = 1;
             clearTimeout(librarySearchTimer);
             librarySearchTimer = setTimeout(() => refreshLibrary(), 300);
         }
@@ -7841,6 +7858,7 @@
         });
 
         function navigateFolder(folderId, { push = true } = {}) {
+            libraryPage = 1;
             libraryCurrentFolder = folderId == null ? null : Number(folderId);
             document.getElementById('librarySearch').value = '';
             librarySelected.clear();
@@ -7861,7 +7879,11 @@
 
         // ── Loading ──
         async function refreshLibrary() {
+            libraryRequest?.abort();
+            const controller = new AbortController();
+            libraryRequest = controller;
             const grid = document.getElementById('libraryGrid');
+            grid.setAttribute('aria-busy', 'true');
             const query = librarySearchQuery();
             libraryLoaded = true;
             try {
@@ -7869,11 +7891,13 @@
                     ? `${BASE}/api/library/files/search?q=${encodeURIComponent(query)}`
                     : `${BASE}/api/library/files${libraryCurrentFolder != null ? '?folder_id=' + libraryCurrentFolder : ''}`;
                 const [treeRes, listRes] = await Promise.all([
-                    fetch(BASE + '/api/library/folders/tree'),
-                    fetch(listUrl),
+                    fetch(BASE + '/api/library/folders/tree', { signal: controller.signal }),
+                    fetch(listUrl, { signal: controller.signal }),
                 ]);
+                if (!treeRes.ok || !listRes.ok) throw new Error('Could not load files. Check your connection and try again.');
                 const tree = await treeRes.json();
                 const list = await listRes.json();
+                if (controller.signal.aborted) return;
                 libraryAllFolders = tree.folders || [];
                 if (libraryCurrentFolder != null && !libraryFolderById(libraryCurrentFolder)) {
                     // The folder was deleted or moved away; fall back to the root.
@@ -7886,8 +7910,11 @@
                 for (const id of [...librarySelected]) if (!present.has(id)) librarySelected.delete(id);
                 renderLibrary();
             } catch (err) {
+                if (controller.signal.aborted) return;
                 console.error('Library load error:', err);
-                grid.innerHTML = '<div class="library-empty">Failed to load library</div>';
+                grid.innerHTML = '<div class="library-empty"><p>Unable to load your library.</p><button class="btn" onclick="refreshLibrary()">Try again</button></div>';
+            } finally {
+                if (libraryRequest === controller) grid.setAttribute('aria-busy', 'false');
             }
         }
 
@@ -7912,7 +7939,7 @@
         function sortedLibraryFiles() {
             const key = LIBRARY_SORTS[librarySort] || LIBRARY_SORTS.created_at;
             const dir = librarySortDir === 'asc' ? 1 : -1;
-            return [...libraryFiles].sort((a, b) => {
+            return [...LibraryBrowser.filter(libraryFiles, document.getElementById('libraryType').value)].sort((a, b) => {
                 const va = key(a), vb = key(b);
                 if (va < vb) return -1 * dir;
                 if (va > vb) return 1 * dir;
@@ -7921,6 +7948,7 @@
         }
 
         function setLibrarySort(value) {
+            libraryPage = 1;
             librarySort = LIBRARY_SORTS[value] ? value : 'created_at';
             // Names read naturally A→Z; everything else is most useful biggest/newest first.
             librarySortDir = librarySort === 'name' ? 'asc' : 'desc';
@@ -8026,8 +8054,8 @@
             return (printAllowed ? `<button type="button" class="${cls}" data-lib-action="print" data-id="${id}">Print</button>` : '')
                 + `<button type="button" class="${cls}" data-lib-action="toolpath" data-id="${id}" title="Interactive 3D toolpath view">Toolpath</button>`
                 + (libraryCanManage()
-                    ? `<button type="button" class="${cls}" data-lib-action="move-file" data-id="${id}">Move</button>
-                       <button type="button" class="${cls} btn-danger" data-lib-action="delete-file" data-id="${id}">Delete</button>`
+                    ? `<details class="lib-more"><summary aria-label="More actions">•••</summary><div class="lib-more-menu"><button type="button" class="${cls}" data-lib-action="move-file" data-id="${id}">Move to folder</button>
+                       <button type="button" class="${cls} btn-danger" data-lib-action="delete-file" data-id="${id}">Delete file</button></div></details>`
                     : '');
         }
 
@@ -8049,11 +8077,17 @@
         function renderLibraryListing() {
             const grid = document.getElementById('libraryGrid');
             const searching = !!librarySearchQuery();
-            const files = sortedLibraryFiles();
+            const page = LibraryBrowser.page(sortedLibraryFiles(), libraryPage);
+            libraryPage = page.current;
+            const files = page.files;
+            document.getElementById('libraryResults').textContent = `${page.total} file${page.total === 1 ? '' : 's'}${librarySearchQuery() ? ' matching your search' : ''} · ${libraryFolders.length} folder${libraryFolders.length === 1 ? '' : 's'}`;
+            const pagination = document.getElementById('libraryPagination');
+            pagination.hidden = page.pages <= 1;
+            pagination.innerHTML = `<button type="button" class="btn" onclick="changeLibraryPage(-1)" ${page.current === 1 ? 'disabled' : ''}>Previous</button><span>Page ${page.current} of ${page.pages}</span><button type="button" class="btn" onclick="changeLibraryPage(1)" ${page.current === page.pages ? 'disabled' : ''}>Next</button>`;
             const folders = [...libraryFolders].sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true }));
             grid.className = (libraryView === 'list' ? 'library-list' : 'library-grid') + (librarySelected.size ? ' lib-has-selection' : '');
             if (!folders.length && !files.length) {
-                grid.innerHTML = `<div class="library-empty">${searching ? 'No files match your search' : 'This folder is empty'}</div>`;
+                grid.innerHTML = `<div class="library-empty">${searching || document.getElementById('libraryType').value !== 'all' ? 'No files match your filters. Try another file type or search.' : 'This folder is empty. Create a folder to organise your print files.'}</div>`;
                 return;
             }
             const drag = libraryCanManage();
@@ -8112,6 +8146,12 @@
         }
 
         // ── Selection ──
+        function changeLibraryPage(delta) {
+            libraryPage += delta;
+            renderLibraryListing();
+            document.getElementById('libraryResults').scrollIntoView({ block: 'start', behavior: 'smooth' });
+        }
+
         function renderLibrarySelectionBar() {
             const bar = document.getElementById('librarySelectionBar');
             if (!libraryCanSelect() || !libraryFiles.length) {
@@ -8120,12 +8160,13 @@
                 return;
             }
             const n = librarySelected.size;
-            const all = n > 0 && n === libraryFiles.length;
+            const visible = sortedLibraryFiles();
+            const all = visible.length > 0 && visible.every(file => librarySelected.has(file.id));
             bar.hidden = false;
             bar.innerHTML = `
                 <label class="lib-check-all">
                     <input type="checkbox" data-lib-action="select-all" ${all ? 'checked' : ''} aria-label="Select all files">
-                    ${n ? `<strong>${n} selected</strong>` : 'Select all'}
+                    ${n ? `<strong>${n} selected</strong>` : 'Select matching files'}
                 </label>
                 <span class="lib-sel-hint">${n ? '' : 'Tick files to print, move or delete several at once. Shift-click selects a range.'}</span>
                 <span class="lib-sel-actions">
@@ -8157,7 +8198,7 @@
         }
 
         function librarySelectAll(on) {
-            librarySelected = on ? new Set(libraryFiles.map(f => f.id)) : new Set();
+            librarySelected = on ? new Set(sortedLibraryFiles().map(f => f.id)) : new Set();
             libraryLastClicked = null;
             renderLibraryListing();
             renderLibrarySelectionBar();

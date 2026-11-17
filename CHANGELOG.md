@@ -7,6 +7,10 @@ changes to The Print Farm.
 
 ### Added
 
+- **Cleaner File Library workspace.** Added file-type filters, file counts,
+  48-file pages, compact secondary action menus, and a persistent selection
+  toolbar. Search cancels stale requests and failed loads offer a retry.
+
 - **Discovery VLAN ranges in Settings.** Admins can now view and edit the
   routed IPv4 `/21` through `/24` networks used automatically by Add Printer
   and Reconnect scans. The page shows the complete effective scan list and

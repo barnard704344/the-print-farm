@@ -7,6 +7,16 @@ Printers can be discovered automatically or added manually:
 - **BambuLab** — Auto-detected via UDP broadcast on the local network. The printer serial and access code are still required in config.
 - **Klipper** — Auto-detected by scanning for Moonraker on common ports. A printer at a known IP can also be added directly.
 
+## File Library
+
+The **File Library** workspace supports grid and list layouts, file-type
+filters, search across folders, and sorting. Results are displayed in pages of
+48 files. **Select matching files** selects all files matching the active
+filter, including other pages; the selection count stays visible before bulk
+printing, moving, or deleting. Individual Move and Delete actions are available
+in each file's **•••** menu. Existing folder drag-and-drop and toolpath previews
+remain available.
+
 ## Adding Printers
 
 ### From the Dashboard
