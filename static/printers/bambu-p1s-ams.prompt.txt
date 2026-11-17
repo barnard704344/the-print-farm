@@ -1,0 +1,9 @@
+Tool: built-in image_gen.imagegen
+Intent: background extraction / transparent product cutout
+Input image: https://cdn.shopify.com/s/files/1/0573/5320/7868/files/Group48168.png?v=1708411583
+Product source page: https://bambu-lab-uk.myshopify.com/products/p1s
+Output: bambu-p1s-ams.png
+Transparent background: true
+
+Final prompt:
+Use case: background-extraction. Asset type: small printer-model thumbnail for a dashboard. Edit target: the supplied product photo of a Bambu Lab P1S with the original enclosed four-spool AMS mounted squarely on its roof. Extract ONLY the full physical P1S printer and its roof-mounted AMS as ONE unified transparent cutout. Preserve exactly their real-world geometry, contact, aligned perspective, proportions, dark grey materials, green/blue/orange/white spools, and product details. Remove the entire studio wall, floor, floor reflection, promotional CNET badge, and all surrounding captions. Do not separate, rotate, resize or float the AMS relative to the printer. Keep the entire machine visible. Tight square framing with modest transparent margins, centered, no white border, no backdrop, no drop shadow, no extra objects. Make existing dark surface details a little legible for a tiny 64px thumbnail, without changing the model.

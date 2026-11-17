@@ -42,9 +42,11 @@ An active print’s available model preview takes priority. If its preview canno
 be loaded, the printer picture remains visible; unknown printers keep the generic
 printer icon. Pictures are bundled locally and require no external image service.
 
-When a Bambu printer reports `has_ams`, its thumbnail also shows a representative
-AMS accessory above the printer. This follows the reported hardware state, not
-the printer’s name, and updates during normal polling. Klipper MMUs do not trigger
+When a Bambu printer reports `has_ams`, its thumbnail also shows the AMS.
+P1S printers use one matched printer-and-AMS cutout, preserving the mounted
+unit’s alignment and proportions. Other models show a representative accessory
+alongside the printer. This follows the reported hardware state, not the
+printer’s name, and updates during normal polling. Klipper MMUs do not trigger
 an AMS picture. Per-unit AMS blocks remain the source for individual slots,
 filament, and unit details.
 

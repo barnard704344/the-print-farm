@@ -16,9 +16,10 @@ changes to The Print Farm.
 
 ### Added
 
-- **AMS in printer thumbnails.** Bambu printers reporting an AMS show the accessory
-  above the printer picture. The thumbnail updates as AMS presence changes; Klipper
-  MMUs are not labelled as AMS, and active print previews still take priority.
+- **AMS in printer thumbnails.** P1S printers reporting an AMS use a single aligned
+  printer-and-AMS image. Other models show the accessory alongside the printer.
+  The thumbnail updates as AMS presence changes; Klipper MMUs are not labelled as
+  AMS, and active print previews still take priority.
 
 - **One meaningful printer status button.** Print state and health alerts now
   share a button: Ready to print, Printing, Finished · clear plate, Paused, or
