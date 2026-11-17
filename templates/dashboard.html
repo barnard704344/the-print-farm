@@ -6,30 +6,30 @@
     <title>The Print Farm</title>
     <style>
         :root, [data-theme="dark"] {
-            --bg: #0f1117;
-            --card: #1a1d27;
-            --card-raised: #202431;
-            --surface-soft: rgba(255, 255, 255, 0.035);
-            --border: #2a2d3a;
-            --line-soft: rgba(148, 163, 184, 0.14);
-            --text: #e4e4e7;
-            --text-muted: #71717a;
-            --accent: #22c55e;
-            --brand-secondary: #38bdf8;
-            --brand-ink: #07120c;
-            --accent-dim: rgba(34, 197, 94, 0.15);
-            --accent-glow: rgba(34, 197, 94, 0.3);
-            --success: #22c55e;
-            --success-dim: rgba(34, 197, 94, 0.15);
-            --warning: #f59e0b;
-            --warning-dim: rgba(245, 158, 11, 0.15);
-            --danger: #ef4444;
-            --danger-dim: rgba(239, 68, 68, 0.15);
-            --info: #3b82f6;
-            --info-dim: rgba(59, 130, 246, 0.15);
-            --idle: #6b7280;
-            --input-bg: var(--bg);
-            --surface: #1a1d27;
+            --bg: #10151d;
+            --card: #1b2430;
+            --card-raised: #253142;
+            --surface-soft: rgba(255, 255, 255, 0.045);
+            --border: #354354;
+            --line-soft: rgba(179, 195, 215, 0.18);
+            --text: #eef2f7;
+            --text-muted: #a8b3c4;
+            --accent: #79d7b4;
+            --brand-secondary: #9bc9ed;
+            --brand-ink: #10271f;
+            --accent-dim: rgba(121, 215, 180, 0.10);
+            --accent-glow: rgba(121, 215, 180, 0.12);
+            --success: #82d8ae;
+            --success-dim: rgba(130, 216, 174, 0.10);
+            --warning: #edc47d;
+            --warning-dim: rgba(237, 196, 125, 0.08);
+            --danger: #f3a0a8;
+            --danger-dim: rgba(243, 160, 168, 0.10);
+            --info: #9dbffc;
+            --info-dim: rgba(157, 191, 252, 0.10);
+            --idle: #a8b3c4;
+            --input-bg: #151d28;
+            --surface: #1b2430;
             --shadow: 0 12px 30px rgba(0,0,0,0.18);
             color-scheme: dark;
         }
@@ -2207,6 +2207,46 @@
             pointer-events: none;
         }
         #viewerCanvas { width: 100%; height: 100%; display: block; }
+        /* Dark controls use subdued fills and readable labels rather than neon outlines. */
+        :root:not([data-theme="light"]) .plate-banner {
+            border-color: color-mix(in srgb, var(--warning) 30%, var(--card));
+            background: var(--warning-dim);
+        }
+        :root:not([data-theme="light"]) .btn-success {
+            color: var(--success); background: var(--success-dim);
+            border-color: color-mix(in srgb, var(--success) 35%, var(--card));
+        }
+        :root:not([data-theme="light"]) .btn-primary {
+            color: var(--info); background: var(--info-dim);
+            border-color: color-mix(in srgb, var(--info) 35%, var(--card));
+        }
+        :root:not([data-theme="light"]) .btn-warning {
+            color: var(--warning); background: var(--warning-dim);
+            border-color: color-mix(in srgb, var(--warning) 35%, var(--card));
+        }
+        :root:not([data-theme="light"]) .btn-danger {
+            color: var(--danger); background: var(--danger-dim);
+            border-color: color-mix(in srgb, var(--danger) 35%, var(--card));
+        }
+        :root:not([data-theme="light"]) .btn:hover:not(:disabled) {
+            background: color-mix(in srgb, var(--text) 10%, var(--card));
+        }
+        :root:not([data-theme="light"]) .btn:disabled,
+        :root:not([data-theme="light"]) .pc-temp-btn:disabled {
+            opacity: 1; color: var(--text-muted); background: var(--surface-soft);
+            border-color: var(--line-soft); cursor: not-allowed;
+        }
+        :root:not([data-theme="light"]) .printer-rename-btn,
+        :root:not([data-theme="light"]) .printer-remove-btn {
+            color: var(--text-muted); opacity: 1;
+        }
+        :root:not([data-theme="light"]) .printer-rename-btn:hover { color: var(--accent); }
+        :root:not([data-theme="light"]) .printer-remove-btn:hover { color: var(--danger); }
+        :root:not([data-theme="light"]) .pc-chip-klipper { color: #f2bb92; background: rgba(242,187,146,0.10); }
+        :root:not([data-theme="light"]) .pc-temp-nozzle { color: #f2bb92; }
+        :root:not([data-theme="light"]) .pc-thumb .pc-thumb-icon { color: var(--text-muted); opacity: 1; }
+        :root:not([data-theme="light"]) .conn-online { box-shadow: none; }
+
     </style>
     <script src="{{ prefix }}/static/three.min.js"></script>
     <script src="{{ prefix }}/static/library.js"></script>

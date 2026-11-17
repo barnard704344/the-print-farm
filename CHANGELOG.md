@@ -44,6 +44,12 @@ changes to The Print Farm.
 
 ### Fixed
 
+- **More readable dark mode.** Brighter secondary text and clearer surface
+  separation improve printer details, job labels, and temperatures. Softer mint,
+  blue, amber, and rose colours replace the saturated status accents. Buttons
+  use subtle fills, plate notices have quieter borders, and disabled controls
+  retain readable labels. The light theme keeps its existing palette.
+
 - **Clearer Orca connection copy buttons.** **Copy Hostname** and **Copy API Key**
   sit below their values and align within each row. The Personal API Key column
   shortens long keys visually; copying still includes the complete key. Narrow
