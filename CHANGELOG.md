@@ -5,7 +5,12 @@ changes to The Print Farm.
 
 ## Unreleased
 
+## v1.0.16 - 2026-11-17 - Personal Orca keys and clearer dashboards
+
 ### Added
+
+- **Release Docker tags.** `latest` follows tagged releases, while `main` and
+  `dev` track main-branch builds. Versioned images pin the exact release source.
 
 - **Dashboard screenshot guide.** Added desktop dark/light, mobile, and Orca
   connection screenshots with sample identities and credentials, plus theme

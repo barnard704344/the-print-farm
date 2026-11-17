@@ -51,7 +51,7 @@ discovery:
 web:
   host: 127.0.0.1            # Apache is the public-facing reverse proxy
   port: 5000
-  orca_api_key: CHANGE_ME       # upload-only key shared with OrcaSlicer users
+  orca_api_key: CHANGE_ME       # legacy shared upload key; also seeds personal Orca credentials
   admin_api_key: CHANGE_ME      # hidden server/integration key; never share with users
   admin_password: ''            # legacy single-password mode (ignored when local_users set)
   auth_enabled: true            # false = single-user mode: no login, every visitor has full staff access

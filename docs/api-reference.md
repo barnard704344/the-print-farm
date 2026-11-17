@@ -1,6 +1,6 @@
 # API Reference
 
-Documentation status: `v1.0.15`.
+Documentation status: `v1.0.16`.
 
 ## REST API v1
 

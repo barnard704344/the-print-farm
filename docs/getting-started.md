@@ -1,7 +1,7 @@
 # Getting Started
 
-These instructions apply to `v1.0.15`. The default branch also contains any
-documentation-only updates made after that tag. For a reproducible code
+These instructions apply to `v1.0.16`. The default branch may also contain
+changes made after that tag. For a reproducible code
 deployment, check out the release tag after cloning.
 
 ## Quick Start
@@ -64,7 +64,7 @@ Dashboard URL:
 Release-pinned checkout:
 
 ```bash
-git checkout v1.0.15
+git checkout v1.0.16
 sudo bash setup.sh --restart
 ```
 

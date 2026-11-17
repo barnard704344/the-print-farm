@@ -30,8 +30,12 @@ docker pull ghcr.io/barnard704344/the-print-farm:latest
 For reproducible deployments, pin this release instead:
 
 ```bash
-docker pull ghcr.io/barnard704344/the-print-farm:v1.0.15
+docker pull ghcr.io/barnard704344/the-print-farm:v1.0.16
 ```
+
+`latest` follows tagged releases. For deployments that should only change when
+explicitly upgraded, use `v1.0.16` in both the pull and run commands. Images tagged
+`main` or `dev` follow main-branch builds and may contain unreleased changes.
 
 ### Run the container
 
@@ -174,4 +178,4 @@ Images are published by:
 Published image path:
 
 - `ghcr.io/barnard704344/the-print-farm:latest`
-- `ghcr.io/barnard704344/the-print-farm:v1.0.15`
+- `ghcr.io/barnard704344/the-print-farm:v1.0.16`
