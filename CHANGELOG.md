@@ -7,6 +7,11 @@ changes to The Print Farm.
 
 ### Added
 
+- **Fresh-install Obico preparation.** Setup installs and checks the complete
+  requirements, verifies application/integration imports, and prepares persistent
+  printer-state storage as the service user. Runtime paths are shared with the
+  application, including custom database/state directories.
+
 - **Create & connect to Obico.** Select any installed Bambu printer and enter
   the Obico address/login. Registration, per-printer tokens and monitoring are
   handled automatically; manual ID/token setup is tucked into advanced settings.

@@ -1,7 +1,7 @@
 # Getting Started
 
-These instructions apply to `v1.0.16`. The default branch may also contain
-changes made after that tag. For a reproducible code
+These instructions cover the current `main` branch. The latest tagged release
+may predate features described here. For a reproducible code
 deployment, check out the release tag after cloning.
 
 ## Quick Start
@@ -15,13 +15,21 @@ sudo bash setup.sh
 The setup script will:
 
 1. Install Python 3, pip, Git, Apache, `isc-dhcp-client`, and `openssl`
-2. Create a virtual environment and install dependencies
+2. Create a virtual environment, install all declared dependencies (including
+   Obico WebSocket support), and check application/integration imports
 3. Create an admin user account
 4. Create a dedicated `print-farm` service account when the install path permits it
 5. Move the private runtime configuration to `/etc/the-print-farm/config.yaml`
 6. Install a narrow root-owned helper for updates and Apache reconciliation
 7. Configure the systemd service, Apache reverse proxy, and OrcaSlicer vhosts
 8. Validate Apache and the application health before reporting success
+
+Setup also prepares and checks the persistent Obico state directory as the
+service account. No separate pip installation or copied credentials are
+needed. Add this installation's printers through the dashboard, then use
+**Settings → Integrations → Obico → Create & connect** with your own Obico
+address/login. Repeat for each printer you want to monitor. Obico itself is a
+separate optional server; setup does not install or require it.
 
 A farm run by one person can turn login off afterwards in **Settings → Access
 → Login** (single-user mode). See
@@ -62,6 +70,9 @@ Dashboard URL:
 - http://your-server-ip/the-print-farm
 
 Release-pinned checkout:
+
+`v1.0.16` predates the native Bambu Obico bridge. Use current `main` for that
+feature until it is included in a newer tagged release.
 
 ```bash
 git checkout v1.0.16

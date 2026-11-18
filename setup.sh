@@ -314,10 +314,10 @@ if ! $SKIP_PACKAGES; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
     if ! apt-get install -y -qq \
-        python3 python3-venv python3-pip apache2 sudo git \
+        python3 python3-venv python3-pip apache2 sudo git ca-certificates iproute2 util-linux \
         libapache2-mod-proxy-html isc-dhcp-client openssl >/dev/null 2>&1; then
         apt-get install -y -qq \
-            python3 python3-venv python3-pip apache2 sudo git \
+            python3 python3-venv python3-pip apache2 sudo git ca-certificates iproute2 util-linux \
             isc-dhcp-client openssl >/dev/null
     fi
     unset DEBIAN_FRONTEND
@@ -360,12 +360,22 @@ else
     "${SCRIPT_DIR}/venv/bin/python" -m pip install --upgrade pip -q
     "${SCRIPT_DIR}/venv/bin/pip" install -r "${SCRIPT_DIR}/requirements.txt" -q
     "${SCRIPT_DIR}/venv/bin/pip" check
+    info "Checking application and integration imports..."
+    "${SCRIPT_DIR}/venv/bin/python" - <<'PY'
+from src.main import main
+from src.web import create_app
+from src.bambu_obico import BambuObicoBridge
+import websocket
+
+print("Application, Bambu LAN and Obico dependencies imported successfully")
+PY
     ok "Python environment ready"
 fi
 
 mkdir -p \
     "${SCRIPT_DIR}/config/certs" \
     "${SCRIPT_DIR}/data/dhcp" \
+    "${SCRIPT_DIR}/data/obico" \
     "${SCRIPT_DIR}/uploads/thumbnails" \
     "${SCRIPT_DIR}/logs"
 
@@ -743,6 +753,7 @@ runuser -u "$SERVICE_USER" -- env \
 import os
 
 import yaml
+from src.runtime_paths import obico_state_directory
 
 with open(os.environ["FARM_CONFIG_PATH"], "r", encoding="utf-8") as handle:
     config = yaml.safe_load(handle) or {}
@@ -760,11 +771,19 @@ def absolute(path):
 upload_dir = absolute(queue.get("upload_dir", "./uploads"))
 db_path = absolute(queue.get("db_path", "./data/farm.db"))
 log_path = absolute(logging_config.get("file", "./logs/farm.log"))
+obico_path = str(obico_state_directory(queue, repo))
+# Create this as the service account, never use privileged ownership changes on
+# an arbitrary configured external path. Default data/obico is prepared above.
+try:
+    os.makedirs(obico_path, mode=0o700, exist_ok=True)
+except OSError as exc:
+    raise SystemExit(f"Cannot prepare queue.obico_state_dir for the service user: {obico_path}") from exc
 
 for label, directory in (
     ("queue.upload_dir", upload_dir),
     ("queue.db_path parent", os.path.dirname(db_path)),
     ("logging.file parent", os.path.dirname(log_path)),
+    ("queue.obico_state_dir", obico_path),
 ):
     if not os.path.isdir(directory):
         raise SystemExit(f"{label} directory does not exist: {directory}")
@@ -1044,6 +1063,9 @@ printf "  %bSetup Complete%b\n" "$GREEN" "$NC"
 echo "=============================================="
 echo
 echo "  Dashboard: http://${LOCAL_IP}/the-print-farm/"
+echo "  Add your printers in the dashboard (each installation uses its own printer list)."
+echo "  Optional Obico: Settings -> Integrations -> Obico -> select printer -> Create & connect."
+echo "  Enter your own Obico server address and login there; no shell commands or tokens to copy."
 if [[ -n "$NEW_ORCA_API_KEY" ]]; then
     echo "  Orca upload key: ${NEW_ORCA_API_KEY}"
     echo "  Share this key with users who connect OrcaSlicer to the farm."

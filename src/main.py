@@ -24,6 +24,7 @@ from .job_queue import JobQueue
 from .file_library import FileLibrary
 from .camera import CameraManager
 from .bambu_obico import BambuObicoManager
+from .runtime_paths import obico_state_directory
 from .config_store import migrate_api_keys, save_config as save_yaml_config
 from .spoolman_client import SpoolmanClient
 from .notifications import NotificationManager
@@ -426,8 +427,7 @@ def cmd_run(args, config: dict):
     vp_manager.start_all(printers, farm, queue, uploads_dir, file_library=library)
 
     obico_mgr = BambuObicoManager(
-        farm, camera_mgr,
-        queue_cfg.get("obico_state_dir", str(Path(queue_cfg.get("db_path", "./data/farm.db")).parent / "obico")),
+        farm, camera_mgr, obico_state_directory(queue_cfg),
     )
     for cfg in printers:
         if cfg.get("type", "bambulab").lower() != "klipper" and cfg.get("obico"):
