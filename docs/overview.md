@@ -103,7 +103,9 @@ No Klipper plugin or extra component is required beyond a standard Moonraker ins
 - **Mobile responsive** — Dashboard adapts to phones and tablets with touch-friendly targets and stacked layouts
 - **Camera streaming** — Live BambuLab and Klipper feeds with per-printer 90-degree rotation saved in each browser
 - **Notifications** — Email (SMTP) and Discord webhook alerts for job submission, print completion, pause, and failure
-- **Obico integration** — Optionally pulls failure-detection and monitoring data
+- **Obico integration** — Bambu LAN printers can send print status and fresh
+  camera snapshots to Obico, with pause/resume/cancel as an opt-in setting.
+  For Klipper, optionally pulls failure-detection and monitoring data
   from a configured self-hosted Obico printer, with connection diagnostics in
   Settings and Printer Details
 - **Spoolman integration** — Optionally connect a local [Spoolman](https://github.com/Donkie/Spoolman) instance for assignment and usage tracking

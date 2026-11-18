@@ -94,7 +94,7 @@ def _save_valid_thumbnail(upload, destination: str) -> None:
     )
 
 
-def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None, admin_password=None, config=None, file_library=None, spoolman_client=None, vp_manager=None):
+def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None, admin_password=None, config=None, file_library=None, spoolman_client=None, vp_manager=None, obico_manager=None):
     """Create the Flask app with references to farm manager, job queue, and camera manager."""
     if config is None:
         config = {}
@@ -2991,145 +2991,111 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
 
     # ── Obico Configuration ───────────────────────────────
 
+    def _obico_printer(name):
+        return next((p for p in app_config.get("printers", []) if p.get("name") == name), None)
+
     def _get_obico_config_for_printer(printer_name):
-        """Return the obico config dict for a given printer, or empty dict."""
-        for p in app_config.get("printers", []):
-            if p.get("name") == printer_name and p.get("type") == "klipper":
-                return dict(p.get("obico", {}))
-        return {}
+        printer = _obico_printer(printer_name)
+        return dict((printer or {}).get("obico") or {})
 
     @app.route(prefix + "/api/obico/config/<name>", methods=["GET"])
     @app.route("/api/obico/config/<name>", methods=["GET"])
     @admin_required
     def obico_get_config(name):
-        """Get Obico configuration for a printer (password masked)."""
+        printer = _obico_printer(name)
+        if not printer:
+            return jsonify(ok=False, message="Printer not found"), 404
         cfg = _get_obico_config_for_printer(name)
         cfg["enabled"] = bool(cfg.get("server"))
-        if cfg.get("password"):
-            cfg["password"] = "********"
+        cfg["printer_type"] = printer.get("type", "bambulab").lower()
+        for field in ("password", "auth_token"):
+            if cfg.get(field):
+                cfg[field] = "********"
         return jsonify(cfg)
+
+    def _obico_candidate(name, data):
+        from .obico_settings import prepare_obico_config, validate_obico_assignment
+        printer = _obico_printer(name)
+        if not printer:
+            raise LookupError("Printer not found")
+        cfg = prepare_obico_config(data, _get_obico_config_for_printer(name),
+                                   printer.get("type", "bambulab").lower())
+        validate_obico_assignment(name, cfg, app_config.get("printers", []))
+        return printer, cfg
 
     @app.route(prefix + "/api/obico/config/<name>", methods=["POST"])
     @app.route("/api/obico/config/<name>", methods=["POST"])
     @admin_required
     def obico_save_config(name):
-        """Save Obico configuration for a specific printer."""
         data = request.get_json(silent=True) or {}
-        enabled = bool(data.get("enabled"))
-        if enabled:
-            missing = [
-                label for label, value in (
-                    ("server", str(data.get("server", "")).strip()),
-                    ("printer ID", data.get("printer_id")),
-                    ("username", str(data.get("username", "")).strip()),
-                    ("password", str(data.get("password", "")).strip()),
-                ) if not value
-            ]
-            if missing:
-                return jsonify({
-                    "ok": False,
-                    "message": "Obico requires " + ", ".join(missing),
-                }), 400
-        config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
+        enabled = data.get("enabled", False)
+        if not isinstance(enabled, bool):
+            return jsonify(ok=False, message="Enabled must be true or false"), 400
         try:
+            printer = _obico_printer(name)
+            if not printer:
+                raise LookupError("Printer not found")
+            cfg = _obico_candidate(name, data)[1] if enabled else None
+            bambu = printer.get("type", "bambulab").lower() != "klipper"
+            if bambu and obico_manager is None:
+                return jsonify(ok=False, message="Bambu Obico bridge is unavailable; restart with the updated service"), 503
+            config_path = os.environ.get("FARM_CONFIG", "config/config.yaml")
             file_config = load_yaml_config(config_path)
-
-            # Find the printer in config
-            printer_found = False
-            for p in file_config.get("printers", []):
-                if p.get("name") == name and p.get("type") == "klipper":
-                    printer_found = True
-                    if enabled:
-                        obico = p.get("obico", {})
-                        obico["server"] = data.get("server", "").strip()
-                        obico["printer_id"] = int(data.get("printer_id", 0))
-                        obico["username"] = data.get("username", "").strip()
-                        if data.get("password") and data["password"] != "********":
-                            obico["password"] = data["password"]
-                        p["obico"] = obico
-                    else:
-                        # Disabled — remove obico block
-                        p.pop("obico", None)
-                    break
-
-            if not printer_found:
-                return jsonify({"ok": False, "message": f"Klipper printer '{name}' not found"}), 404
-
+            stored = next((p for p in file_config.get("printers", []) if p.get("name") == name), None)
+            if stored is None:
+                raise LookupError("Printer not found in saved configuration")
+            if cfg:
+                stored["obico"] = cfg
+            else:
+                stored.pop("obico", None)
             save_yaml_config(config_path, file_config)
-
-            # Update live config
-            for p in app_config.get("printers", []):
-                if p.get("name") == name:
-                    if enabled:
-                        p["obico"] = next(
-                            (pr.get("obico", {}) for pr in file_config["printers"] if pr.get("name") == name), {}
-                        )
-                    else:
-                        p.pop("obico", None)
-                    break
-
-            saved_obico = _get_obico_config_for_printer(name) if enabled else None
-            printer = farm_manager.get_printer(name)
-            if printer and hasattr(printer, "configure_obico"):
-                printer.configure_obico(saved_obico)
-
-            return jsonify({
-                "ok": True,
-                "enabled": enabled,
-                "message": "Obico configuration saved",
-            })
-        except Exception as e:
-            logger.error(f"Failed to save Obico config: {e}")
-            return jsonify({"ok": False, "message": str(e)}), 500
+            if cfg:
+                printer["obico"] = cfg
+            else:
+                printer.pop("obico", None)
+            if bambu:
+                obico_manager.configure(name, cfg)
+            else:
+                client = farm_manager.get_printer(name)
+                if client and hasattr(client, "configure_obico"):
+                    client.configure_obico(cfg)
+            return jsonify(ok=True, enabled=enabled, message="Obico configuration saved")
+        except LookupError as exc:
+            return jsonify(ok=False, message=str(exc)), 404
+        except ValueError as exc:
+            return jsonify(ok=False, message=str(exc)), 400
+        except Exception:
+            logger.error("Could not save/apply Obico configuration")
+            return jsonify(ok=False, message="Could not save/apply Obico configuration; check the service"), 500
 
     @app.route(prefix + "/api/obico/test", methods=["POST"])
     @app.route("/api/obico/test", methods=["POST"])
     @admin_required
     def obico_test_connection():
-        """Test Obico connection with provided credentials."""
         data = request.get_json(silent=True) or {}
-        server = data.get("server", "").strip()
-        username = data.get("username", "").strip()
-        password = data.get("password", "").strip()
-        printer_id = int(data.get("printer_id", 0))
-        printer_name = data.get("printer_name", "").strip()
-
-        if password == "********" and printer_name:
-            saved = _get_obico_config_for_printer(printer_name)
-            if (
-                server != str(saved.get("server", "")).strip()
-                or username != str(saved.get("username", "")).strip()
-            ):
-                return jsonify({
-                    "ok": False,
-                    "message": "Re-enter the Obico password after changing the server or username",
-                }), 400
-            password = str(saved.get("password", ""))
-
-        if not server or not username or not password or not printer_id:
-            return jsonify({"ok": False, "message": "All fields are required"}), 400
-
+        name = str(data.get("printer_name") or "").strip()
         try:
+            printer, cfg = _obico_candidate(name, data)
+            if printer.get("type", "bambulab").lower() != "klipper":
+                from .bambu_obico import linked_printer
+                linked_printer(cfg)
             from .obico_client import ObicoClient
-            client = ObicoClient(server, username, password, printer_id)
-            if not client._login():
-                return jsonify({
-                    "ok": False,
-                    "message": client.last_error or "Obico authentication failed",
-                }), 502
-            status = client.fetch_status()
+            client = ObicoClient(cfg["server"], cfg["username"], cfg["password"], cfg["printer_id"])
+            try:
+                status = client.fetch_status()
+            finally:
+                if client._session:
+                    client._session.close()
             if not status.get("connected"):
-                return jsonify({
-                    "ok": False,
-                    "message": status.get("error", "Obico printer is unavailable"),
-                }), 502
-            return jsonify({
-                "ok": True,
-                "state": status.get("state", "unknown"),
-                "watching": status.get("watching", False),
-            })
-        except Exception as e:
-            return jsonify({"ok": False, "message": str(e)}), 500
+                return jsonify(ok=False, message="Obico account or printer could not be verified"), 502
+            return jsonify(ok=True, state=status.get("state", "unknown"),
+                           watching=status.get("watching", False))
+        except LookupError as exc:
+            return jsonify(ok=False, message=str(exc)), 404
+        except ValueError as exc:
+            return jsonify(ok=False, message=str(exc)), 400
+        except Exception:
+            return jsonify(ok=False, message="Could not test the Obico connection"), 502
 
     # ── UI Preferences API ────────────────────────────────
 

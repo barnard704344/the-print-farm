@@ -25,6 +25,13 @@ printers: []
 #    staff_only: false          # optional — restrict to staff users
 #    require_plate_clear: true  # optional — confirm the plate is clear before the next job
 #    virtual_printer: true      # native only; set false for Docker/direct-IP use
+#    obico:                     # optional — native Obico agent, one unique token per printer
+#      server: http://obico.example:3334
+#      printer_id: 4
+#      username: user@example.com
+#      password: CHANGE_ME
+#      auth_token: CHANGE_ME    # Obico printer agent token, not the farm API key
+#      allow_remote_control: false  # monitoring first; opt in to pause/resume/cancel
 #
 # ── Klipper Printer (via Moonraker) ──
 #  - name: Voron-01
@@ -65,6 +72,7 @@ queue:
   upload_dir: ./uploads
   db_path: ./data/farm.db
   auto_assign: false
+  # obico_state_dir: ./data/obico  # persisted Bambu print identity; default beside db_path
 
 # ── Printer Pool (optional) ──────────────────────────────
 # Auto-dispatch jobs from the generic OrcaSlicer queue to these printers.

@@ -20,6 +20,7 @@ This README acts as a documentation index. Detailed information is split across 
 - [Docker](docs/docker.md)
 - [Printers and OrcaSlicer](docs/printers-and-orcaslicer.md)
 - [Configuration](docs/configuration.md)
+- [Bambu LAN Obico Setup and Testing](docs/bambu-obico.md)
 - [Architecture](docs/architecture.md)
 - [3D Toolpath Viewer](docs/3d-toolpath-viewer.md)
 - [API Reference Summary](docs/api-reference.md)

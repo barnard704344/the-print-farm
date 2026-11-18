@@ -221,17 +221,48 @@ MMU, and generic filament controls continue to work.
 
 ## Obico
 
-Optional failure-detection and remote-monitoring integration for Klipper
-printers. Configure each printer from **Settings → Integrations → Obico AI
-Failure Detection** with the self-hosted server URL, Obico printer ID,
-username, and password.
+Configure each printer from **Settings → Integrations → Obico AI Failure
+Detection** with the Obico server URL, printer ID, username, and password.
+
+- **Klipper:** install and link `moonraker-obico` on the printer first. The
+  farm displays the existing agent's detection results; it does not replace it.
+- **Bambu LAN (P1S/P1P camera protocol):** The Print Farm acts as the agent.
+  It sends print status over Obico's agent WebSocket and uploads a fresh JPEG
+  every ten seconds during an active print. No OctoPrint or USB connection is
+  required. See [Bambu Obico setup and testing](bambu-obico.md).
+
+Bambu printers additionally require the **printer agent token** belonging to
+that Obico printer ID. This is not the farm API key or your Obico account
+password. Give every physical printer its own Obico printer record and token;
+do not also run another Obico agent with the same token. The farm rejects
+duplicate configured assignments, and Obico duplicate-agent disconnects stop
+the bridge instead of reconnecting indefinitely.
+
+**Allow Obico to pause, resume or cancel this printer** is off by default for
+Bambu printers. With it off, the bridge monitors but ignores control requests.
+When enabled, only those three actions are accepted for that printer's current
+active job. The bridge does not offer G-code execution, remote file printing,
+heater control, or an HTTP tunnel through Obico. Obico notification delivery
+and the notify/pause failure action are configured on your Obico server.
 
 The connection test verifies authentication and fetches the selected printer,
 so an invalid ID or unavailable endpoint is reported before saving. A masked
 saved password is reused only when the server and username are unchanged.
+For Bambu it also checks that the agent token belongs to the selected printer;
+this test does not open a WebSocket or interrupt an existing agent. Saved tokens
+are masked and must be re-entered when the server or printer ID changes.
 Saving or disabling Obico updates the live printer client immediately; no
 service restart is required. Connection state and diagnostic errors appear in
 Printer Details.
+
+Bambu monitoring keeps the shared camera connection alive while printing,
+even with no dashboard viewers. Idle camera connections still stop normally.
+Frames older than fifteen seconds, or already uploaded, are not submitted.
+Printer telemetry older than ninety seconds is treated as unknown; a network
+outage does not report a successful print completion. The current Obico print
+identity is persisted under `data/obico` (beside `queue.db_path`); persist this
+directory across restarts and Docker deployments. `queue.obico_state_dir` can
+override the location. State files contain job identity, not credentials.
 
 ## Camera Display Rotation
 

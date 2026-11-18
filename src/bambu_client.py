@@ -212,6 +212,7 @@ class PrintState:
     total_layers: int = 0
     subtask_name: str = ""
     gcode_file: str = ""
+    job_id: str = ""  # LAN task/subtask identity, retained across partial MQTT reports
     # Temperatures
     bed_temper: float = 0.0
     bed_target_temper: float = 0.0
@@ -248,7 +249,7 @@ class PrintState:
     klipper_tools: list = field(default_factory=list)
     klipper_fans: list = field(default_factory=list)
     klipper_leds: list = field(default_factory=list)
-    # Obico failure detection (Klipper)
+    # Obico failure detection (Klipper or Bambu agent bridge)
     obico: dict = field(default_factory=dict)
     # Errors
     print_error: int = 0
@@ -281,6 +282,8 @@ class BambuClient:
         self._client: Optional[mqtt.Client] = None
         self._connected = threading.Event()
         self._state = PrintState()
+        self._last_report_at = None
+        self._job_identity = {}
         self._state_lock = threading.Lock()
         self._command_lock = threading.Lock()
         self._command_events = {}
@@ -297,6 +300,15 @@ class BambuClient:
     def state(self) -> PrintState:
         with self._state_lock:
             return self._state
+
+    @property
+    def last_report_age(self) -> Optional[float]:
+        with self._state_lock:
+            return None if self._last_report_at is None else time.monotonic() - self._last_report_at
+
+    def set_obico_status(self, status: dict):
+        with self._state_lock:
+            self._state.obico = dict(status)
 
     def on_state_change(self, callback: Callable[[str, PrintState], None]):
         """Register callback(printer_name, state) for state changes."""
@@ -782,6 +794,8 @@ class BambuClient:
         if rc == 0:
             logger.info(f"[{self.name}] MQTT connected, subscribing...")
             client.subscribe(self._report_topic)
+            with self._state_lock:
+                self._last_report_at = None  # wait for print state on this connection
             self._connected.set()
             self._reconnect_backoff = 1  # Reset backoff on success
             self.push_status_request()
@@ -791,6 +805,8 @@ class BambuClient:
     def _handle_disconnect(self, client, userdata, flags=None, rc=None, properties=None):
         was_connected = self._connected.is_set()
         self._connected.clear()
+        with self._state_lock:
+            self._last_report_at = None
 
         # Only log once, with useful context
         if hasattr(self, '_stop_event') and self._stop_event.is_set():
@@ -850,6 +866,14 @@ class BambuClient:
 
         with self._state_lock:
             self._state.raw_data = data
+            if data.get("gcode_state") or self._last_report_at is not None:
+                self._last_report_at = time.monotonic()
+            for key in ("task_id", "subtask_id"):
+                if key in data:
+                    value = str(data[key] or "")
+                    self._job_identity[key] = "" if value in {"0", "-1"} else value
+            parts = [self._job_identity.get(key, "") for key in ("task_id", "subtask_id")]
+            self._state.job_id = ":".join(parts) if any(parts) else ""
 
             gcode_state = data.get("gcode_state", "")
             if gcode_state:

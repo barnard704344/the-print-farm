@@ -179,7 +179,11 @@ class SecurityTests(unittest.TestCase):
 
     def test_https_proxy_origin_allows_update_and_preserves_staff_check(self):
         client = self._origin_client()
-        with patch("src.web.subprocess.run") as run:
+        # This exercises origin/staff checks, not the host's installed helper.
+        with (patch("src.web.os.path.isfile", return_value=True),
+              patch("src.web.os.access", return_value=True),
+              patch("src.web.os.geteuid", return_value=0),
+              patch("src.web.subprocess.run") as run):
             run.return_value.returncode = 0
             run.return_value.stdout = "Already up to date"
             run.return_value.stderr = ""

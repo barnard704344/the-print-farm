@@ -5,6 +5,15 @@ changes to The Print Farm.
 
 ## Unreleased
 
+### Added
+
+- **Obico for Bambu LAN printers.** Per-printer agents share the farm's P1S/P1P
+  camera and MQTT connections, report job progress, upload fresh snapshots for
+  AI analysis, and display detection results. Pause/resume/cancel is opt-in.
+  Print identity survives restarts; duplicate tokens and stale frames are
+  rejected. Existing Klipper Obico integration continues unchanged. See
+  [setup and hardware testing](docs/bambu-obico.md).
+
 ### Fixed
 
 - **Cleaner printer headers.** Nozzle size/material, OrcaSlicer hostname, and

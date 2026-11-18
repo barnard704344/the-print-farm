@@ -858,11 +858,22 @@ Admin only. Per-printer Obico failure detection config.
 ```
 
 The password returned by `GET` is masked. Saving or disabling the integration
-updates the live Klipper client immediately. `POST /api/obico/test` accepts the
+updates the live Klipper client or Bambu bridge immediately. `POST /api/obico/test` accepts the
 same fields plus `printer_name`; when the password is the mask, the saved secret
 is reused only if the server and username are unchanged. The test returns a
 non-success response when authentication fails, the printer ID does not exist,
 or the printer endpoint is unavailable.
+
+For a Bambu printer, the body also requires `auth_token` (that Obico printer's
+agent token) and accepts `allow_remote_control` (boolean, default `false`).
+`GET` masks `auth_token` and includes `printer_type`. A masked token is reused
+only for the same server and printer ID. Duplicate printer IDs/tokens are
+rejected across configured printers. The Bambu connection test checks the
+token's printer ID without opening a live agent connection.
+
+With control enabled, only pause/resume/cancel for the current active job are
+accepted from Obico; arbitrary printer APIs and tunnels are unsupported. See
+[Bambu setup and testing](docs/bambu-obico.md).
 
 ---
 
