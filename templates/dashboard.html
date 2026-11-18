@@ -2791,25 +2791,9 @@
                                 <input type="checkbox" id="obicoEnabled" style="width:18px; height:18px;">
                                 <span>Enable Obico for this printer</span>
                             </label>
-                            <div style="display:grid; grid-template-columns:2fr 1fr; gap:12px;">
-                                <div>
-                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Obico Server URL</label>
-                                    <input type="text" id="obicoServer" placeholder="e.g. http://192.168.1.105:3334" class="ad-input">
-                                </div>
-                                <div>
-                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Printer ID</label>
-                                    <input type="number" id="obicoPrinterId" placeholder="e.g. 3" class="ad-input">
-                                </div>
-                            </div>
-                            <div id="obicoBambuFields" style="display:none;">
-                                <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Obico printer agent token</label>
-                                <input type="password" id="obicoAuthToken" autocomplete="new-password" class="ad-input" placeholder="Token for this printer from Obico manual setup">
-                                <p style="color:var(--text-muted); font-size:12px;">Use a different token for every Bambu printer. Snapshots are sent while printing, even with the dashboard closed.</p>
-                                <label style="display:flex; align-items:center; gap:10px;">
-                                    <input type="checkbox" id="obicoRemoteControl">
-                                    Allow Obico to pause, resume or cancel this printer
-                                </label>
-                                <p style="color:var(--text-muted); font-size:12px;">Leave control off for initial monitoring tests. Enable it after verifying the correct printer and camera.</p>
+                            <div>
+                                <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Obico Server URL</label>
+                                <input type="text" id="obicoServer" placeholder="e.g. https://obico.example.com" class="ad-input">
                             </div>
                             <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
                                 <div>
@@ -2821,6 +2805,26 @@
                                     <input type="password" id="obicoPassword" placeholder="Obico account password" class="ad-input">
                                 </div>
                             </div>
+                            <div id="obicoBambuFields" style="display:none;">
+                                <button id="obicoCreateButton" class="btn btn-primary" onclick="createObicoPrinter()">Create &amp; connect</button>
+                                <p style="color:var(--text-muted); font-size:12px;">Adds the selected printer to your Obico account and starts monitoring. No codes or tokens to copy.</p>
+                                <label style="display:flex; align-items:center; gap:10px;">
+                                    <input type="checkbox" id="obicoRemoteControl">
+                                    Allow Obico to pause, resume or cancel this printer
+                                </label>
+                                <p style="color:var(--text-muted); font-size:12px;">Leave control off for initial monitoring tests.</p>
+                            </div>
+                            <details id="obicoManualFields">
+                                <summary style="cursor:pointer;">Existing printer / advanced settings</summary>
+                                <div style="margin-top:12px;">
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Obico Printer ID</label>
+                                    <input type="number" id="obicoPrinterId" class="ad-input">
+                                </div>
+                                <div id="obicoAgentTokenField" style="margin-top:12px;">
+                                    <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Obico printer agent token</label>
+                                    <input type="password" id="obicoAuthToken" autocomplete="new-password" class="ad-input" placeholder="Only needed when connecting an existing Obico printer manually">
+                                </div>
+                            </details>
                         </div>
                     </div>
                     <div style="display:flex; gap:8px; margin-top:8px;">
@@ -4526,6 +4530,9 @@
             document.getElementById('obicoEnabled').checked = false;
             document.getElementById('obicoRemoteControl').checked = false;
             document.getElementById('obicoBambuFields').style.display = 'none';
+            document.getElementById('obicoManualFields').open = false;
+            document.getElementById('obicoCreateButton').disabled = false;
+            document.getElementById('obicoCreateButton').textContent = 'Create & connect';
             if (!name) { fields.style.display = 'none'; return; }
             fields.style.display = '';
             try {
@@ -4534,6 +4541,10 @@
                 const data = await res.json();
                 if (document.getElementById('obicoTargetPrinter').value !== name) return;
                 document.getElementById('obicoBambuFields').style.display = data.printer_type === 'klipper' ? 'none' : '';
+                document.getElementById('obicoManualFields').open = data.printer_type === 'klipper';
+                document.getElementById('obicoAgentTokenField').style.display = data.printer_type === 'klipper' ? 'none' : '';
+                document.getElementById('obicoCreateButton').disabled = Boolean(data.enabled);
+                document.getElementById('obicoCreateButton').textContent = data.enabled ? 'Connected to Obico' : 'Create & connect';
                 document.getElementById('obicoAuthToken').value = data.auth_token || '';
                 document.getElementById('obicoRemoteControl').checked = Boolean(data.allow_remote_control);
                 document.getElementById('obicoEnabled').checked = data.enabled || false;
@@ -4544,6 +4555,42 @@
                 obicoLoadedPrinter = name;
             } catch (e) {
                 resultEl.textContent = e.message;
+            }
+        }
+
+        async function createObicoPrinter() {
+            const name = document.getElementById('obicoTargetPrinter').value;
+            const button = document.getElementById('obicoCreateButton');
+            const resultEl = document.getElementById('obicoTestResult');
+            if (!name || obicoLoadedPrinter !== name || button.disabled) return;
+            const payload = {
+                server: document.getElementById('obicoServer').value,
+                username: document.getElementById('obicoUsername').value,
+                password: document.getElementById('obicoPassword').value,
+            };
+            if (!payload.server || !payload.username || !payload.password) {
+                resultEl.textContent = 'Enter the Obico server address, username and password first';
+                return;
+            }
+            button.disabled = true;
+            resultEl.textContent = 'Connecting the selected printer to Obico…';
+            try {
+                const res = await fetch(BASE + '/api/obico/create/' + encodeURIComponent(name), {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify(payload),
+                });
+                const data = await res.json();
+                if (document.getElementById('obicoTargetPrinter').value !== name) return;
+                if (!res.ok || !data.ok) throw new Error(data.message || 'Could not connect to Obico');
+                await loadObicoForPrinter();
+                if (document.getElementById('obicoTargetPrinter').value !== name) return;
+                resultEl.textContent = 'Connected. Your selected printer is now available in Obico.';
+            } catch (e) {
+                if (document.getElementById('obicoTargetPrinter').value === name) resultEl.textContent = e.message;
+            } finally {
+                if (document.getElementById('obicoTargetPrinter').value === name) {
+                    button.disabled = Boolean(document.getElementById('obicoEnabled').checked);
+                }
             }
         }
 

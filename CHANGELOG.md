@@ -7,6 +7,10 @@ changes to The Print Farm.
 
 ### Added
 
+- **Create & connect to Obico.** Select any installed Bambu printer and enter
+  the Obico address/login. Registration, per-printer tokens and monitoring are
+  handled automatically; manual ID/token setup is tucked into advanced settings.
+
 - **Obico for Bambu LAN printers.** Per-printer agents share the farm's P1S/P1P
   camera and MQTT connections, report job progress, upload fresh snapshots for
   AI analysis, and display detection results. Pause/resume/cancel is opt-in.

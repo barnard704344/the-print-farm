@@ -1,7 +1,7 @@
 import os
 import tempfile
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY
 
 from src.config_store import load_config, save_config
 from src.web import create_app
@@ -161,6 +161,72 @@ class ObicoSettingsTests(unittest.TestCase):
         })
         self.assertEqual(response.status_code, 400)
         self.assertEqual(load_config(self.config_path)["printers"][0]["obico"]["server"], "http://obico.test")
+
+    def test_create_and_connect_keeps_token_private_and_defaults_to_monitoring(self):
+        client, manager = self.bambu_client()
+        with patch("src.obico_client.ObicoClient") as obico:
+            obico.return_value.ensure_printer.return_value = {"id": 17, "auth_token": "server-only-token"}
+            response = client.post("/api/obico/create/P1S-1", json={
+                "server": "https://obico.test", "username": "owner", "password": "account-password",
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("server-only-token", response.get_data(as_text=True))
+        obico.return_value.ensure_printer.assert_called_once_with("P1S-1", ANY)
+        cfg = load_config(self.config_path)["printers"][1]["obico"]
+        self.assertEqual(cfg["auth_token"], "server-only-token")
+        self.assertFalse(cfg["allow_remote_control"])
+        manager.configure.assert_called_once_with("P1S-1", cfg)
+        self.assertEqual(client.get("/api/obico/config/P1S-1").json["auth_token"], "********")
+
+    def test_registration_uses_all_installed_names_and_preserves_other_printers(self):
+        client, manager = self.bambu_client()
+        names = [f"Workshop-{i}" for i in range(12)]
+        self.config["printers"].extend({"name": name, "type": "bambulab", "host": f"192.0.2.{i+10}"} for i, name in enumerate(names))
+        save_config(self.config_path, self.config)
+        with patch("src.obico_client.ObicoClient") as obico:
+            obico.return_value.ensure_printer.side_effect = lambda name, key: {"id": 100+names.index(name), "auth_token": "token-"+name}
+            for name in names:
+                response = client.post("/api/obico/create/"+name, json={
+                    "server": "https://work-obico.test", "username": "owner", "password": "password",
+                })
+                self.assertEqual(response.status_code, 200, name)
+        stored = load_config(self.config_path)["printers"]
+        self.assertEqual(sum(bool(p.get("obico")) for p in stored), 13)
+        self.assertEqual([c.args[0] for c in obico.return_value.ensure_printer.call_args_list], names)
+        self.assertEqual(manager.configure.call_count, 12)
+        keys = [c.args[1] for c in obico.return_value.ensure_printer.call_args_list]
+        self.assertEqual(len(set(keys)), 12)
+
+    def test_registration_rejects_unknown_and_klipper_and_missing_login(self):
+        client, _ = self.bambu_client()
+        with patch("src.obico_client.ObicoClient") as obico:
+            self.assertEqual(client.post("/api/obico/create/missing", json={}).status_code, 404)
+            self.assertEqual(client.post("/api/obico/create/Voron", json={}).status_code, 400)
+            self.assertEqual(client.post("/api/obico/create/P1S-1", json={"server":"https://obico.test"}).status_code, 400)
+            obico.assert_not_called()
+
+    def test_registration_identity_is_scoped_to_the_installation(self):
+        client, _ = self.bambu_client()
+        payload = {"server": "https://shared-obico.test", "username": "owner", "password": "password"}
+        with patch("src.obico_client.ObicoClient") as obico:
+            obico.return_value.ensure_printer.return_value = {"id": 7, "auth_token": "private"}
+            self.assertEqual(client.post("/api/obico/create/P1S-1", json=payload).status_code, 200)
+            first_key = obico.return_value.ensure_printer.call_args.args[1]
+            self.config["printers"][1].pop("obico")
+            self.config["web"]["admin_api_key"] = "a-different-installation-key"
+            save_config(self.config_path, self.config)
+            self.assertEqual(client.post("/api/obico/create/P1S-1", json=payload).status_code, 200)
+            second_key = obico.return_value.ensure_printer.call_args.args[1]
+        self.assertNotEqual(first_key, second_key)
+
+    def test_registration_requires_staff_and_never_calls_obico_for_student(self):
+        client, _ = self.bambu_client()
+        with client.session_transaction() as session:
+            session.update(role="student", username="student")
+        with patch("src.obico_client.ObicoClient") as obico:
+            response = client.post("/api/obico/create/P1S-1", json={})
+        self.assertEqual(response.status_code, 403)
+        obico.assert_not_called()
 
     def test_dashboard_restores_selection_and_saved_checkbox_state(self):
         response = self.client.get("/")

@@ -306,7 +306,8 @@ class BambuObicoBridge:
                         header={"authorization": "bearer " + self.config["auth_token"]},
                         enable_multithread=True)
                     self.ws.settimeout(1)
-                    self.send({"settings": {"agent": {"name": "the_print_farm", "version": "1.0"},
+                    version = "1.0" + ("+" + self.config["registration_key"] if self.config.get("registration_key") else "")
+                    self.send({"settings": {"agent": {"name": "the_print_farm", "version": version},
                                              "webcams": [{"name": self.name, "is_primary_camera": True,
                                                           "stream_mode": "snapshot", "streamRatio": "16:9",
                                                           "target_fps": 0.1}]}})

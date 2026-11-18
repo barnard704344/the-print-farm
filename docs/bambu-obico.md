@@ -17,59 +17,45 @@ part of the Git repository.
    once to load the new bridge. `websocket-client` is the new dependency.
    Native installations can use their existing `setup.sh` update workflow;
    Docker installations must rebuild/use an image containing this change.
-4. Create a **separate printer record** for this physical Bambu using the
-   instructions below. Obico's normal add-printer wizard expects an existing
-   OctoPrint/Klipper agent and a linking code; this bridge doesn't implement
-   that discovery/linking-code flow. Do not reuse a Klipper printer's identity.
+## Connect from The Print Farm
 
-### Create the Obico printer record
+No browser developer tools or Obico linking codes are needed.
 
-Sign into your Obico server as the account that should own the printer. Open
-your browser's developer tools **Console** on that same Obico page and run this
-once, changing the name for each physical printer:
+1. Open **Settings → Integrations → Obico AI Failure Detection** in The Print
+   Farm. The printer dropdown comes from this installation's configured
+   printers; it has no hard-coded names, IP addresses or printer-count limit.
+2. Select the Bambu printer you want to connect.
+3. Enter your **Obico server address, username/email and password**.
+4. Click **Create & connect**.
 
-```javascript
-const response = await fetch('/api/v1/printers/', {
-  method: 'POST',
-  credentials: 'same-origin',
-  headers: {'Content-Type': 'application/json'},
-  body: JSON.stringify({
-    name: 'P1S-Home',
-    action_on_failure: 'NONE',
-    watching_enabled: true
-  })
-});
-if (!response.ok) throw new Error(`Printer creation failed: HTTP ${response.status}`);
-const printer = await response.json();
-console.log({printer_id: printer.id, auth_token: printer.auth_token});
-```
-
-This creates a monitoring-only printer record in your signed-in account and
-returns its ID and generated agent token. It does not send commands to the
-physical printer. Copy these values into the farm's settings below. Treat the
-token as a password; do not post it in GitHub issues or screenshots. Run the
-creation request only once per printer: rerunning it creates another record.
-To retrieve an existing printer's token, while signed in as its owner open
-`/api/v1/printers/<id>/` and find `auth_token`.
-
-## Configure one home printer
-
-Open **Settings → Integrations → Obico AI Failure Detection** in The Print
-Farm, select the Bambu printer, and enter:
-
-- Obico server URL and this printer's ID.
-- The matching **printer agent token**.
-- Your Obico username/email and password (used to retrieve detection results).
+The farm creates a matching Obico printer record, saves its ID and agent token
+privately, and starts monitoring automatically. The token is never returned to
+browser code; the settings display only a mask. Registration uses this
+installation and physical printer identity, so identical names at different
+sites do not share a token. Repeating setup reuses the same registration
+instead of creating duplicates. Conflicting registration records are reported
+for manual review.
 
 Leave **Allow Obico to pause, resume or cancel this printer** unchecked for
-the first test. Click **Test Connection**, then enable Obico and save. The
-bridge starts immediately; no printer or service restart is needed when
-changing these settings.
+initial tests. New Obico records use **Just notify me**. Failure detection and
+notification delivery still require a working Obico ML backend and notification
+configuration.
 
-In Obico, enable failure detection for the printer and choose **Just notify
-me** initially. There must also be a functioning Obico ML backend and working
-notification delivery. A successful connection test checks credentials and
-printer identity, not the ML backend, camera, notifications, or print controls.
+For another printer, select it and repeat. Every printer gets an independent
+Obico identity and connection. The server/account may be shared if it owns the
+printers. No home credentials or device addresses are embedded in the software.
+
+If you already created an Obico record under a different name, expand
+**Existing printer / advanced settings**, enter its printer ID and agent token,
+then use **Test Connection**, enable Obico and save. Klipper printers continue
+using their existing Obico agent and printer ID. To retrieve an existing token,
+while signed into Obico as its owner open `/api/v1/printers/<id>/` and find
+`auth_token`; treat it as a password.
+
+The normal Obico add-printer wizard expects an OctoPrint/Klipper linking code.
+The **Create & connect** button handles registration automatically. It also
+supports older Obico servers by obtaining and consuming a new unassigned
+linking code internally; no manual codes or developer tools are required.
 
 ## Test with a normal short print
 
@@ -100,9 +86,9 @@ live hardware validation is required for each printer/firmware combination.
 
 ## Repeat for the four work P1S printers
 
-Create four Obico printer records and configure each work printer separately.
-Each needs its own **printer ID and token**. Server/account credentials may be
-shared if the account owns those four printers. Enable and test one at a time;
+The work installation lists its own configured printers. Select each P1S and
+click **Create & connect**, using the work Obico server/account. Each receives
+its own **printer ID and token** automatically. Enable and test one at a time;
 pause on one must not affect any of the others. Home credentials are not
 copied to work. No code changes or fixed four-printer limit are required.
 

@@ -32,6 +32,13 @@ def prepare_obico_config(data, saved, printer_type):
         if not isinstance(allow, bool):
             raise ValueError("Remote control must be enabled or disabled")
         config.update(auth_token=token, allow_remote_control=allow)
+        registration_key = (saved.get("registration_key")
+                            if server == saved.get("server") and printer_id == saved.get("printer_id")
+                            else data.get("registration_key"))
+        if registration_key:
+            if not isinstance(registration_key, str) or len(registration_key) != 24 or any(c not in "0123456789abcdef" for c in registration_key):
+                raise ValueError("Invalid printer registration identity")
+            config["registration_key"] = registration_key
     return config
 
 

@@ -845,6 +845,7 @@ Admin only. Per-printer Obico failure detection config.
 | GET | `/api/obico/config/<name>` | Get Obico config for printer |
 | POST | `/api/obico/config/<name>` | Save Obico config |
 | POST | `/api/obico/test` | Test Obico connection |
+| POST | `/api/obico/create/<name>` | Register/connect a configured Bambu printer |
 
 **Save Body:**
 ```json
@@ -863,6 +864,18 @@ same fields plus `printer_name`; when the password is the mask, the saved secret
 is reused only if the server and username are unchanged. The test returns a
 non-success response when authentication fails, the printer ID does not exist,
 or the printer endpoint is unavailable.
+
+`POST /api/obico/create/<name>` accepts `server`, `username` and `password`.
+The name must be an installed Bambu printer in this farm. It creates or reuses
+a record scoped to this installation and physical printer in the signed-in
+Obico account (not just by display name), stores the
+ID/token privately and starts monitoring with control disabled for a new
+connection. Older servers without printer-list POST support use a new unassigned linking
+code internally; an existing printer’s bound code is never verified or reset.
+The response contains `ok`, `enabled`, `printer_id`, and `message`,
+never the token. The same saved-password mask rules apply. Requests are
+serialized with settings saves so registering multiple printers retains every
+assignment. Klipper printers should use their existing agent.
 
 For a Bambu printer, the body also requires `auth_token` (that Obico printer's
 agent token) and accepts `allow_remote_control` (boolean, default `false`).

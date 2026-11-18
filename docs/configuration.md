@@ -221,8 +221,10 @@ MMU, and generic filament controls continue to work.
 
 ## Obico
 
-Configure each printer from **Settings → Integrations → Obico AI Failure
-Detection** with the Obico server URL, printer ID, username, and password.
+Open **Settings → Integrations → Obico AI Failure Detection** and select one
+of this installation’s configured printers. For Bambu, enter the Obico server
+address and login, then click **Create & connect**. For Klipper, also enter
+the existing agent’s Obico printer ID.
 
 - **Klipper:** install and link `moonraker-obico` on the printer first. The
   farm displays the existing agent's detection results; it does not replace it.
@@ -231,12 +233,13 @@ Detection** with the Obico server URL, printer ID, username, and password.
   every ten seconds during an active print. No OctoPrint or USB connection is
   required. See [Bambu Obico setup and testing](bambu-obico.md).
 
-Bambu printers additionally require the **printer agent token** belonging to
-that Obico printer ID. This is not the farm API key or your Obico account
-password. Give every physical printer its own Obico printer record and token;
-do not also run another Obico agent with the same token. The farm rejects
-duplicate configured assignments, and Obico duplicate-agent disconnects stop
-the bridge instead of reconnecting indefinitely.
+For Bambu printers, select a configured printer, enter the Obico server and
+account login, then click **Create & connect**. The farm registers the selected
+printer, stores its unique ID/token privately, and starts monitoring. Repeat
+for any number of configured printers; names and addresses are read from this
+installation. A matching record is reused on retry. For an existing record
+under another name, expand **Existing printer / advanced settings** to enter
+its ID/token manually. Never share one Obico identity between physical printers.
 
 **Allow Obico to pause, resume or cancel this printer** is off by default for
 Bambu printers. With it off, the bridge monitors but ignores control requests.

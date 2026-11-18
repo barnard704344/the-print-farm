@@ -17,12 +17,13 @@ function harness(fetch) {
 }
 const response = data => ({ok:true, json:async () => data});
 
-test('all four work Bambu printers and the Klipper printer are selectable', async () => {
-    const printers = Object.fromEntries([1,2,3,4].map(n => [`P1S-${n}`, {type:'bambulab'}]));
+test('every installed Bambu printer and the Klipper printer are selectable', async () => {
+    const names = Array.from({length:12}, (_, i) => `School-BBL-${i+1}`);
+    const printers = Object.fromEntries(names.map(name => [name, {type:'bambulab'}]));
     printers.Voron = {type:'klipper'};
     const {element, context} = harness(async () => response({printers}));
     await context.populateObicoPrinterDropdown();
-    assert.deepEqual(element('obicoTargetPrinter').children.map(x => x.value), ['P1S-1','P1S-2','P1S-3','P1S-4','Voron']);
+    assert.deepEqual(element('obicoTargetPrinter').children.map(x => x.value), [...names, 'Voron']);
 });
 
 test('Bambu restores its masked token and control setting; Klipper hides those fields', async () => {
@@ -73,4 +74,42 @@ test('save sends the selected printer settings and reloads masked credentials', 
     assert.equal(posted.data.auth_token, 'new-token');
     assert.equal(posted.data.allow_remote_control, true);
     assert.equal(element('obicoAuthToken').value, '********');
+});
+
+
+test('create and connect uses the selected installed name, not a fixed home printer', async () => {
+    let posted;
+    let configured = false;
+    const {element, context} = harness(async (url, options) => {
+        if (options) {posted = {url, data:JSON.parse(options.body)}; configured=true; return response({ok:true});}
+        return response({printer_type:'bambulab', enabled:configured, server:'https://work.test', username:'owner', password:'********', printer_id:configured?42:0, auth_token:configured?'********':''});
+    });
+    element('obicoTargetPrinter').value = 'School BBL 12';
+    await context.loadObicoForPrinter();
+    element('obicoPassword').value = 'login-password';
+    await context.createObicoPrinter();
+    assert.equal(posted.url, '/api/obico/create/School%20BBL%2012');
+    assert.deepEqual(posted.data, {server:'https://work.test', username:'owner', password:'login-password'});
+    assert.equal(element('obicoPrinterId').value, 42);
+    assert.equal(element('obicoAuthToken').value, '********');
+    assert.equal(element('obicoRemoteControl').checked, false);
+    assert.equal(element('obicoCreateButton').disabled, true);
+});
+
+test('create requires login details and prevents duplicate submissions while waiting', async () => {
+    let calls=0, finish;
+    const {element, context} = harness(async (url, options) => {
+        if (options) {calls++; return new Promise(resolve => finish=resolve);}
+        return response({printer_type:'bambulab', enabled:false});
+    });
+    element('obicoTargetPrinter').value = 'P1';
+    await context.loadObicoForPrinter();
+    await context.createObicoPrinter();
+    assert.equal(calls, 0);
+    for (const [id, value] of Object.entries({obicoServer:'https://test', obicoUsername:'user', obicoPassword:'password'})) element(id).value=value;
+    const first=context.createObicoPrinter();
+    await context.createObicoPrinter();
+    assert.equal(calls, 1);
+    finish(response({ok:true}));
+    await first;
 });
