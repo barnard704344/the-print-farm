@@ -152,8 +152,12 @@ class ObicoClient:
         code = str(data.get("code") or "")
         if data.get("printer") or data.get("verified_at") or len(code) != 6 or not code.isdigit():
             raise ValueError("Obico did not provide a new unassigned linking code")
-        r = self._session.post(self.server_url + "/api/v1/octo/verify/",
-                               params={"code": code}, timeout=15, allow_redirects=False)
+        # This is the anonymous AGENT endpoint, not an account/session API.
+        # Sending the signed-in cookie makes DRF enforce CSRF and reject the
+        # agent request. Keep account cookies only for obtaining the code and
+        # updating the owned printer; never disable server CSRF protection.
+        r = requests.post(self.server_url + "/api/v1/octo/verify/",
+                          params={"code": code}, timeout=15, allow_redirects=False)
         if r.status_code != 200:
             raise ValueError(f"Could not finish Obico registration (HTTP {r.status_code})")
         printer = r.json().get("printer") or {}

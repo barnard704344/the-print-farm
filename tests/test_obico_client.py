@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from src.obico_client import ObicoClient
 
@@ -78,12 +78,16 @@ class ObicoClientTests(unittest.TestCase):
         verified.json.return_value = {"printer": record}
         updated.json.return_value = record
         client._session.get.side_effect = [listing, code]
-        client._session.post.side_effect = [Mock(status_code=405), verified]
+        client._session.post.return_value = Mock(status_code=405)
         client._session.patch.return_value = updated
-        self.assertEqual(client.ensure_printer("School P1S", "device-key"), record)
-        verify = client._session.post.call_args_list[1]
+        with patch("src.obico_client.requests.post", return_value=verified) as agent_post:
+            self.assertEqual(client.ensure_printer("School P1S", "device-key"), record)
+        verify = agent_post.call_args
         self.assertTrue(verify.args[0].endswith('/api/v1/octo/verify/'))
         self.assertEqual(verify.kwargs["params"], {"code": "123456"})
+        self.assertNotIn("cookies", verify.kwargs)
+        self.assertNotIn("auth", verify.kwargs)
+        client._session.post.assert_called_once()  # signed-in session is never used to verify
         applied = client._session.patch.call_args.kwargs["json"]
         self.assertEqual(applied["name"], "School P1S")
         self.assertEqual(applied["action_on_failure"], "NONE")
