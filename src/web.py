@@ -2670,6 +2670,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             save_yaml_config(config_path, config)
             app_config["printers"] = config["printers"]
 
+            job_queue.fail_orphaned_jobs(p["name"] for p in config["printers"])
             _remove_orca_vhost(name, orca_port)
 
             return jsonify({"ok": True, "message": f"Printer '{name}' removed"})

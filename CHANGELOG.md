@@ -25,6 +25,10 @@ changes to The Print Farm.
 
 ### Fixed
 
+- **Removed printers no longer leave active jobs blocking updates.** Startup and
+  printer removal mark orphaned upload/print records as failed with an explanation.
+  Jobs on configured printers, including offline printers, remain active.
+
 - **Cleaner printer headers.** Nozzle size/material, OrcaSlicer hostname, and
   Wi-Fi signal strength live in Details instead of taking up card space. The
   chamber-light control now shares the status-button row and still updates live.

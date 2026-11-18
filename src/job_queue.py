@@ -192,6 +192,44 @@ class JobQueue:
         conn.close()
         return [dict(r) for r in rows]
 
+    def fail_orphaned_jobs(self, printer_names) -> list:
+        """Close active records whose printer was removed from configuration.
+
+        Use configured names, including offline printers. Losing a connection
+        must never be treated as removing a printer or finishing a print.
+        """
+        names = tuple(printer_names)
+        missing = (
+            "COALESCE(printer_name, '') NOT IN ("
+            + ",".join("?" for _ in names) + ")"
+            if names else "1"
+        )
+        reason = "Tracking ended: assigned printer is no longer configured."
+        with self._lock:
+            conn = self._get_conn()
+            try:
+                rows = conn.execute(
+                    "SELECT id, printer_name FROM jobs "
+                    "WHERE status IN ('uploading', 'printing') AND " + missing,
+                    names,
+                ).fetchall()
+                conn.execute(
+                    "UPDATE jobs SET status = 'failed', completed_at = ?, "
+                    "notes = CASE WHEN COALESCE(notes, '') = '' THEN ? "
+                    "ELSE notes || char(10) || ? END "
+                    "WHERE status IN ('uploading', 'printing') AND " + missing,
+                    (datetime.now(timezone.utc).isoformat(), reason, reason, *names),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+        for row in rows:
+            logger.warning(
+                "Job #%s tracking failed: printer %r is no longer configured",
+                row["id"], row["printer_name"],
+            )
+        return [row["id"] for row in rows]
+
     def get_all_jobs(self, limit: int = 100) -> list:
         conn = self._get_conn()
         rows = conn.execute(

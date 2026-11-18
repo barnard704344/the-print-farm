@@ -341,6 +341,9 @@ def cmd_run(args, config: dict):
         db_path=queue_cfg.get("db_path", "./data/farm.db"),
         upload_dir=queue_cfg.get("upload_dir", "./uploads"),
     )
+    # Reconcile configuration edits made while the service was stopped. An
+    # orphan cannot receive completion telemetry and would block updates forever.
+    queue.fail_orphaned_jobs(printer["name"] for printer in printers)
 
     library = FileLibrary(
         db_path=queue_cfg.get("db_path", "./data/farm.db"),
