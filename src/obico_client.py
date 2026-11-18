@@ -167,6 +167,13 @@ class ObicoClient:
                                 json=settings, timeout=10, allow_redirects=False)
         if r.status_code != 200:
             raise ValueError(f"Obico printer was created, but its settings could not be applied (HTTP {r.status_code})")
+        # Older servers acknowledge PATCH without returning a serialized printer.
+        # Read the canonical record rather than treating the acknowledgement as
+        # the ID/token payload. This also verifies the created record is readable.
+        r = self._session.get(self.server_url + f"/api/v1/printers/{int(printer['id'])}/",
+                              timeout=10, allow_redirects=False)
+        if r.status_code != 200:
+            raise ValueError(f"Could not read the registered Obico printer (HTTP {r.status_code})")
         return r.json()
 
     def fetch_status(self) -> dict:

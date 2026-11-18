@@ -77,9 +77,11 @@ class ObicoClientTests(unittest.TestCase):
         record = {"id": 9, "name": "School P1S", "auth_token": "private-token"}
         verified.json.return_value = {"printer": record}
         updated.json.return_value = record
-        client._session.get.side_effect = [listing, code]
+        client._session.get.side_effect = [listing, code, updated]
         client._session.post.return_value = Mock(status_code=405)
-        client._session.patch.return_value = updated
+        ack = Mock(status_code=200)
+        ack.json.return_value = {"result": "ok"}
+        client._session.patch.return_value = ack
         with patch("src.obico_client.requests.post", return_value=verified) as agent_post:
             self.assertEqual(client.ensure_printer("School P1S", "device-key"), record)
         verify = agent_post.call_args
