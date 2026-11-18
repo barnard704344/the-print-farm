@@ -1,6 +1,8 @@
 # The Print Farm — API Documentation
 
-Complete reference for all REST API endpoints, reviewed for `v1.0.15`.
+Reference for the current `main` branch, including unreleased changes. See the
+[changelog](CHANGELOG.md) for release coverage; `v1.0.16` predates the native
+Bambu Obico bridge and automatic registration endpoints described here.
 
 ---
 
@@ -13,6 +15,7 @@ Complete reference for all REST API endpoints, reviewed for `v1.0.15`.
 - [File Library](#file-library)
 - [Camera](#camera)
 - [Printer Discovery](#printer-discovery)
+- [Printer Pool Config](#printer-pool-config)
 - [Spoolman Integration](#spoolman-integration)
 - [Happy Hare / MMU](#happy-hare--mmu)
 - [Klipper Macros](#klipper-macros)
@@ -563,6 +566,7 @@ queued, uploading or printing job are always kept.
 | POST | `/api/library/folders/<id>/rename` | admin | Rename. Body: `{"name": "New Name"}` |
 | POST | `/api/library/folders/<id>/move` | admin | Move. Body: `{"parent_id": 2}` (null = top level). A folder can't move into itself or a sub-folder |
 | DELETE | `/api/library/folders/<id>` | admin | Delete folder and its sub-folders; their files move to the top level |
+| POST, DELETE | `/api/library/folders/<id>/delete` | admin | Alias for deleting a folder |
 
 Folder names are trimmed, repeated spaces collapsed, and limited to 100
 characters. Names must be unique within a parent folder.
@@ -704,11 +708,62 @@ Add a printer to the farm.
 
 #### `POST /api/discover/remove`
 
-Remove printer. Body: `{"name": "voron"}`
+Remove printer. Body: `{"name": "voron"}`. Active upload/print records for a
+removed printer are marked failed with an explanation instead of blocking
+future updates. Startup also reconciles orphaned records for removed printers;
+jobs belonging to configured offline printers remain active.
 
 #### `POST /api/discover/rename`
 
 Rename printer. Body: `{"old_name": "voron", "new_name": "voron-2.4"}`
+
+#### `POST /api/discover/reconnect/scan`
+
+Staff browser session required; administrator integration keys are not accepted.
+Find possible new addresses for a configured offline printer using its saved
+identity and discovery networks. Body:
+
+```json
+{"name": "P1S-1", "timeout": 8, "port_scan": true, "subnet": "192.168.1.0/24"}
+```
+
+`subnet` is an optional scan override. Without it, the server scans attached and
+configured networks plus the saved address's `/24`. The response contains
+`candidates`, `current_host`, `name`, `type`, `scanned_subnets`, and `subnets`.
+Bambu broadcast candidates match the saved serial; port-scan candidates are
+verified with the saved serial and access code. Hosts assigned to other
+configured printers are excluded.
+
+#### `POST /api/discover/reconnect`
+
+Staff browser session required. Verify the selected new address and update the
+existing printer, preserving its other configuration. Body:
+
+```json
+{"name": "P1S-1", "host": "192.168.1.58"}
+```
+
+Use a different address from the saved host. Reconnect verifies the configured
+Bambu identity or Klipper connection before saving; it does not create a new
+printer or replace integration credentials.
+
+---
+
+## Printer Pool Config
+
+Administrator access required. These endpoints configure dispatch of generic
+OrcaSlicer submissions; printer-targeted uploads are unaffected.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/pool/config` | Get `enabled`, selected `printers`, and available `all_printers` |
+| POST | `/api/pool/config` | Save pool membership and enabled state; applies immediately |
+
+**Save Body:**
+
+```json
+{"enabled": true, "printers": ["P1S-1", "Voron-01"]}
+```
 
 ---
 
@@ -840,6 +895,13 @@ Admin only. Staff can always print. Students must match the allowlist by usernam
 
 Admin only. Per-printer Obico failure detection config.
 
+These endpoints configure the farm-side integration, not the Obico server.
+Detection requires a reachable Obico web/API, working worker/Redis and ML
+backend/model, plus fresh camera images during an active print. Obico's SMTP,
+recipient addresses, and notification preferences are managed on that server,
+separately from the farm's notification endpoints. See
+[prerequisites and verification](docs/bambu-obico.md).
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/obico/config/<name>` | Get Obico config for printer |
@@ -847,7 +909,7 @@ Admin only. Per-printer Obico failure detection config.
 | POST | `/api/obico/test` | Test Obico connection |
 | POST | `/api/obico/create/<name>` | Register/connect a configured Bambu printer |
 
-**Save Body:**
+**Klipper Save Body** (the printer must already have a linked Obico agent):
 ```json
 {
   "enabled": true,
@@ -877,12 +939,20 @@ never the token. The same saved-password mask rules apply. Requests are
 serialized with settings saves so registering multiple printers retains every
 assignment. Klipper printers should use their existing agent.
 
-For a Bambu printer, the body also requires `auth_token` (that Obico printer's
+For a manual Bambu `POST /api/obico/config/<name>` save, the body also requires
+`auth_token` (that Obico printer's
 agent token) and accepts `allow_remote_control` (boolean, default `false`).
+This token is not required in the automatic `POST /api/obico/create/<name>`
+registration request; the server stores it privately after registration.
 `GET` masks `auth_token` and includes `printer_type`. A masked token is reused
 only for the same server and printer ID. Duplicate printer IDs/tokens are
 rejected across configured printers. The Bambu connection test checks the
 token's printer ID without opening a live agent connection.
+
+Successful registration or a connection test verifies account/printer access.
+It does not establish successful WebSocket transport, fresh image uploads, AI
+inference, or email delivery; verify those separately with the
+[live test steps](docs/bambu-obico.md#test-with-a-normal-short-print).
 
 With control enabled, only pause/resume/cancel for the current active job are
 accepted from Obico; arbitrary printer APIs and tunnels are unsupported. See

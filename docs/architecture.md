@@ -34,6 +34,25 @@ The Print Farm deliberately uses a small, local-first architecture.
    Spoolman usage deduction. A finished or failed print marks the build plate
    as needing clearing.
 
+## Obico Data And Notification Flow
+
+Obico is a separate optional service. The farm does not host its AI model or
+send its AI alerts through the farm's notification manager.
+
+| Stage | Bambu LAN bridge | Klipper integration |
+|-------|------------------|---------------------|
+| Printer telemetry and images | The farm sends status over a WebSocket and fresh camera snapshots over HTTP to Obico during a print | The printer's separately installed `moonraker-obico` agent sends them |
+| AI analysis | Obico's detection backend analyses the images | Obico's detection backend analyses the images |
+| Results in the farm | The farm polls the owning Obico account for results | The farm polls the owning Obico account for results |
+| AI email alerts | Obico sends them using its own SMTP and recipient preferences | Obico sends them using its own SMTP and recipient preferences |
+
+The farm's job submitted/completed/paused/failed notifications remain separate.
+An Obico outage does not stop ordinary farm printing, but detection, results,
+and Obico-triggered actions are unavailable while the required services are
+down. An authenticated connection alone does not establish that camera uploads,
+AI inference, or notification delivery work. See the
+[Obico setup and verification guide](bambu-obico.md).
+
 ## Stored Files
 
 Jobs and library entries refer to stored files by path. Reprints, per-printer

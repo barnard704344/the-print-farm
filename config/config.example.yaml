@@ -25,6 +25,9 @@ printers: []
 #    staff_only: false          # optional — restrict to staff users
 #    require_plate_clear: true  # optional — confirm the plate is clear before the next job
 #    virtual_printer: true      # native only; set false for Docker/direct-IP use
+#    # Requires a separate working Obico server/AI backend; setup does not install it.
+#    # Obico sends its own AI emails; farm notification settings are independent.
+#    # See docs/bambu-obico.md for prerequisites, recipients, and verification.
 #    obico:                     # optional — native Obico agent, one unique token per printer
 #      server: http://obico.example:3334
 #      printer_id: 4
@@ -45,7 +48,7 @@ printers: []
 #    require_plate_clear: true
 #    pinned_macros:             # optional — macro buttons on the card (set from All macros…)
 #      - NOZZLE_WIPE
-#    obico:                     # optional — self-hosted Obico integration
+#    obico:                     # optional — requires linked moonraker-obico and a working server
 #      server: http://192.168.1.105:3334
 #      printer_id: 3
 #      username: user@example.com

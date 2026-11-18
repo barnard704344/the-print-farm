@@ -23,21 +23,6 @@ changes to The Print Farm.
   rejected. Existing Klipper Obico integration continues unchanged. See
   [setup and hardware testing](docs/bambu-obico.md).
 
-### Fixed
-
-- **Removed printers no longer leave active jobs blocking updates.** Startup and
-  printer removal mark orphaned upload/print records as failed with an explanation.
-  Jobs on configured printers, including offline printers, remain active.
-
-- **Cleaner printer headers.** Nozzle size/material, OrcaSlicer hostname, and
-  Wi-Fi signal strength live in Details instead of taking up card space. The
-  chamber-light control now shares the status-button row and still updates live.
-
-- **Printer pictures blend into dark cards.** Removed the light picture backdrop
-  in dark mode, keeping the transparent model images on the thumbnail’s dark surface.
-
-### Added
-
 - **AMS in printer thumbnails.** P1S printers reporting an AMS use a single aligned
   printer-and-AMS image. Other models show the accessory alongside the printer.
   The thumbnail updates as AMS presence changes; Klipper MMUs are not labelled as
@@ -54,6 +39,45 @@ changes to The Print Farm.
   fall back to the printer picture when unavailable. Configure `model` for custom
   printer names; unknown types retain the generic icon. Images are bundled locally
   with source attribution and the upstream licence.
+
+### Fixed
+
+- **Removed printers no longer leave active jobs blocking updates.** Startup and
+  printer removal mark orphaned upload/print records as failed with an explanation.
+  Jobs on configured printers, including offline printers, remain active.
+
+- **Cleaner printer headers.** Nozzle size/material, OrcaSlicer hostname, and
+  Wi-Fi signal strength live in Details instead of taking up card space. The
+  chamber-light control now shares the status-button row and still updates live.
+
+- **Printer pictures blend into dark cards.** Removed the light picture backdrop
+  in dark mode, keeping the transparent model images on the thumbnail’s dark surface.
+
+- **Obico registration compatibility.** Older servers use a fresh unassigned
+  linking code and the created printer is fetched after acknowledgement. Agent
+  token checks use a separate session without account cookies, and webcam
+  settings include defaults required by older servers.
+
+- **Queue dispatch errors are visible.** Sending a queued job reports server
+  and network errors instead of silently closing the printer selection.
+
+- **HTTPS proxy updates work with the configured public origin.** Browser
+  origin checks accept that origin only for its matching host, retain direct
+  LAN access, and reject unrelated origins. Software Update shows the returned
+  error or HTTP status instead of an undefined message.
+
+### Documentation
+
+- **Obico integration requirements and verification.** Explain that the farm
+  installs only its bridge/client and requires a separately working Obico
+  server, AI backend/model, camera feed, and notification service. Document
+  separate Obico/farm emails, additional Obico account recipients, camera-based
+  failure alerts only, and checks for uploads, inference, and delivery.
+- **Current branch and release coverage.** Update Bambu/Klipper setup, API
+  references, architecture, Docker image selection and persistent state guidance.
+  Add the missing reconnect, printer-pool, and folder-deletion alias API routes.
+  The Bambu bridge is on `main`; the `v1.0.16` release predates it. Document the
+  known raw Bambu `FAILED` flag discrepancy as an unresolved limitation.
 
 ## v1.0.16 - 2026-11-17 - Personal Orca keys and clearer dashboards
 

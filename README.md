@@ -40,7 +40,15 @@ This README acts as a documentation index. Detailed information is split across 
 - BambuLab P1/P1S firmware 01.08.02.00+ requires LAN-only mode and Developer Mode for local start/control commands
 - Spoolman optional
 - Happy Hare optional
-- Self-hosted Obico optional
+- Self-hosted Obico optional for the farm, but required for the Obico integration:
+  a reachable server, working AI detection backend, and fresh printer-camera
+  images. The farm installer does not install Obico. See
+  [Obico prerequisites and verification](docs/bambu-obico.md#obico-server-prerequisites).
+
+Obico sends its own AI failure notifications. Configure its SMTP service,
+recipients, and alert preferences in Obico; the bridge does not use The Print
+Farm's email settings. A successful connection test does not verify AI analysis
+or email delivery.
 
 ## Installation And Updates
 

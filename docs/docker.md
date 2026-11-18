@@ -37,6 +37,10 @@ docker pull ghcr.io/barnard704344/the-print-farm:v1.0.16
 explicitly upgraded, use `v1.0.16` in both the pull and run commands. Images tagged
 `main` or `dev` follow main-branch builds and may contain unreleased changes.
 
+The native Bambu Obico bridge is newer than `v1.0.16`; `latest` currently does
+not include it. See [Obico in Docker](#obico-in-docker) before choosing an image
+for that integration.
+
 ### Run the container
 
 ```bash
@@ -169,6 +173,36 @@ Use the local source build if:
   `virtual_printer: false` on BambuLab entries when LAN-mode emulation is not
   provided separately by the host.
 
+## Obico in Docker
+
+The Print Farm container includes its bridge dependencies when built from
+current `main`. It does not include an Obico server or AI model. Run Obico
+separately and verify its web/API, worker, Redis, and detection backend before
+enabling the farm integration.
+
+Until a newer tagged release includes the bridge, use a current main-branch
+build instead of `v1.0.16`/`latest`:
+
+```bash
+docker pull ghcr.io/barnard704344/the-print-farm:main
+```
+
+Replace the image tag in the `docker run` examples with `:main` as well, or use
+the source build above. Keep `/app/data` mounted: by default the current Obico
+job identities live in `/app/data/obico`. If `queue.db_path` or
+`queue.obico_state_dir` points elsewhere, persist the resulting state directory
+too. Runtime configuration, including integration credentials, must also be
+retained privately in `/app/config`.
+
+The farm container must reach the physical printer's MQTT/camera ports and the
+Obico HTTP(S)/WebSocket address. `localhost` inside the farm container refers
+to that container, not your Docker host or a separate Obico container. Use a
+reachable hostname/IP or a service name on a shared Docker network.
+
+Obico sends AI alerts with its own SMTP and email preferences; the farm
+container's email configuration does not configure Obico. Follow
+[Obico prerequisites, notifications, and live verification](bambu-obico.md).
+
 ## GHCR Image Source
 
 Images are published by:
@@ -179,3 +213,5 @@ Published image path:
 
 - `ghcr.io/barnard704344/the-print-farm:latest`
 - `ghcr.io/barnard704344/the-print-farm:v1.0.16`
+- `ghcr.io/barnard704344/the-print-farm:main` (main-branch builds)
+- `ghcr.io/barnard704344/the-print-farm:dev` (main-branch builds)
