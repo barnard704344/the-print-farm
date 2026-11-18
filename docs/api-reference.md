@@ -1,8 +1,8 @@
 # API Reference
 
-This summary tracks current `main`, including unreleased changes. The latest
-tagged release is listed in the [README](../README.md); `v1.0.16` predates the
-native Bambu Obico bridge.
+This summary covers `v1.0.17` and current `main`. The latest tagged release is
+listed in the [README](../README.md); the native Bambu Obico bridge first shipped
+in `v1.0.17`.
 
 ## REST API v1
 

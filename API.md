@@ -1,8 +1,8 @@
 # The Print Farm — API Documentation
 
-Reference for the current `main` branch, including unreleased changes. See the
-[changelog](CHANGELOG.md) for release coverage; `v1.0.16` predates the native
-Bambu Obico bridge and automatic registration endpoints described here.
+Reference for `v1.0.17` and current `main`. See the [changelog](CHANGELOG.md) for
+release coverage; the native Bambu Obico bridge and automatic registration
+endpoints described here first shipped in `v1.0.17`.
 
 ---
 

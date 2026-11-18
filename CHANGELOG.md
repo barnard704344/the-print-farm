@@ -5,6 +5,8 @@ changes to The Print Farm.
 
 ## Unreleased
 
+## v1.0.17 - 2026-11-19 - Bambu Obico integration and reliable setup
+
 ### Added
 
 - **Fresh-install Obico preparation.** Setup installs and checks the complete
@@ -66,6 +68,10 @@ changes to The Print Farm.
   LAN access, and reject unrelated origins. Software Update shows the returned
   error or HTTP status instead of an undefined message.
 
+- **Portable printer-removal regression test.** Mock native helper prerequisites
+  so the removal/queue cleanup test also runs on machines without a native
+  farm installation.
+
 ### Documentation
 
 - **Obico integration requirements and verification.** Explain that the farm
@@ -76,7 +82,7 @@ changes to The Print Farm.
 - **Current branch and release coverage.** Update Bambu/Klipper setup, API
   references, architecture, Docker image selection and persistent state guidance.
   Add the missing reconnect, printer-pool, and folder-deletion alias API routes.
-  The Bambu bridge is on `main`; the `v1.0.16` release predates it. Document the
+  The Bambu bridge is included in `v1.0.17`; `v1.0.16` predates it. Document the
   known raw Bambu `FAILED` flag discrepancy as an unresolved limitation.
 
 ## v1.0.16 - 2026-11-17 - Personal Orca keys and clearer dashboards

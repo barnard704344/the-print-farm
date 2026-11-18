@@ -75,11 +75,11 @@ Dashboard URL:
 
 Release-pinned checkout:
 
-`v1.0.16` predates the native Bambu Obico bridge. Use current `main` for that
-feature until it is included in a newer tagged release.
+`v1.0.17` includes the native Bambu Obico bridge. Earlier releases through
+`v1.0.16` do not include it.
 
 ```bash
-git checkout v1.0.16
+git checkout v1.0.17
 sudo bash setup.sh --restart
 ```
 

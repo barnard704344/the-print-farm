@@ -30,16 +30,16 @@ docker pull ghcr.io/barnard704344/the-print-farm:latest
 For reproducible deployments, pin this release instead:
 
 ```bash
-docker pull ghcr.io/barnard704344/the-print-farm:v1.0.16
+docker pull ghcr.io/barnard704344/the-print-farm:v1.0.17
 ```
 
 `latest` follows tagged releases. For deployments that should only change when
-explicitly upgraded, use `v1.0.16` in both the pull and run commands. Images tagged
+explicitly upgraded, use `v1.0.17` in both the pull and run commands. Images tagged
 `main` or `dev` follow main-branch builds and may contain unreleased changes.
 
-The native Bambu Obico bridge is newer than `v1.0.16`; `latest` currently does
-not include it. See [Obico in Docker](#obico-in-docker) before choosing an image
-for that integration.
+The native Bambu Obico bridge is included in `v1.0.17` and the corresponding
+`latest` image. Earlier releases through `v1.0.16` do not include it. See
+[Obico in Docker](#obico-in-docker) for server and networking requirements.
 
 ### Run the container
 
@@ -176,19 +176,19 @@ Use the local source build if:
 ## Obico in Docker
 
 The Print Farm container includes its bridge dependencies when built from
-current `main`. It does not include an Obico server or AI model. Run Obico
-separately and verify its web/API, worker, Redis, and detection backend before
-enabling the farm integration.
+`v1.0.17` or current `main`. It does not include an Obico server or AI model.
+Run Obico separately and verify its web/API, worker, Redis, and detection backend
+before enabling the farm integration.
 
-Until a newer tagged release includes the bridge, use a current main-branch
-build instead of `v1.0.16`/`latest`:
+For the released Bambu bridge, pull the versioned image:
 
 ```bash
-docker pull ghcr.io/barnard704344/the-print-farm:main
+docker pull ghcr.io/barnard704344/the-print-farm:v1.0.17
 ```
 
-Replace the image tag in the `docker run` examples with `:main` as well, or use
-the source build above. Keep `/app/data` mounted: by default the current Obico
+Use `:v1.0.17` in the `docker run` examples as well to pin the release, or use
+`:latest` to follow tagged releases. The `:main`/`:dev` tags track development
+builds. Keep `/app/data` mounted: by default the current Obico
 job identities live in `/app/data/obico`. If `queue.db_path` or
 `queue.obico_state_dir` points elsewhere, persist the resulting state directory
 too. Runtime configuration, including integration credentials, must also be
@@ -212,6 +212,6 @@ Images are published by:
 Published image path:
 
 - `ghcr.io/barnard704344/the-print-farm:latest`
-- `ghcr.io/barnard704344/the-print-farm:v1.0.16`
+- `ghcr.io/barnard704344/the-print-farm:v1.0.17`
 - `ghcr.io/barnard704344/the-print-farm:main` (main-branch builds)
 - `ghcr.io/barnard704344/the-print-farm:dev` (main-branch builds)

@@ -6,13 +6,14 @@ Built primarily for primary and secondary schools—but equally usable at home,
 in makerspaces, and in other small print farms—The Print Farm keeps things
 simple: no unnecessary plugins, extensions, or heavy dependencies.
 
-Current release: **[v1.0.16](https://github.com/barnard704344/the-print-farm/releases/tag/v1.0.16)**,
-with personal Orca upload attribution, clearer dark mode, preview-led library
-cards, and improved Klipper error handling. See the [changelog](CHANGELOG.md).
+Current release: **[v1.0.17](https://github.com/barnard704344/the-print-farm/releases/tag/v1.0.17)**,
+with native Bambu Obico monitoring and **Create & connect**, clearer printer
+cards, queue recovery fixes, and updated integration documentation. See the
+[changelog](CHANGELOG.md).
 
-Current `main` also includes native Bambu Obico monitoring and **Create & connect**;
-the `v1.0.16` tag predates those features. New installs from `main` use `setup.sh`
-to install all required dependencies.
+The `v1.0.17` release includes the Bambu Obico bridge; earlier releases through
+`v1.0.16` predate it. New native installs use `setup.sh` to install the farm-side
+dependencies. Obico itself must be installed and working separately.
 
 This README acts as a documentation index. Detailed information is split across the docs pages below.
 

@@ -49,9 +49,10 @@ not verify the model or prove an email reached its recipients.
    Native installations can use their existing `setup.sh` update workflow;
    Docker installations must rebuild/use an image containing this change.
 
-The bridge is on current `main`; the `v1.0.16` release and its `latest` Docker
-image predate it. Use a current `main`/`dev` image or build current source until
-a newer tagged release includes the bridge. See [Docker](docker.md#obico-in-docker).
+The bridge is included in `v1.0.17` and newer farm releases. Use the `v1.0.17`
+or corresponding `latest` Docker image, or build current source. Earlier
+releases through `v1.0.16` predate the bridge. See
+[Docker](docker.md#obico-in-docker).
 ## Connect from The Print Farm
 
 No browser developer tools or Obico linking codes are needed.
