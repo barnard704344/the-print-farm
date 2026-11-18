@@ -310,6 +310,8 @@ class BambuObicoBridge:
                     self.send({"settings": {"agent": {"name": "the_print_farm", "version": version},
                                              "webcams": [{"name": self.name, "is_primary_camera": True,
                                                           "stream_mode": "snapshot", "streamRatio": "16:9",
+                                                          "rotation": 0, "rotate90": False,
+                                                          "flipV": False, "flipH": False,
                                                           "target_fps": 0.1}]}})
                     self.publish(connected=True, error="", state="Connected")
                     connected_at = time.monotonic()

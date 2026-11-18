@@ -130,6 +130,11 @@ class TransportTests(unittest.TestCase):
         self.assertEqual(errors, [])
         settings = next(m["settings"] for m in messages if "settings" in m)
         self.assertEqual(settings["webcams"][0]["stream_mode"], "snapshot")
+        # Older Obico versions call int(rotation); absent/None crashes their API.
+        webcam = settings["webcams"][0]
+        self.assertEqual(int(webcam["rotation"]), 0)
+        self.assertIs(webcam["flipV"], False)
+        self.assertIs(webcam["flipH"], False)
         self.assertTrue(any(m.get("status", {}).get("job", {}).get("file", {}).get("name") == "home-test.3mf" for m in messages))
         self.assertEqual(len(uploads), 1)
         content_type, body = uploads[0]
