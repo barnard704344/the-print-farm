@@ -17,11 +17,40 @@ part of the Git repository.
    once to load the new bridge. `websocket-client` is the new dependency.
    Native installations can use their existing `setup.sh` update workflow;
    Docker installations must rebuild/use an image containing this change.
-4. In Obico, add a **separate printer** for this physical Bambu. Obtain its
-   printer ID and agent authentication token from manual agent setup. If your
-   Obico UI doesn't expose the token, while signed into Obico open
-   `/api/v1/printers/<id>/`: the printer owner's response includes `auth_token`.
-   Treat that value as a password. Do not reuse a Klipper printer's identity.
+4. Create a **separate printer record** for this physical Bambu using the
+   instructions below. Obico's normal add-printer wizard expects an existing
+   OctoPrint/Klipper agent and a linking code; this bridge doesn't implement
+   that discovery/linking-code flow. Do not reuse a Klipper printer's identity.
+
+### Create the Obico printer record
+
+Sign into your Obico server as the account that should own the printer. Open
+your browser's developer tools **Console** on that same Obico page and run this
+once, changing the name for each physical printer:
+
+```javascript
+const response = await fetch('/api/v1/printers/', {
+  method: 'POST',
+  credentials: 'same-origin',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({
+    name: 'P1S-Home',
+    action_on_failure: 'NONE',
+    watching_enabled: true
+  })
+});
+if (!response.ok) throw new Error(`Printer creation failed: HTTP ${response.status}`);
+const printer = await response.json();
+console.log({printer_id: printer.id, auth_token: printer.auth_token});
+```
+
+This creates a monitoring-only printer record in your signed-in account and
+returns its ID and generated agent token. It does not send commands to the
+physical printer. Copy these values into the farm's settings below. Treat the
+token as a password; do not post it in GitHub issues or screenshots. Run the
+creation request only once per printer: rerunning it creates another record.
+To retrieve an existing printer's token, while signed in as its owner open
+`/api/v1/printers/<id>/` and find `auth_token`.
 
 ## Configure one home printer
 
