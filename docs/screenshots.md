@@ -3,7 +3,10 @@
 These screenshots show the current dashboard as of 17 November 2026. They were
 captured in Chromium from the application’s rendered interface using sample
 printer states, an example hostname, a demo account, and a dummy API key.
-The same camera preview is reused across the example printer cards.
+The same camera preview is reused across the example printer cards. Current
+`main` may include newer controls; these images do not show the subsequent
+Bambu Obico registration flow. See the [Obico guide](bambu-obico.md) for current
+setup instructions.
 
 ## Dark Theme
 

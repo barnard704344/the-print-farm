@@ -30,12 +30,16 @@ docker pull ghcr.io/barnard704344/the-print-farm:latest
 For reproducible deployments, pin this release instead:
 
 ```bash
-docker pull ghcr.io/barnard704344/the-print-farm:v1.0.16
+docker pull ghcr.io/barnard704344/the-print-farm:v1.0.17
 ```
 
 `latest` follows tagged releases. For deployments that should only change when
-explicitly upgraded, use `v1.0.16` in both the pull and run commands. Images tagged
+explicitly upgraded, use `v1.0.17` in both the pull and run commands. Images tagged
 `main` or `dev` follow main-branch builds and may contain unreleased changes.
+
+The native Bambu Obico bridge is included in `v1.0.17` and the corresponding
+`latest` image. Earlier releases through `v1.0.16` do not include it. See
+[Obico in Docker](#obico-in-docker) for server and networking requirements.
 
 ### Run the container
 
@@ -169,6 +173,36 @@ Use the local source build if:
   `virtual_printer: false` on BambuLab entries when LAN-mode emulation is not
   provided separately by the host.
 
+## Obico in Docker
+
+The Print Farm container includes its bridge dependencies when built from
+`v1.0.17` or current `main`. It does not include an Obico server or AI model.
+Run Obico separately and verify its web/API, worker, Redis, and detection backend
+before enabling the farm integration.
+
+For the released Bambu bridge, pull the versioned image:
+
+```bash
+docker pull ghcr.io/barnard704344/the-print-farm:v1.0.17
+```
+
+Use `:v1.0.17` in the `docker run` examples as well to pin the release, or use
+`:latest` to follow tagged releases. The `:main`/`:dev` tags track development
+builds. Keep `/app/data` mounted: by default the current Obico
+job identities live in `/app/data/obico`. If `queue.db_path` or
+`queue.obico_state_dir` points elsewhere, persist the resulting state directory
+too. Runtime configuration, including integration credentials, must also be
+retained privately in `/app/config`.
+
+The farm container must reach the physical printer's MQTT/camera ports and the
+Obico HTTP(S)/WebSocket address. `localhost` inside the farm container refers
+to that container, not your Docker host or a separate Obico container. Use a
+reachable hostname/IP or a service name on a shared Docker network.
+
+Obico sends AI alerts with its own SMTP and email preferences; the farm
+container's email configuration does not configure Obico. Follow
+[Obico prerequisites, notifications, and live verification](bambu-obico.md).
+
 ## GHCR Image Source
 
 Images are published by:
@@ -178,4 +212,6 @@ Images are published by:
 Published image path:
 
 - `ghcr.io/barnard704344/the-print-farm:latest`
-- `ghcr.io/barnard704344/the-print-farm:v1.0.16`
+- `ghcr.io/barnard704344/the-print-farm:v1.0.17`
+- `ghcr.io/barnard704344/the-print-farm:main` (main-branch builds)
+- `ghcr.io/barnard704344/the-print-farm:dev` (main-branch builds)

@@ -110,6 +110,11 @@ No Klipper plugin or extra component is required beyond a standard Moonraker ins
   Settings and Printer Details
 - **Spoolman integration** — Optionally connect a local [Spoolman](https://github.com/Donkie/Spoolman) instance for assignment and usage tracking
 
+The Obico integration requires a working separate Obico server and AI backend;
+The Print Farm does not perform the AI analysis itself. Obico sends AI emails
+using its own notification settings, independently of the farm's job emails.
+See [Obico prerequisites, alerts, and verification](bambu-obico.md).
+
 ## Build Plate Check and Camera Wall
 
 After a print finishes or fails, the printer card shows an amber **Finished · clear plate**

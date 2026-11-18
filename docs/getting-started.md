@@ -29,7 +29,11 @@ service account. No separate pip installation or copied credentials are
 needed. Add this installation's printers through the dashboard, then use
 **Settings → Integrations → Obico → Create & connect** with your own Obico
 address/login. Repeat for each printer you want to monitor. Obico itself is a
-separate optional server; setup does not install or require it.
+separate server: the farm works without it, but the Obico integration requires
+it to be running, reachable, and able to analyse camera images. Setup installs
+the farm-side bridge, not the Obico server, AI models, or SMTP configuration.
+Follow [Obico server prerequisites and verification](bambu-obico.md#obico-server-prerequisites)
+before relying on detection or notifications.
 
 A farm run by one person can turn login off afterwards in **Settings → Access
 → Login** (single-user mode). See
@@ -71,11 +75,11 @@ Dashboard URL:
 
 Release-pinned checkout:
 
-`v1.0.16` predates the native Bambu Obico bridge. Use current `main` for that
-feature until it is included in a newer tagged release.
+`v1.0.17` includes the native Bambu Obico bridge. Earlier releases through
+`v1.0.16` do not include it.
 
 ```bash
-git checkout v1.0.16
+git checkout v1.0.17
 sudo bash setup.sh --restart
 ```
 
@@ -101,3 +105,5 @@ install the systemd service, Apache proxy, or privileged helper.
 - Debian 12+ / Ubuntu 22.04+ / Raspberry Pi OS Bookworm
 - [Spoolman](https://github.com/Donkie/Spoolman) — optional, for filament tracking
 - Happy Hare — optional, for MMU control on Klipper printers
+- Obico — optional for ordinary farm operation; a working self-hosted Obico
+  server and AI backend are required to enable Obico failure detection

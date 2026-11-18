@@ -6,13 +6,14 @@ Built primarily for primary and secondary schools—but equally usable at home,
 in makerspaces, and in other small print farms—The Print Farm keeps things
 simple: no unnecessary plugins, extensions, or heavy dependencies.
 
-Current release: **[v1.0.16](https://github.com/barnard704344/the-print-farm/releases/tag/v1.0.16)**,
-with personal Orca upload attribution, clearer dark mode, preview-led library
-cards, and improved Klipper error handling. See the [changelog](CHANGELOG.md).
+Current release: **[v1.0.17](https://github.com/barnard704344/the-print-farm/releases/tag/v1.0.17)**,
+with native Bambu Obico monitoring and **Create & connect**, clearer printer
+cards, queue recovery fixes, and updated integration documentation. See the
+[changelog](CHANGELOG.md).
 
-Current `main` also includes native Bambu Obico monitoring and **Create & connect**;
-the `v1.0.16` tag predates those features. New installs from `main` use `setup.sh`
-to install all required dependencies.
+The `v1.0.17` release includes the Bambu Obico bridge; earlier releases through
+`v1.0.16` predate it. New native installs use `setup.sh` to install the farm-side
+dependencies. Obico itself must be installed and working separately.
 
 This README acts as a documentation index. Detailed information is split across the docs pages below.
 
@@ -40,7 +41,15 @@ This README acts as a documentation index. Detailed information is split across 
 - BambuLab P1/P1S firmware 01.08.02.00+ requires LAN-only mode and Developer Mode for local start/control commands
 - Spoolman optional
 - Happy Hare optional
-- Self-hosted Obico optional
+- Self-hosted Obico optional for the farm, but required for the Obico integration:
+  a reachable server, working AI detection backend, and fresh printer-camera
+  images. The farm installer does not install Obico. See
+  [Obico prerequisites and verification](docs/bambu-obico.md#obico-server-prerequisites).
+
+Obico sends its own AI failure notifications. Configure its SMTP service,
+recipients, and alert preferences in Obico; the bridge does not use The Print
+Farm's email settings. A successful connection test does not verify AI analysis
+or email delivery.
 
 ## Installation And Updates
 

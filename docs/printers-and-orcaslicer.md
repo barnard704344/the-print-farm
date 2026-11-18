@@ -211,15 +211,28 @@ are shown separately. Hover a name to see the full file name.
 
 ## Obico Integration
 
-The Print Farm can display failure-detection and monitoring information from a
-self-hosted [Obico](https://www.obico.io/) server for each Klipper printer.
+The Print Farm integrates Bambu LAN and Klipper printers with a separately
+installed self-hosted [Obico](https://www.obico.io/) server. Obico's web/API,
+worker, Redis, and AI backend must be working for detection and alerts; the
+farm does not install them. See
+[prerequisites and verification](bambu-obico.md#obico-server-prerequisites).
+
+For **Bambu LAN printers using the P1S/P1P camera protocol**, select the printer
+under **Settings → Integrations → Obico AI Failure Detection**, enter the
+Obico address and account login, then click **Create & connect**. The farm
+registers a separate Obico identity for that printer and sends status and fresh
+snapshots during active prints. Controls are opt-in. Follow the
+[Bambu setup guide](bambu-obico.md) for registration, persistence, and testing.
 
 In **Settings → Integrations → Obico AI Failure Detection**, select the
-Klipper printer and provide:
+**Klipper** printer and provide:
 
 - the Obico server URL;
 - the Obico printer ID shown by that server;
 - an Obico account username and password.
+
+Install and link `moonraker-obico` on the Klipper printer first; the farm reads
+its results rather than replacing that agent.
 
 Use **Test Connection** before saving. The test validates both authentication
 and the configured printer endpoint; an incorrect printer ID is reported rather
@@ -229,6 +242,11 @@ unchanged. Saving applies the settings to the live Klipper client immediately.
 Connected state, monitoring state, and any failure likelihood then appear on
 the printer card and in Printer Details. When unavailable, Printer Details
 shows the reason returned by the integration client.
+
+Connection success does not verify AI inference or email delivery. Obico sends
+its own camera-detected failure alerts using its own SMTP, recipients, and
+notification preferences; The Print Farm's job emails are separate. See
+[email notifications](bambu-obico.md#email-notifications).
 
 ## Happy Hare MMU Integration
 

@@ -221,6 +221,13 @@ MMU, and generic filament controls continue to work.
 
 ## Obico
 
+Obico is optional for normal farm operation. To use this integration, you need
+a separately installed, working Obico server: web/API, background worker,
+Redis, and an AI detection backend with its model loaded. The farm installs
+only its bridge/client. A working camera, an active print, and fresh snapshots
+are also needed for AI analysis. See
+[server prerequisites](bambu-obico.md#obico-server-prerequisites).
+
 Open **Settings → Integrations → Obico AI Failure Detection** and select one
 of this installation’s configured printers. For Bambu, enter the Obico server
 address and login, then click **Create & connect**. For Klipper, also enter
@@ -248,6 +255,12 @@ active job. The bridge does not offer G-code execution, remote file printing,
 heater control, or an HTTP tunnel through Obico. Obico notification delivery
 and the notify/pause failure action are configured on your Obico server.
 
+Obico's SMTP service, sender, recipient addresses, and enabled email events are
+independent of **Settings → Integrations → Notifications** in The Print Farm.
+For camera-detected print failures only, enable Obico's failure-alert emails
+and disable its other email events. Adding recipients does not change which
+events are enabled. See [notification setup](bambu-obico.md#email-notifications).
+
 The connection test verifies authentication and fetches the selected printer,
 so an invalid ID or unavailable endpoint is reported before saving. A masked
 saved password is reused only when the server and username are unchanged.
@@ -257,6 +270,11 @@ are masked and must be re-entered when the server or printer ID changes.
 Saving or disabling Obico updates the live printer client immediately; no
 service restart is required. Connection state and diagnostic errors appear in
 Printer Details.
+
+**Test Connection** verifies credentials and printer access; it does not test
+camera uploads, the AI model, SMTP, or recipient delivery. Verify those with a
+short supervised print and a separate notification test before relying on
+alerts. Ordinary farm printing remains available if Obico is unavailable.
 
 Bambu monitoring keeps the shared camera connection alive while printing,
 even with no dashboard viewers. Idle camera connections still stop normally.
@@ -304,10 +322,11 @@ the API, and pool auto-dispatch. Staff and approved students can confirm; a
 print started directly on the printer also counts as confirmation. The state
 is stored in the database, so it survives restarts.
 
-While a print is on the plate the card shows an amber **FINISH**; after
-**Plate cleared** it shows a green **READY**. Bambu printers keep reporting
-`FINISH` until their next job starts, so READY is the dashboard's label, not
-the printer's.
+While a finished print is on the plate the combined status button shows
+**Finished · clear plate**. After **Plate cleared**, an otherwise ready printer
+shows **Ready to print**. Bambu printers keep reporting `FINISH` until their
+next job starts, so readiness is the dashboard's interpretation rather than a
+change to the printer's reported state.
 
 Staff can turn the check off for a printer in its **Details** panel under
 **Printer settings → Build plate check**. The card then shows an amber **Plate

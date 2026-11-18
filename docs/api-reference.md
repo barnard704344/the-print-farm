@@ -1,6 +1,8 @@
 # API Reference
 
-Documentation status: `v1.0.16`.
+This summary covers `v1.0.17` and current `main`. The latest tagged release is
+listed in the [README](../README.md); the native Bambu Obico bridge first shipped
+in `v1.0.17`.
 
 ## REST API v1
 
@@ -33,6 +35,12 @@ Notable dashboard routes:
 - Klipper macros: list, run and pin (`/api/printer/<name>/macros…`)
 - File library: folder tree, bulk move/delete, and printing to a chosen printer
 - Login mode: `/api/auth/config` for single-user mode
+
+The Obico routes configure the farm-side bridge/client. They do not install an
+Obico server or configure its SMTP service. A successful connection test checks
+account/printer access, not AI analysis or email delivery. See the
+[Obico API contract](../API.md#obico-config) and
+[server prerequisites and live checks](bambu-obico.md).
 
 OrcaSlicer uses a personal upload-only key copied from **OrcaSlicer Setup →
 Connection Details** by logged-in approved students and staff. Uploads are

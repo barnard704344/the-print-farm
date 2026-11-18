@@ -64,6 +64,9 @@ class OrphanedJobTests(unittest.TestCase):
             session.update(role="staff", username="teacher")
         with (patch("src.web.load_yaml_config", return_value=config),
               patch("src.web.save_yaml_config") as save,
+              patch("src.web.os.path.isfile", return_value=True),
+              patch("src.web.os.access", return_value=True),
+              patch("src.web.os.geteuid", return_value=0),
               patch("src.web.subprocess.run") as run):
             run.return_value.returncode = 0
             run.return_value.stdout = ""
