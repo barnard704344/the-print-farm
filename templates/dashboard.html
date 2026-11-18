@@ -7772,6 +7772,23 @@
             }
         });
 
+        async function sendQueuedJob(jobId, printers) {
+            try {
+                const result = await apiPost(`${BASE}/api/jobs/${jobId}/assign`, {printers});
+                if (!result.ok) {
+                    showToast(result.message || result.error || 'Could not send the job. Check the printer state and queue.', 'error');
+                    return false;
+                }
+                showToast(`Job sent to ${printers.join(', ')}`);
+                refreshJobs();
+                refreshPrinters();
+                return true;
+            } catch (e) {
+                showToast('Could not send the job: a network error occurred. Check the queue before retrying.', 'error');
+                return false;
+            }
+        }
+
         async function sendToSelected(jobId) {
             const dd = document.getElementById(`send-dd-${jobId}`);
             const checked = [...dd.querySelectorAll('input[type="checkbox"]:checked')].map(cb => cb.value);
@@ -7804,9 +7821,7 @@
                 if (!proceed) return;
             }
 
-            dd.classList.remove('open');
-            await apiPost(`${BASE}/api/jobs/${jobId}/assign`, { printers: checked });
-            refreshJobs();
+            if (await sendQueuedJob(jobId, checked)) dd.classList.remove('open');
         }
 
         async function sendToAssigned(jobId, printerName) {
@@ -7826,8 +7841,7 @@
                     }
                 }
             } catch (e) {}
-            await apiPost(`${BASE}/api/jobs/${jobId}/assign`, { printers: [printerName] });
-            refreshJobs();
+            await sendQueuedJob(jobId, [printerName]);
         }
 
         async function reprintToSelected(jobId) {
