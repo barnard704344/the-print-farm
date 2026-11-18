@@ -10,6 +10,7 @@ import re
 import threading
 import time
 from typing import Optional
+from urllib.parse import urljoin, urlsplit
 
 import requests
 
@@ -82,6 +83,98 @@ class ObicoClient:
             if self._session is None:
                 return self._login()
         return True
+
+    def ensure_printer(self, name: str, registration_key: str) -> dict:
+        """Register a farm printer, reusing this installation/device on retry.
+
+        The caller keeps the returned agent token private in server configuration.
+        This never issues a command to the physical printer.
+        """
+        if not self._ensure_session():
+            raise ValueError("Could not sign into Obico; check the address and login")
+        try:
+            endpoint = self.server_url + "/api/v1/printers/"
+            next_url, seen, matches = endpoint, set(), []
+            while next_url:
+                parts, expected = urlsplit(next_url), urlsplit(endpoint)
+                if ((parts.scheme, parts.netloc, parts.path) != (expected.scheme, expected.netloc, expected.path)
+                        or next_url in seen):
+                    raise ValueError("Obico returned an invalid printer-list page")
+                seen.add(next_url)
+                r = self._session.get(next_url, timeout=10, allow_redirects=False)
+                if r.status_code != 200:
+                    raise ValueError(f"Could not list Obico printers (HTTP {r.status_code})")
+                data = r.json()
+                printers = data.get("results", []) if isinstance(data, dict) else data
+                if not isinstance(printers, list):
+                    raise ValueError("Obico returned an invalid printer list")
+                matches.extend(p for p in printers
+                               if p.get("agent_name") == "the_print_farm"
+                               and str(p.get("agent_version") or "").partition("+")[2] == registration_key)
+                next_page = data.get("next") if isinstance(data, dict) else None
+                next_url = urljoin(endpoint, next_page) if next_page else None
+            if len(matches) > 1:
+                raise ValueError("Duplicate registration records found; select the correct ID in manual settings")
+            if matches:
+                printer = matches[0]
+                if printer.get("agent_connected") and printer.get("agent_name") != "the_print_farm":
+                    raise ValueError("That Obico printer is already connected to another agent")
+            else:
+                settings = {"name": name, "action_on_failure": "NONE",
+                            "watching_enabled": True, "agent_name": "the_print_farm",
+                            "agent_version": "1.0+" + registration_key}
+                r = self._session.post(self.server_url + "/api/v1/printers/",
+                                       json=settings,
+                                       timeout=15, allow_redirects=False)
+                if r.status_code == 405:
+                    printer = self._register_with_linking_code(settings)
+                elif r.status_code == 201:
+                    printer = r.json()
+                else:
+                    raise ValueError(f"Could not create the Obico printer (HTTP {r.status_code})")
+            if not printer.get("auth_token") or not printer.get("id"):
+                raise ValueError("Obico did not return a printer ID and agent token")
+            return printer
+        except requests.RequestException:
+            raise ValueError("Could not reach Obico; check the server address") from None
+
+    def _register_with_linking_code(self, settings):
+        """Compatibility with servers whose printer list does not support POST.
+
+        Only request a NEW unassigned code in the signed-in account. Never verify
+        a code attached to a printer: verification would rotate its live token.
+        """
+        r = self._session.get(self.server_url + "/api/v1/onetimeverificationcodes/",
+                              timeout=10, allow_redirects=False)
+        if r.status_code != 200:
+            raise ValueError(f"Could not start Obico registration (HTTP {r.status_code})")
+        data = r.json()
+        code = str(data.get("code") or "")
+        if data.get("printer") or data.get("verified_at") or len(code) != 6 or not code.isdigit():
+            raise ValueError("Obico did not provide a new unassigned linking code")
+        # This is the anonymous AGENT endpoint, not an account/session API.
+        # Sending the signed-in cookie makes DRF enforce CSRF and reject the
+        # agent request. Keep account cookies only for obtaining the code and
+        # updating the owned printer; never disable server CSRF protection.
+        r = requests.post(self.server_url + "/api/v1/octo/verify/",
+                          params={"code": code}, timeout=15, allow_redirects=False)
+        if r.status_code != 200:
+            raise ValueError(f"Could not finish Obico registration (HTTP {r.status_code})")
+        printer = r.json().get("printer") or {}
+        if not printer.get("id") or not printer.get("auth_token"):
+            raise ValueError("Obico did not return the registered printer")
+        r = self._session.patch(self.server_url + f"/api/v1/printers/{int(printer['id'])}/",
+                                json=settings, timeout=10, allow_redirects=False)
+        if r.status_code != 200:
+            raise ValueError(f"Obico printer was created, but its settings could not be applied (HTTP {r.status_code})")
+        # Older servers acknowledge PATCH without returning a serialized printer.
+        # Read the canonical record rather than treating the acknowledgement as
+        # the ID/token payload. This also verifies the created record is readable.
+        r = self._session.get(self.server_url + f"/api/v1/printers/{int(printer['id'])}/",
+                              timeout=10, allow_redirects=False)
+        if r.status_code != 200:
+            raise ValueError(f"Could not read the registered Obico printer (HTTP {r.status_code})")
+        return r.json()
 
     def fetch_status(self) -> dict:
         """Fetch printer status and latest failure detection score from Obico.

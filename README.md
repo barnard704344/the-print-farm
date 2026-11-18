@@ -10,6 +10,10 @@ Current release: **[v1.0.16](https://github.com/barnard704344/the-print-farm/rel
 with personal Orca upload attribution, clearer dark mode, preview-led library
 cards, and improved Klipper error handling. See the [changelog](CHANGELOG.md).
 
+Current `main` also includes native Bambu Obico monitoring and **Create & connect**;
+the `v1.0.16` tag predates those features. New installs from `main` use `setup.sh`
+to install all required dependencies.
+
 This README acts as a documentation index. Detailed information is split across the docs pages below.
 
 ## Documentation Menu
@@ -20,6 +24,7 @@ This README acts as a documentation index. Detailed information is split across 
 - [Docker](docs/docker.md)
 - [Printers and OrcaSlicer](docs/printers-and-orcaslicer.md)
 - [Configuration](docs/configuration.md)
+- [Bambu LAN Obico Setup and Testing](docs/bambu-obico.md)
 - [Architecture](docs/architecture.md)
 - [3D Toolpath Viewer](docs/3d-toolpath-viewer.md)
 - [API Reference Summary](docs/api-reference.md)

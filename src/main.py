@@ -23,6 +23,8 @@ from .farm_manager import FarmManager
 from .job_queue import JobQueue
 from .file_library import FileLibrary
 from .camera import CameraManager
+from .bambu_obico import BambuObicoManager
+from .runtime_paths import obico_state_directory
 from .config_store import migrate_api_keys, save_config as save_yaml_config
 from .spoolman_client import SpoolmanClient
 from .notifications import NotificationManager
@@ -424,12 +426,25 @@ def cmd_run(args, config: dict):
     uploads_dir = queue_cfg.get("upload_dir", "./uploads")
     vp_manager.start_all(printers, farm, queue, uploads_dir, file_library=library)
 
+    obico_mgr = BambuObicoManager(
+        farm, camera_mgr, obico_state_directory(queue_cfg),
+    )
+    for cfg in printers:
+        if cfg.get("type", "bambulab").lower() != "klipper" and cfg.get("obico"):
+            try:
+                obico_mgr.configure(cfg["name"], cfg["obico"])
+            except ValueError:
+                logger.warning("[%s] Invalid Bambu Obico configuration; check integration settings", cfg["name"])
+                farm.get_printer(cfg["name"]).set_obico_status({
+                    "connected": False, "error": "Invalid Obico settings; open Settings → Integrations",
+                })
+
     app = create_app(farm, queue, camera_manager=camera_mgr,
                      admin_api_key=web_cfg.get("admin_api_key", ""),
                      admin_password=web_cfg.get("admin_password", ""),
                      config=config, file_library=library,
                      spoolman_client=spoolman,
-                     vp_manager=vp_manager)
+                     vp_manager=vp_manager, obico_manager=obico_mgr)
     if web_cfg.get("auth_enabled", True) is False:
         logger.warning("Login is DISABLED (single-user mode): anyone who can reach the "
                        "dashboard has full staff access. Turn it back on in Settings.")
@@ -450,6 +465,7 @@ def cmd_run(args, config: dict):
 
     def signal_handler(sig, frame):
         print("\nShutting down...")
+        obico_mgr.stop_all()
         vp_manager.stop_all()
         camera_mgr.stop_all()
         farm.disconnect_all()
@@ -458,6 +474,7 @@ def cmd_run(args, config: dict):
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
     # Track previous printer status per job to detect transitions (e.g. RUNNING → PAUSED)
     _job_prev_status = {}

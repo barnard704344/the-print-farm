@@ -5,6 +5,24 @@ changes to The Print Farm.
 
 ## Unreleased
 
+### Added
+
+- **Fresh-install Obico preparation.** Setup installs and checks the complete
+  requirements, verifies application/integration imports, and prepares persistent
+  printer-state storage as the service user. Runtime paths are shared with the
+  application, including custom database/state directories.
+
+- **Create & connect to Obico.** Select any installed Bambu printer and enter
+  the Obico address/login. Registration, per-printer tokens and monitoring are
+  handled automatically; manual ID/token setup is tucked into advanced settings.
+
+- **Obico for Bambu LAN printers.** Per-printer agents share the farm's P1S/P1P
+  camera and MQTT connections, report job progress, upload fresh snapshots for
+  AI analysis, and display detection results. Pause/resume/cancel is opt-in.
+  Print identity survives restarts; duplicate tokens and stale frames are
+  rejected. Existing Klipper Obico integration continues unchanged. See
+  [setup and hardware testing](docs/bambu-obico.md).
+
 ### Fixed
 
 - **Cleaner printer headers.** Nozzle size/material, OrcaSlicer hostname, and
