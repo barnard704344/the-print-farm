@@ -7,6 +7,8 @@ changes to The Print Farm.
 
 ### Fixed
 
+- **Manual AMS source labels after a finished print.** Keep the independent AMS operation visible while the printer still reports FINISH. Display the requested slot during loading and the previous slot in fault details, instead of labelling transitional tray 254 as the external spool.
+
 - **Bambu AMS runout recovery.** Decode slot-specific runout, broken-filament and purge-timeout errors; retain recovery state across partial LAN reports; show Retry AMS and guarded extrusion-confirmation controls. A firmware RUNNING report no longer hides an unresolved filament fault, and transitional unload telemetry is not labelled as an external-spool print. Pause notifications include the decoded reason and report escalation to a different recovery fault.
 - **Verified Bambu controls.** Pause, resume, stop, heater targets and filament changes verify printer telemetry instead of treating MQTT publication or a SUCCESS reply as physical completion. Failed or stalled commands are visible, and explicit cancellation remains cancelled even if firmware reports FINISH first.
 

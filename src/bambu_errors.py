@@ -71,7 +71,9 @@ def recovery_state(data):
         errors.append({"code": label, "message": message, "blocking": slot_message and (code >> 16) == 2, "filament": slot_message})
     status = number(data.get("ams_status"))
     wire_state = str(data.get("gcode_state", "")).upper()
-    busy = (status >> 8) == 1 and wire_state not in ("FINISH", "FAILED")
+    # Print lifecycle and AMS lifecycle are independent: a manual load after a
+    # completed job still reports FINISH while the AMS is actively changing.
+    busy = (status >> 8) == 1
     ams = data.get("ams") or {}
     if source is None:
         for key in ("tray_now", "tray_pre"):
@@ -87,8 +89,8 @@ def recovery_state(data):
         phase = "Unloading / purging filament"
     active_job = wire_state in ("RUNNING", "PAUSE")
     blocking_filament = any(e["blocking"] and e["filament"] for e in errors)
-    active = active_job and blocking_filament
-    confirm = (active_job or (wire_state == "IDLE" and busy)) and (print_error in (0x07FF8007, 0x12FF8007) or (busy and sub == 6 and target == 254))
+    active = (active_job or busy) and blocking_filament
+    confirm = (active_job or busy) and (print_error in (0x07FF8007, 0x12FF8007) or (busy and sub == 6 and target == 254))
     messages = [e["message"] for e in errors if e["blocking"]]
     return {
         "active": active, "busy": busy, "phase": phase,
@@ -97,5 +99,7 @@ def recovery_state(data):
         "can_confirm_extrusion": bool(confirm),
         "source_tray": source["tray"] if source else None,
         "source_label": source["label"] if source else "",
+        "target_tray": target,
+        "target_label": f"AMS {chr(65 + target // 4)} slot {target % 4 + 1}" if 0 <= target < 16 else "external spool" if target == 254 else "",
         "errors": errors,
     }

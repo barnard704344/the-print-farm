@@ -5515,7 +5515,12 @@
 
         function amsSourceLabel(p) {
             const recovery = p.ams_recovery || {};
-            if (recovery.busy || recovery.active) return `${recovery.source_label || 'AMS'} — ${recovery.phase || 'needs attention'}`;
+            if (recovery.busy || recovery.active) {
+                const target = recovery.target_label
+                    ? `${recovery.busy ? 'Loading' : 'Requested'} ${recovery.target_label}`
+                    : recovery.source_label || 'AMS';
+                return `${target} — ${recovery.phase || 'needs attention'}`;
+            }
             const tray = (p.ams_trays || []).find(t => t.id === p.ams_tray_now);
             if (tray) return `Using ${amsSlotLabel(tray)}`;
             return p.ams_tray_now === 254 ? 'Using external spool' : '';

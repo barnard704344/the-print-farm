@@ -40,3 +40,10 @@ test('control failures produce visible feedback instead of a silent success', as
     assert.equal(toasts[0][1], 'error');
     assert.match(toasts[0][0], /did not start/);
 });
+
+test('manual slot-4 load after FINISH uses the requested target, not transitional external tray', () => {
+    const label = ctx.amsSourceLabel({status:'FINISH',ams_tray_now:254,ams_recovery:{busy:true,active:true,target_tray:3,target_label:'AMS A slot 4',source_label:'AMS A slot 2',phase:'Retracting filament'}});
+    assert.equal(label, 'Loading AMS A slot 4 — Retracting filament');
+    assert.doesNotMatch(label, /external/);
+    assert.equal(ctx.amsSourceLabel({ams_tray_now:3,ams_trays:[{id:3,slot:3}],ams_recovery:{busy:false,active:false}}),'Using A4');
+});

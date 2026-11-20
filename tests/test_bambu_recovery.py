@@ -70,7 +70,23 @@ class TelemetryRegression(unittest.TestCase):
     def test_finished_print_is_not_resurrected_by_retained_hms(self):
         c = client(); c._update_state(RUNOUT); c._update_state({'gcode_state': 'FINISH'})
         self.assertEqual(c.state.status, PrintStatus.FINISH)
+        self.assertTrue(c.state.ams_recovery['busy'])  # independent AMS lifecycle
+        c._update_state({'ams_status': 0, 'hms': [], 'print_error': 0})
         self.assertFalse(c.state.ams_recovery['can_retry'])
+
+    def test_manual_slot4_load_after_finished_job_retains_target_and_previous_source(self):
+        c = client(); c._update_state({'gcode_state':'FINISH','ams_status':260,
+            'print_error':0x07008003,
+            'ams':{'tray_now':'254','tray_tar':'3','tray_pre':'1'},
+            'hms':[{'attr':0x07002100,'code':0x00020004}]})
+        r = c.state.ams_recovery
+        self.assertEqual(c.state.status, PrintStatus.FINISH)
+        self.assertTrue(r['busy'])
+        self.assertEqual(r['target_label'], 'AMS A slot 4')
+        self.assertEqual(r['source_label'], 'AMS A slot 2')
+        self.assertEqual(r['phase'], 'Retracting filament')
+        c._update_state({'nozzle_temper':250})
+        self.assertEqual(c.state.ams_recovery['target_tray'], 3)
 
     def test_unknown_errors_are_preserved(self):
         r = recovery_state({'print_error': 0x03008099, 'hms': [{'attr': 1, 'code': 2}]})
