@@ -980,6 +980,18 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             return jsonify({"error": "Printer not found"}), 404
         return jsonify(states[name])
 
+    def _control_response(client, ok, **extra):
+        command = dict(getattr(getattr(client, "state", None), "command_status", {}) or {})
+        message = command.get("message") or ("Command sent" if ok else "The printer did not confirm the requested change")
+        return jsonify({"ok": bool(ok), "message": message, "command_status": command, **extra}), (200 if ok else 502)
+
+    def _cancel_stopped_job(job):
+        # A confirmed stop can reach the state callback before this request
+        # finishes. Keep the operator's cancellation distinct from FINISH/FAILED.
+        if hasattr(job_queue, "cancel_stopped_job"):
+            return job_queue.cancel_stopped_job(job["id"], copies_done=job.get("copies_done"))
+        return job_queue.cancel_job(job["id"])
+
     @app.route(prefix + "/api/printer/<name>/pause", methods=["POST"])
     @app.route("/api/printer/<name>/pause", methods=["POST"])
     @printer_owner_or_admin_required
@@ -988,7 +1000,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         if not client:
             return jsonify({"error": "Printer not found"}), 404
         ok = client.pause_print()
-        return jsonify({"ok": ok})
+        return _control_response(client, ok)
 
     @app.route(prefix + "/api/printer/<name>/resume", methods=["POST"])
     @app.route("/api/printer/<name>/resume", methods=["POST"])
@@ -998,7 +1010,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         if not client:
             return jsonify({"error": "Printer not found"}), 404
         ok = client.resume_print()
-        return jsonify({"ok": ok})
+        return _control_response(client, ok)
 
     @app.route(prefix + "/api/printer/<name>/stop", methods=["POST"])
     @app.route("/api/printer/<name>/stop", methods=["POST"])
@@ -1007,13 +1019,13 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         client = farm_manager.get_printer(name)
         if not client:
             return jsonify({"error": "Printer not found"}), 404
+        active_jobs = [job for job in job_queue.get_active_jobs() if job.get("printer_name") == name]
         ok = client.stop_print()
         # Mark any active job on this printer as cancelled (user-initiated stop)
         if ok:
-            for job in job_queue.get_active_jobs():
-                if job.get("printer_name") == name:
-                    job_queue.cancel_job(job["id"])
-        return jsonify({"ok": ok})
+            for job in active_jobs:
+                _cancel_stopped_job(job)
+        return _control_response(client, ok)
 
     @app.route(prefix + "/api/printer/<name>/light", methods=["POST"])
     @app.route("/api/printer/<name>/light", methods=["POST"])
@@ -1101,7 +1113,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         except (TypeError, ValueError):
             return jsonify({"ok": False, "error": "Temperature must be a number"}), 400
         ok = client.set_bed_temperature(temp)
-        return jsonify({"ok": ok, "temp": temp})
+        return _control_response(client, ok, temp=temp)
 
     @app.route(prefix + "/api/printer/<name>/nozzle_temp", methods=["POST"])
     @app.route("/api/printer/<name>/nozzle_temp", methods=["POST"])
@@ -1120,7 +1132,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             ok = client.set_nozzle_temperature(temp, heater=heater)
         else:
             ok = client.set_nozzle_temperature(temp)
-        return jsonify({"ok": ok, "temp": temp, "heater": heater})
+        return _control_response(client, ok, temp=temp, heater=heater)
 
     # ── Klipper macros ────────────────────────────────────
 
@@ -1210,7 +1222,9 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             return None, (jsonify({"ok": False, "message": reason}), 409)
         return client, None
 
-    def _filament_result(ok, message):
+    def _filament_result(ok, message, client=None):
+        if client is not None:
+            return _control_response(client, ok)
         if ok:
             return jsonify({"ok": True, "message": message})
         return jsonify({"ok": False, "message": "The printer did not accept the command"}), 502
@@ -1222,7 +1236,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         client, error = _filament_change_error(name)
         if error:
             return error
-        return _filament_result(client.unload_filament(), "Unloading filament")
+        return _filament_result(client.unload_filament(), "Unloading filament", client)
 
     @app.route(prefix + "/api/printer/<name>/load_filament", methods=["POST"])
     @app.route("/api/printer/<name>/load_filament", methods=["POST"])
@@ -1232,7 +1246,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         client, error = _filament_change_error(name)
         if error:
             return error
-        return _filament_result(client.load_filament(), "Loading filament from the external spool")
+        return _filament_result(client.load_filament(), "Loading filament from the external spool", client)
 
     @app.route(prefix + "/api/printer/<name>/ams_load", methods=["POST"])
     @app.route("/api/printer/<name>/ams_load", methods=["POST"])
@@ -1251,7 +1265,7 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         if error:
             return error
         if tray_id == 255:
-            return _filament_result(client.unload_filament(), "Unloading filament")
+            return _filament_result(client.unload_filament(), "Unloading filament", client)
         if tray_id == 254:
             target = "the external spool"
         elif tray_id >= 128:
@@ -1260,7 +1274,24 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
             target = f"AMS Lite slot {tray_id - 63}"
         else:
             target = f"{chr(ord('A') + tray_id // 4)}{tray_id % 4 + 1}"
-        return _filament_result(client.ams_load_tray(tray_id), f"Loading filament from {target}")
+        return _filament_result(client.ams_load_tray(tray_id), f"Loading filament from {target}", client)
+
+    @app.route(prefix + "/api/printer/<name>/ams_recovery", methods=["POST"])
+    @app.route("/api/printer/<name>/ams_recovery", methods=["POST"])
+    @printer_control_required
+    def printer_ams_recovery(name):
+        client = farm_manager.get_printer(name)
+        if not client:
+            return jsonify({"ok": False, "message": "Printer not found"}), 404
+        if not hasattr(client, "ams_recover"):
+            return jsonify({"ok": False, "message": "AMS recovery is only available on Bambu Lab printers"}), 400
+        data = request.get_json(silent=True) or {}
+        action = data.get("action")
+        if action not in ("retry", "confirm_extrusion"):
+            return jsonify({"ok": False, "message": "Choose retry or confirm_extrusion"}), 400
+        if action == "confirm_extrusion" and data.get("confirmed") is not True:
+            return jsonify({"ok": False, "message": "Confirm visible filament extrusion before continuing"}), 400
+        return _control_response(client, client.ams_recover(action, confirmed=data.get("confirmed") is True))
 
     @app.route(prefix + "/api/printer/<name>/tray_config", methods=["POST"])
     @app.route("/api/printer/<name>/tray_config", methods=["POST"])
@@ -1826,7 +1857,9 @@ def create_app(farm_manager, job_queue, camera_manager=None, admin_api_key=None,
         if job and job["status"] == "printing" and job.get("printer_name"):
             printer = farm_manager.get_printer(job["printer_name"])
             if printer:
-                printer.stop_print()
+                if not printer.stop_print():
+                    return _control_response(printer, False)
+                return jsonify({"ok": _cancel_stopped_job(job)})
         ok = job_queue.cancel_job(job_id)
         return jsonify({"ok": ok})
 

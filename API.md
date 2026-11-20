@@ -1390,3 +1390,22 @@ Requires Spoolman configured. Returns 503 if unavailable.
 - MJPEG camera streams at `GET /api/camera/<name>/stream` are long-lived HTTP connections.
 - No WebSocket endpoints are exposed — Bambu MQTT and Klipper Moonraker connections are handled internally.
 - The dashboard polls `GET /api/farm/status` every 2 seconds for live updates.
+
+
+### Bambu AMS recovery and command verification
+
+Printer status includes `ams_status`, `ams_recovery`, `printer_errors` and
+`command_status`. `gcode_state` retains the printer's wire state; effective
+`status` may be `PAUSE_FILAMENT` when AMS recovery still requires attention.
+`command_status.state` is `awaiting_state`, `in_progress`, `completed` or `failed`;
+a command being acknowledged is distinct from the requested action completing.
+Heater command responses retain the requested `temperature` field.
+
+`POST /api/printer/<name>/ams_recovery` accepts `{"action":"retry"}` or
+`{"action":"confirm_extrusion","confirmed":true}` with the same printer-control
+permissions as filament loading. Invalid recovery states are rejected. API v1
+clients can use `ams_retry` and `ams_confirm_extrusion` through the existing
+printer command endpoint; confirmation likewise requires boolean `confirmed`.
+A successful response means the requested state change was observed; long loads
+can still be `in_progress`. Failed confirmation or a timeout returns a non-2xx
+response with an explanatory message. No recovery command is issued automatically.

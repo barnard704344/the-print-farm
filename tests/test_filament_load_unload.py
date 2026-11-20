@@ -25,6 +25,7 @@ def make_client(status=PrintStatus.IDLE, tray_now=255, nozzle=28.0, trays=None, 
         return True
 
     client._send_command = capture
+    client._observed_control = lambda command, params, *args, **kwargs: capture({"print": {"command": command, **params}})
     return client
 
 

@@ -36,6 +36,12 @@ logger = logging.getLogger("the_print_farm")
 PRINT_START_GRACE_SECONDS = 60
 
 
+def pause_alert_changed(previous_status, previous_reason, reason):
+    """Notify on a new pause or a changed recovery fault, not every poll."""
+    previous = getattr(previous_status, "value", previous_status)
+    return previous not in ("PAUSED", "PAUSE_FILAMENT") or bool(reason and reason != previous_reason)
+
+
 def setup_logging(config: dict):
     log_config = config.get("logging", {})
     level = getattr(logging, log_config.get("level", "INFO").upper(), logging.INFO)
@@ -481,6 +487,7 @@ def cmd_run(args, config: dict):
 
     # Track previous printer status per job to detect transitions (e.g. RUNNING → PAUSED)
     _job_prev_status = {}
+    _job_prev_pause_reason = {}
     _pool_dispatching = set()
     _pool_dispatch_lock = threading.Lock()
     web_services = app.extensions["print_farm"]
@@ -515,6 +522,8 @@ def cmd_run(args, config: dict):
         return "; ".join(parts) if parts else ""
 
     def _get_pause_reason(state):
+        if getattr(state, "error_message", ""):
+            return state.error_message
         """Extract a human-readable pause reason from printer state."""
         from .bambu_client import PrintStatus
         if state.status == PrintStatus.PAUSE_FILAMENT:
@@ -661,8 +670,8 @@ def cmd_run(args, config: dict):
                             )
                         elif state.status in (PrintStatus.PAUSED, PrintStatus.PAUSE_FILAMENT):
                             prev = _job_prev_status.get(job_key)
-                            if prev not in (PrintStatus.PAUSED, PrintStatus.PAUSE_FILAMENT):
-                                reason = _get_pause_reason(state)
+                            reason = _get_pause_reason(state)
+                            if pause_alert_changed(prev, _job_prev_pause_reason.get(job_key), reason):
                                 subj = f"Print Paused — {fname}"
                                 if reason:
                                     subj += f" ({reason})"
@@ -671,6 +680,7 @@ def cmd_run(args, config: dict):
                                     "print_paused", subj,
                                     f"Job #{job_key} paused on {pname}.\nFile: {fname}\nReason: {reason or 'User paused'}",
                                 )
+                            _job_prev_pause_reason[job_key] = reason
 
                         _job_prev_status[job_key] = state.status
 
@@ -679,6 +689,7 @@ def cmd_run(args, config: dict):
             for jid in list(_job_prev_status):
                 if jid not in active_ids:
                     del _job_prev_status[jid]
+                    _job_prev_pause_reason.pop(jid, None)
 
             time.sleep(5)
     except KeyboardInterrupt:

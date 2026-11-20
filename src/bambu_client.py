@@ -30,6 +30,7 @@ from typing import Callable, Optional
 import paho.mqtt.client as mqtt
 
 from .tls_trust import verify_peer_certificate
+from .bambu_errors import merge_report, recovery_state
 
 
 class ImplicitFTPS(ftplib.FTP_TLS):
@@ -256,6 +257,10 @@ class PrintState:
     error_message: str = ""  # human-readable printer error (Klipper)
     hms: list = field(default_factory=list)
     raw_data: dict = field(default_factory=dict)
+    ams_status: int = 0
+    ams_recovery: dict = field(default_factory=dict)
+    printer_errors: list = field(default_factory=list)
+    command_status: dict = field(default_factory=dict)
 
 
 class BambuClient:
@@ -286,6 +291,9 @@ class BambuClient:
         self._job_identity = {}
         self._state_lock = threading.Lock()
         self._command_lock = threading.Lock()
+        self._control_lock = threading.Lock()
+        self._pending_control = None
+        self._control_sequence = int(time.time())
         self._command_events = {}
         self._command_responses = {}
         self._on_state_change: Optional[Callable[[str, PrintState], None]] = None
@@ -375,19 +383,16 @@ class BambuClient:
     # ── Commands ──────────────────────────────────────────────
 
     def pause_print(self) -> bool:
-        return self._send_command({
-            "print": {"command": "pause", "sequence_id": str(int(time.time()))}
-        })
+        return self._observed_control("pause", {}, lambda s: s.gcode_state == "PAUSE", "Print paused")
 
     def resume_print(self) -> bool:
-        return self._send_command({
-            "print": {"command": "resume", "sequence_id": str(int(time.time()))}
-        })
+        if self._state.ams_recovery.get("active") or (self._state.ams_recovery.get("busy") and self._state.gcode_state == "PAUSE"):
+            self._control_failed("resume", "Resolve the filament error, then use Retry AMS instead of normal Resume.")
+            return False
+        return self._observed_control("resume", {}, lambda s: s.gcode_state == "RUNNING" and not s.ams_recovery.get("active"), "Print resumed")
 
     def stop_print(self) -> bool:
-        return self._send_command({
-            "print": {"command": "stop", "sequence_id": str(int(time.time()))}
-        })
+        return self._observed_control("stop", {}, lambda s: s.gcode_state in ("IDLE", "FINISH", "FAILED"), "Print stopped")
 
     def start_print(self, filename: str, plate_number: int = 1,
                     use_ams: Optional[bool] = None,
@@ -523,24 +528,22 @@ class BambuClient:
     def set_bed_temperature(self, temp: int) -> bool:
         """Set the heated bed target temperature (0 to turn off)."""
         temp = max(0, min(temp, 120))
-        return self._send_command({
-            "print": {
-                "command": "gcode_line",
-                "sequence_id": str(int(time.time())),
-                "param": f"M140 S{temp}\n",
-            }
-        })
+        if temp > 0 and self._state.ams_recovery.get("busy"):
+            self._control_failed("gcode_line", "The AMS is handling filament. Resolve or stop that operation before requesting manual heating; the command was not sent.")
+            return False
+        return self._observed_control("gcode_line", {"param": f"M140 S{temp}\n"},
+            lambda s: abs(s.bed_target_temper - temp) < 1,
+            f"Bed target set to {temp}°C", completion=lambda s: temp == 0 or abs(s.bed_temper - temp) <= 3)
 
     def set_nozzle_temperature(self, temp: int) -> bool:
         """Set the nozzle target temperature (0 to turn off)."""
         temp = max(0, min(temp, 300))
-        return self._send_command({
-            "print": {
-                "command": "gcode_line",
-                "sequence_id": str(int(time.time())),
-                "param": f"M104 S{temp}\n",
-            }
-        })
+        if temp > 0 and self._state.ams_recovery.get("busy"):
+            self._control_failed("gcode_line", "The AMS currently controls nozzle temperature. Resolve or stop that operation before requesting manual heating; the command was not sent.")
+            return False
+        return self._observed_control("gcode_line", {"param": f"M104 S{temp}\n"},
+            lambda s: abs(s.nozzle_target_temper - temp) < 1,
+            f"Nozzle target set to {temp}°C", completion=lambda s: temp == 0 or abs(s.nozzle_temper - temp) <= 3)
 
     def send_gcode_line(self, gcode: str) -> bool:
         """Send one or more raw G-code lines to the printer."""
@@ -562,6 +565,8 @@ class BambuClient:
         """
         if not self.is_connected():
             return "Printer is not connected"
+        if self._state.ams_recovery.get("active") or self._state.ams_recovery.get("busy"):
+            return "The AMS is recovering or changing filament. Resolve the reported error and use Retry AMS; do not start another load/unload."
         if self._state.status == PrintStatus.RUNNING:
             return "Filament can't be loaded or unloaded while a print is running"
         return None
@@ -596,17 +601,10 @@ class BambuClient:
         ams_id = 255 if tray_now in (254, 255) else self._tray_wire_ids(tray_now)[0]
         temp = self._unload_temp()
         logger.info(f"[{self.name}] Unloading filament (tray_now={tray_now}, ams_id={ams_id}, temp={temp})")
-        return self._send_command({
-            "print": {
-                "command": "ams_change_filament",
-                "sequence_id": str(int(time.time())),
-                "ams_id": ams_id,
-                "slot_id": 255,
-                "target": 255,
-                "curr_temp": temp,
-                "tar_temp": temp,
-            }
-        })
+        return self._observed_control("ams_change_filament",
+            {"ams_id": ams_id, "slot_id": 255, "target": 255, "curr_temp": temp, "tar_temp": temp},
+            lambda s: s.ams_recovery.get("busy") and int(s.raw_data.get("ams", {}).get("tray_tar", -1)) == 255,
+            "Filament unload started", completion=lambda s: not s.ams_recovery.get("busy") and s.ams_tray_now == 255)
 
     def load_filament(self) -> bool:
         """Load from the external spool using the printer's own load routine."""
@@ -625,17 +623,29 @@ class BambuClient:
         else:
             ams_id, slot_id, target = self._tray_wire_ids(tray_id)
         logger.info(f"[{self.name}] Loading filament from tray {tray_id} (ams_id={ams_id}, slot_id={slot_id})")
-        return self._send_command({
-            "print": {
-                "command": "ams_change_filament",
-                "sequence_id": str(int(time.time())),
-                "ams_id": ams_id,
-                "slot_id": slot_id,
-                "target": target,
-                "curr_temp": -1,
-                "tar_temp": -1,
-            }
-        })
+        return self._observed_control("ams_change_filament",
+            {"ams_id": ams_id, "slot_id": slot_id, "target": target, "curr_temp": -1, "tar_temp": -1},
+            lambda s: (s.ams_recovery.get("busy") and int(s.raw_data.get("ams", {}).get("tray_tar", -1)) == target) or s.ams_tray_now == tray_id,
+            "Filament load started; wait for the AMS to finish",
+            completion=lambda s: not s.ams_recovery.get("busy") and s.ams_tray_now == tray_id)
+
+    def ams_recover(self, action: str, confirmed: bool = False) -> bool:
+        """Explicit operator recovery only; never automatically confirm extrusion."""
+        r = self._state.ams_recovery
+        if action not in ("retry", "confirm_extrusion"):
+            self._control_failed("ams_control", "Unknown AMS recovery action")
+            return False
+        if not r.get("can_retry" if action == "retry" else "can_confirm_extrusion"):
+            self._control_failed("ams_control", "The current printer state does not allow this AMS recovery action.")
+            return False
+        if action == "confirm_extrusion" and confirmed is not True:
+            self._control_failed("ams_control", "Confirm that filament is visibly extruding before continuing.")
+            return False
+        before = (self._state.ams_status, self._state.gcode_state, self._state.print_error)
+        return self._observed_control("ams_control", {"param": "resume" if action == "retry" else "done"},
+            lambda s: (s.ams_status, s.gcode_state, s.print_error) != before,
+            "AMS recovery started; waiting for printer confirmation",
+            completion=lambda s: not s.ams_recovery.get("active") and not s.ams_recovery.get("busy"))
 
     def set_tray_info(self, tray_id: int, tray_type: str, color: str,
                       nozzle_temp_min: int = 190, nozzle_temp_max: int = 230) -> bool:
@@ -734,6 +744,78 @@ class BambuClient:
             return False
 
     # ── Internal ──────────────────────────────────────────────
+
+    def _control_failed(self, action, message):
+        self._pending_control = None
+        self._state.command_status = {"action": action, "state": "failed", "message": message}
+
+    def _observed_control(self, command, params, predicate, description, completion=None, timeout=10):
+        """Publish once, reject negative acknowledgements, and verify fresh telemetry.
+
+        MQTT publication and even a SUCCESS reply are not evidence that a motor
+        moved or a heater target changed. Long operations return 'in_progress'
+        only once their start is observed and are completed by later telemetry.
+        """
+        if not self.is_connected():
+            self._control_failed(command, "Printer is not connected")
+            return False
+        if not self._control_lock.acquire(blocking=False):
+            self._state.command_status = {"action": command, "state": "failed", "message": "Another printer command is awaiting confirmation. Please wait."}
+            return False
+        key = None
+        try:
+            if predicate(self._state) and (completion is None or completion(self._state)):
+                self._state.command_status = {"action": command, "state": "completed", "message": description + " (already confirmed by printer)"}
+                return True
+            with self._command_lock:
+                self._control_sequence = max(self._control_sequence + 1, int(time.time()))
+                seq = str(self._control_sequence)
+                key = (command, seq)
+                self._command_events[key] = threading.Event()
+                self._command_responses.pop(key, None)
+            baseline = self._last_report_at
+            self._pending_control = None
+            self._state.command_status = {"action": command, "state": "awaiting_state", "message": "Request sent; waiting for the printer to confirm the requested change", "acknowledged": False}
+            if not self._send_command({"print": {"command": command, "sequence_id": seq, **params}}):
+                self._control_failed(command, "Could not send command to the printer")
+                return False
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                with self._command_lock:
+                    response = self._command_responses.get(key, {})
+                acknowledged = str(response.get("result", "")).lower() == "success"
+                if response.get("result") and not acknowledged:
+                    self._control_failed(command, f"Printer rejected {command}: {str(response.get('reason') or response['result'])[:240]}")
+                    return False
+                if self._last_report_at != baseline and predicate(self._state):
+                    complete = completion is None or completion(self._state)
+                    self._state.command_status = {"action": command, "state": "completed" if complete else "in_progress", "message": description, "acknowledged": acknowledged}
+                    if not complete:
+                        self._pending_control = {"complete": completion, "deadline": time.monotonic() + 180, "error": self._state.print_error}
+                    return True
+                self._state.command_status["acknowledged"] = acknowledged
+                time.sleep(0.1)
+            acknowledged = self._state.command_status.get("acknowledged", False)
+            self._control_failed(command, ("Printer acknowledged the request, but" if acknowledged else "Request sent, but") + " the requested change was not observed. It may still be queued: check printer status and the filament path before sending another command.")
+            return False
+        finally:
+            if key:
+                with self._command_lock:
+                    self._command_events.pop(key, None)
+                    self._command_responses.pop(key, None)
+            self._control_lock.release()
+
+    def _refresh_pending_control(self):
+        pending = getattr(self, "_pending_control", None)
+        if not pending:
+            return
+        if pending["complete"](self._state):
+            self._state.command_status = {**self._state.command_status, "state": "completed", "message": "Printer confirmed the requested operation completed"}
+            self._pending_control = None
+        elif self._state.print_error and self._state.print_error != pending["error"]:
+            self._control_failed(self._state.command_status.get("action"), "Operation stopped: " + (self._state.error_message or f"printer error 0x{self._state.print_error:08X}"))
+        elif time.monotonic() >= pending["deadline"]:
+            self._control_failed(self._state.command_status.get("action"), "Printer has not confirmed completion. Check its reported error and filament path.")
 
     def _send_command(self, payload: dict) -> bool:
         if not self._client or not self._connected.is_set():
@@ -865,7 +947,7 @@ class BambuClient:
         prev_status = self._state.status
 
         with self._state_lock:
-            self._state.raw_data = data
+            self._state.raw_data = merge_report(self._state.raw_data, data)
             if data.get("gcode_state") or self._last_report_at is not None:
                 self._last_report_at = time.monotonic()
             for key in ("task_id", "subtask_id"):
@@ -878,7 +960,6 @@ class BambuClient:
             gcode_state = data.get("gcode_state", "")
             if gcode_state:
                 self._state.gcode_state = gcode_state
-                self._state.status = self._parse_status(gcode_state, data)
 
             if "mc_percent" in data:
                 self._state.mc_percent = data["mc_percent"]
@@ -937,6 +1018,16 @@ class BambuClient:
                 self._state.print_error = new_err
             if "hms" in data:
                 self._state.hms = data["hms"]
+            self._state.ams_status = int(self._state.raw_data.get("ams_status") or 0)
+            ams = self._state.raw_data.get("ams") or {}
+            if "tray_now" in ams:
+                self._state.ams_tray_now = int(ams["tray_now"])
+            recovery = recovery_state(self._state.raw_data)
+            self._state.printer_errors = recovery.pop("errors")
+            self._state.ams_recovery = recovery
+            self._state.error_message = recovery["message"]
+            self._state.status = self._parse_status(self._state.gcode_state, self._state.raw_data)
+            self._refresh_pending_control()
             # Light
             lights = data.get("lights_report", [])
             for light in lights:
@@ -1055,12 +1146,15 @@ class BambuClient:
 
     def _parse_status(self, gcode_state: str, data: dict) -> PrintStatus:
         state_upper = gcode_state.upper()
+        recovery = recovery_state(data)
+        if state_upper in ("RUNNING", "PAUSE") and recovery["active"]:
+            return PrintStatus.PAUSE_FILAMENT
         if state_upper == "RUNNING":
             return PrintStatus.RUNNING
         elif state_upper == "PAUSE":
             sub_stage = data.get("mc_print_sub_stage", 0)
             error_code = str(data.get("mc_print_error_code", "0"))
-            if sub_stage == 1 or error_code in ("50348", "50349"):
+            if sub_stage == 1 or error_code in ("50348", "50349") or recovery["busy"]:
                 return PrintStatus.PAUSE_FILAMENT
             return PrintStatus.PAUSED
         elif state_upper == "FINISH":

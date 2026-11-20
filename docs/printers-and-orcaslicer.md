@@ -487,3 +487,28 @@ printers:
 | OrcaSlicer can't connect at all | Confirm port 8883 is not blocked by a firewall on the server |
 | Permission denied creating interface | Ensure `AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW` is present in the service unit (`systemctl cat the-print-farm`) |
 | Upload succeeds but a BambuLab printer stays idle | On current firmware, enable LAN-only mode and Developer Mode on the printer, power-cycle it, and verify the LAN access code in config |
+
+
+### Recovering a Bambu AMS filament runout
+
+The printer remains responsible for detecting runout and performing its filament
+recovery. The farm decodes supported AMS error messages, including the affected
+slot, and preserves them across partial MQTT reports. A runout followed by a purge
+failure is shown as **Paused · check filament**, even if firmware temporarily
+reports `RUNNING` while attempting recovery. Unknown codes remain visible.
+
+Refill the indicated slot or clear the reported filament-path problem, then use
+**Retry AMS**. This sends the AMS recovery command, rather than ordinary print
+Resume. Do not start another load/unload while the AMS is already recovering.
+**Filament is extruding — Continue** is shown only for an appropriate printer
+confirmation state and requires the operator to confirm visible extrusion. The
+farm never automatically asserts that filament has extruded or bypasses a jam.
+
+Controls distinguish a request being sent, a printer-observed operation starting,
+and confirmed completion. A positive acknowledgement without the requested
+telemetry change is reported as a failure. Heater controls verify the target was
+applied; actual temperature must still reach the target before extrusion. Long
+operations expose `command_status` and a completion timeout. A physical blockage
+can still require hands-on maintenance; software recovery cannot guarantee a
+successful purge. Transitional `tray_now=254` during an AMS unload is not shown
+as proof that the original job used the external spool.
