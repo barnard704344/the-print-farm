@@ -323,6 +323,22 @@ class JobQueue:
             conn.close()
             return result.rowcount > 0
 
+    def cancel_stopped_job(self, job_id: int, copies_done=None) -> bool:
+        """Finalize an operator cancellation after a verified hardware stop.
+
+        The telemetry callback may already have classified the stop as FINISH
+        or FAILED. Only explicit stop callers use this method.
+        """
+        with self._lock:
+            conn = self._get_conn()
+            result = conn.execute(
+                "UPDATE jobs SET status = 'cancelled', completed_at = ?, copies_done = COALESCE(?, copies_done) WHERE id = ? AND status IN ('printing', 'completed', 'failed', 'cancelled', 'queued')",
+                (datetime.now(timezone.utc).isoformat(), copies_done, job_id),
+            )
+            conn.commit()
+            conn.close()
+            return result.rowcount > 0
+
     def requeue_job(self, job_id: int) -> bool:
         """Re-queue a failed or cancelled job."""
         with self._lock:

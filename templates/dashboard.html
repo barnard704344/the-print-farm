@@ -5513,6 +5513,19 @@
             return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
         }
 
+        function amsSourceLabel(p) {
+            const recovery = p.ams_recovery || {};
+            if (recovery.busy || recovery.active) {
+                const target = recovery.target_label
+                    ? `${recovery.busy ? 'Loading' : 'Requested'} ${recovery.target_label}`
+                    : recovery.source_label || 'AMS';
+                return `${target} — ${recovery.phase || 'needs attention'}`;
+            }
+            const tray = (p.ams_trays || []).find(t => t.id === p.ams_tray_now);
+            if (tray) return `Using ${amsSlotLabel(tray)}`;
+            return p.ams_tray_now === 254 ? 'Using external spool' : '';
+        }
+
         function renderPrinterSubline(name, p) {
             const parts = [];
             if (isKlipperToolchanger(p)) parts.push(`${klipperToolchangerTools(p).length} tools`);
@@ -5622,6 +5635,8 @@
                 <div class="pc-job-label">${htmlEscape(label)}</div>
                 <div class="pc-job-name" title="${htmlEscape(p.subtask_name || title)}">${htmlEscape(title)}</div>
                 ${connected && p.error_message ? `<div class="pc-job-error" title="${htmlEscape(p.error_message)}">${iconMarkup('alert')}${htmlEscape(p.error_message)}</div>` : ''}
+                ${connected && p.ams_recovery && p.ams_recovery.busy ? `<div class="pc-job-last">${htmlEscape(p.ams_recovery.phase || 'Changing filament')}</div>` : ''}
+                ${connected && p.command_status && p.command_status.state === 'failed' ? `<div class="pc-job-error">${htmlEscape(p.command_status.message)}</div>` : ''}
                 ${ready && p.subtask_name ? `<div class="pc-job-last" title="${htmlEscape(p.subtask_name)}">Last: ${htmlEscape(prettyJobName(p.subtask_name))}</div>` : ''}
                 <div class="pc-job-progress">
                     <div class="progress-bar-container"><div class="progress-bar ${barClass}" style="width:${barWidth}%"></div></div>
@@ -5635,10 +5650,12 @@
             const isRunning = status === 'running';
             const isPaused = status === 'paused' || status === 'pause_filament';
             const nameArg = jsArg(name);
-            const pauseOrResume = isPaused
+            const recovery = p.ams_recovery || {};
+            const recoveryButtons = `${recovery.can_retry ? `<button class="btn btn-warning pc-act" onclick="amsRecoveryCmd(${nameArg},'retry')">Retry AMS</button>` : ''}${recovery.can_confirm_extrusion ? `<button class="btn btn-success pc-act" onclick="amsRecoveryCmd(${nameArg},'confirm_extrusion')">Filament is extruding — Continue</button>` : ''}`;
+            const pauseOrResume = (recovery.active || (isPaused && recovery.busy)) ? '' : isPaused
                 ? `<button class="btn btn-success pc-act" onclick="printerCmd(${nameArg},'resume')">${iconMarkup('play')}Resume</button>`
                 : `<button class="btn btn-warning pc-act" onclick="printerCmd(${nameArg},'pause')"${isRunning ? '' : ' disabled'}>${iconMarkup('pause')}Pause</button>`;
-            return `${pauseOrResume}
+            return `${recoveryButtons}${pauseOrResume}
                 <button class="btn btn-danger pc-act" onclick="confirmStopPrint(${nameArg})"${isRunning || isPaused ? '' : ' disabled'}>${iconMarkup('stop')}Stop</button>`;
         }
 
@@ -5672,6 +5689,10 @@
             let label = 'Status unknown', tone = 'unknown', title = 'Printer has not reported a recognised state.';
             if (status === 'RUNNING') {
                 label = 'Printing'; tone = 'running'; title = 'Print in progress.';
+                if (p.ams_recovery && p.ams_recovery.busy) {
+                    label = p.ams_recovery.phase || 'Changing filament';
+                    title = 'Printer is handling filament; wait for the AMS operation to finish.';
+                }
             } else if (status === 'PAUSED' || status === 'PAUSE_FILAMENT') {
                 label = status === 'PAUSE_FILAMENT' ? 'Paused · check filament' : 'Paused';
                 tone = 'paused'; title = 'Print is paused and needs attention.';
@@ -5685,9 +5706,10 @@
             } else if (status === 'FINISH') {
                 label = 'Finished'; tone = 'finish'; title = 'Print has finished.';
             }
-            const alerts = (Array.isArray(p.hms) ? p.hms : []).map(hmsCodeLabel);
+            const decoded = Array.isArray(p.printer_errors) ? p.printer_errors : [];
+            const alerts = decoded.length ? decoded.map(e => `${e.message} [${e.code}]`) : (Array.isArray(p.hms) ? p.hms : []).map(hmsCodeLabel);
             const error = Number(p.print_error) || 0;
-            if (error) alerts.unshift(`Print error 0x${(error >>> 0).toString(16).toUpperCase().padStart(8, '0')}`);
+            if (error && !decoded.length) alerts.unshift(`Print error 0x${(error >>> 0).toString(16).toUpperCase().padStart(8, '0')}`);
             if (p.type === 'klipper' && p.error_message) alerts.unshift(String(p.error_message));
             if (alerts.length) {
                 if (label === 'Ready to print') {
@@ -6143,9 +6165,10 @@
                         </div>`;
                 }).join('');
 
-                const externalActive = p.ams_tray_now === 254;
+                const recovering = p.ams_recovery && (p.ams_recovery.busy || p.ams_recovery.active);
+                const externalActive = p.ams_tray_now === 254 && !recovering;
                 const activeTray = p.ams_trays.find(t => t.id === p.ams_tray_now);
-                const using = activeTray ? `Using ${amsSlotLabel(activeTray)}` : externalActive ? 'Using external spool' : '';
+                const using = amsSourceLabel(p);
 
                 return `
                     <div class="ams-section" data-field="ams" onclick="openAmsModal(${nameArg})" title="Click to open AMS details" style="cursor:pointer">
@@ -6355,7 +6378,7 @@
         }
 
         async function printerCmd(name, cmd) {
-            await apiPost(`${BASE}/api/printer/${encodeURIComponent(name)}/${cmd}`);
+            await sendFilamentCommand(name, `${BASE}/api/printer/${encodeURIComponent(name)}/${cmd}`);
         }
 
         function htmlEscape(value) {
@@ -6514,7 +6537,7 @@
 
         // ── Temperature & Filament Controls ──────────────────
         async function setTemp(name, endpoint, temp, extra = {}) {
-            await apiPost(`${BASE}/api/printer/${encodeURIComponent(name)}/${endpoint}`, { temp, ...extra });
+            await sendFilamentCommand(name, `${BASE}/api/printer/${encodeURIComponent(name)}/${endpoint}`, { temp, ...extra });
         }
 
         function printerDomId(name) {
@@ -6709,6 +6732,7 @@
         // when you swap filament). The server enforces this too.
         function filamentChangeBlocked(p) {
             if (!p || !p.connected) return 'Printer is not connected';
+            if (p.ams_recovery && (p.ams_recovery.active || p.ams_recovery.busy)) return 'Resolve the current AMS operation using its recovery controls before starting another load/unload';
             if (String(p.status || '').toUpperCase() === 'RUNNING') return "Can't load or unload while a print is running";
             return '';
         }
@@ -6736,13 +6760,25 @@
         }
 
         async function sendFilamentCommand(name, url, body) {
-            const res = await apiPost(url, body);
-            if (res.ok === false) {
-                showToast(`${name}: ${res.message || 'Command failed'}`, 'error');
-            } else {
-                showToast(`${name}: ${res.message || 'Command sent'}`, 'success');
-                setTimeout(refreshPrinters, 1500);
+            try {
+                const res = await apiPost(url, body);
+                if (res.ok === false) {
+                    showToast(`${name}: ${res.message || 'Command failed'}`, 'error');
+                } else {
+                    showToast(`${name}: ${res.message || 'Command sent'}`, res.command_status && res.command_status.state === 'completed' ? 'success' : 'info');
+                }
+                refreshPrinters();
+            } catch (e) {
+                showToast(`${name}: Request could not be confirmed. Check printer status before retrying.`, 'error');
             }
+        }
+
+        async function amsRecoveryCmd(name, action) {
+            const message = action === 'confirm_extrusion'
+                ? 'Only continue if you can see filament coming out of the nozzle. Is filament visibly extruding?'
+                : 'Refill the indicated AMS slot or clear the reported filament blockage, then retry AMS recovery?';
+            if (!confirm(message)) return;
+            await sendFilamentCommand(name, `${BASE}/api/printer/${encodeURIComponent(name)}/ams_recovery`, { action, confirmed: action === 'confirm_extrusion' });
         }
 
         async function filamentCmd(name, cmd) {

@@ -223,6 +223,13 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         states = farm_manager.get_all_states()
         return _ok(states.get(name))
 
+    def _control_result(printer, ok, command, name, **extra):
+        state = dict(getattr(getattr(printer, "state", None), "command_status", {}) or {})
+        message = state.get("message") or ("Command sent" if ok else "Printer did not confirm the requested change")
+        if not ok:
+            return _error(message, 502, "PRINTER_COMMAND_NOT_CONFIRMED")
+        return _ok({"command": command, "printer": name, "message": message, "command_status": state, **extra})
+
     @bp.route("/printers/<name>/command", methods=["POST"])
     @_admin_only
     def printer_command(name):
@@ -232,7 +239,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
         Body: {"command": "<cmd>", ...params}
         Commands: pause, resume, stop, emergency_stop,
                   light, set_bed_temp, set_nozzle_temp,
-                  unload_filament, load_filament
+                  unload_filament, load_filament, ams_retry, ams_confirm_extrusion
         """
         printer = farm_manager.get_printer(name)
         if not printer:
@@ -243,15 +250,23 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
 
         if cmd == "pause":
             ok = printer.pause_print()
-            return _ok({"command": "pause", "printer": name}) if ok else _error("Printer rejected command", 502)
+            return _control_result(printer, ok, cmd, name)
 
         elif cmd == "resume":
             ok = printer.resume_print()
-            return _ok({"command": "resume", "printer": name}) if ok else _error("Printer rejected command", 502)
+            return _control_result(printer, ok, cmd, name)
 
         elif cmd == "stop":
             ok = printer.stop_print()
-            return _ok({"command": "stop", "printer": name}) if ok else _error("Printer rejected command", 502)
+            return _control_result(printer, ok, cmd, name)
+
+        elif cmd in ("ams_retry", "ams_confirm_extrusion"):
+            if not hasattr(printer, "ams_recover"):
+                return _error("AMS recovery is only available on Bambu Lab printers", 400)
+            if cmd == "ams_confirm_extrusion" and data.get("confirmed") is not True:
+                return _error("Confirm visible filament extrusion before continuing", 400)
+            ok = printer.ams_recover("retry" if cmd == "ams_retry" else "confirm_extrusion", confirmed=data.get("confirmed") is True)
+            return _control_result(printer, ok, cmd, name)
 
         elif cmd == "emergency_stop":
             if hasattr(printer, "emergency_stop"):
@@ -278,7 +293,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
             if not 0 <= temp <= 130:
                 return _error("Bed temperature must be between 0 and 130 C", 400)
             ok = printer.set_bed_temperature(temp)
-            return _ok({"command": "set_bed_temp", "temperature": temp, "printer": name}) if ok else _error("Printer rejected command", 502)
+            return _control_result(printer, ok, cmd, name, temperature=temp)
 
         elif cmd == "set_nozzle_temp":
             temp = data.get("temperature")
@@ -291,7 +306,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
             if not 0 <= temp <= 350:
                 return _error("Nozzle temperature must be between 0 and 350 C", 400)
             ok = printer.set_nozzle_temperature(temp)
-            return _ok({"command": "set_nozzle_temp", "temperature": temp, "printer": name}) if ok else _error("Printer rejected command", 502)
+            return _control_result(printer, ok, cmd, name, temperature=temp)
 
         elif cmd in ("unload_filament", "load_filament") and not hasattr(printer, "filament_change_blocked"):
             return _error("Filament load/unload is only available on Bambu Lab printers", 400)
@@ -301,11 +316,11 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
 
         elif cmd == "unload_filament":
             ok = printer.unload_filament()
-            return _ok({"command": "unload_filament", "printer": name}) if ok else _error("Printer rejected command", 502)
+            return _control_result(printer, ok, cmd, name)
 
         elif cmd == "load_filament":
             ok = printer.load_filament()
-            return _ok({"command": "load_filament", "printer": name}) if ok else _error("Printer rejected command", 502)
+            return _control_result(printer, ok, cmd, name)
 
         else:
             return _error(f"Unknown command: {cmd}", 400, "UNKNOWN_COMMAND")
@@ -1281,7 +1296,7 @@ def create_api_v1(farm_manager, job_queue, camera_manager=None,
                     "post": {
                         "summary": "Send command to printer",
                         "tags": ["Printers"],
-                        "description": "Commands: pause, resume, stop, emergency_stop, light, set_bed_temp, set_nozzle_temp, unload_filament, load_filament",
+                        "description": "Commands: pause, resume, stop, emergency_stop, light, set_bed_temp, set_nozzle_temp, unload_filament, load_filament, ams_retry, ams_confirm_extrusion",
                     },
                 },
                 "/jobs": {
